@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-zoom="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PACT - plan</title>
+<meta name="description" content="PACT: a calm local resourcing plan. One row per person, height is commitment.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="wordmark">PACT</span>
+    <span class="topbar__context" id="context"></span>
+    <div class="topbar__spacer"></div>
+    <div class="zoom" role="group" aria-label="Zoom - the width of one day">
+      <button type="button" class="zoom__btn" data-zoom="day" aria-pressed="true">Day</button>
+      <button type="button" class="zoom__btn" data-zoom="week" aria-pressed="false">Week</button>
+      <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="false">Month</button>
+    </div>
+    <button type="button" class="ghost" id="add-person">Add person</button>
+    <button type="button" class="ghost" id="add-project">Add project</button>
+  </header>
+
+  <main class="board">
+    <aside class="stack" aria-label="Stack - the projects available to plan">
+      <div class="stack__head">
+        <h1 class="stack__title">Stack</h1>
+      </div>
+      <ul class="stack__list" id="stack-list"></ul>
+      <p class="stack__hint" id="stack-hint">Drag a project onto a row to plan it.</p>
+    </aside>
+
+    <div class="scroller" id="scroller">
+      <div class="tl" id="tl">
+        <!-- weekend band, axis and rows are drawn from the fixture -->
+      </div>
+    </div>
+  </main>
+
+  <div class="panel-layer" id="panel-layer" hidden></div>
+
+  <noscript>
+    <p class="noscript">PACT needs JavaScript to draw the plan.</p>
+  </noscript>
+
+  <script src="data/fixture.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

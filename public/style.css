@@ -1,0 +1,758 @@
+/* ============================================================================
+   PACT - interface pass 2
+   The whole token set lives here, once. Nothing below invents a colour, a
+   size or a duration: everything reads from these custom properties.
+   ========================================================================= */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/archivo-variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Palette ------------------------------------------------------------------ */
+  --canvas: #FBFBFA;
+  --panel: #F1F3F1;
+  --ink: #16323A;
+  --ink-soft: #5C6F72;
+  --rule: #DEE4E1;
+  --rule-strong: #B9C4C0;
+  --off: #EDF0EE;
+  --signal: #9E2B25;
+  --on-project: #FFFFFF;   /* label ink over a project block */
+
+  /* Project inks - identity, all at equal weight, never red ------------------ */
+  --proj-steel: #2C6E8F;
+  --proj-moss: #3F7A55;
+  --proj-teal: #2F7C7B;
+  --proj-iris: #7A5CA8;
+  --proj-plum: #8A4C7A;
+  --proj-umber: #86622E;
+
+  /* Type --------------------------------------------------------------------- */
+  --font: Archivo, "Helvetica Neue", Arial, system-ui, sans-serif;
+  --fs-axis: 0.6875rem;   /* 11 */
+  --fs-data: 0.8125rem;   /* 13 */
+  --fs-body: 0.875rem;    /* 14 */
+  --fs-title: 1.0625rem;  /* 17 */
+  --fs-mark: 1.375rem;    /* 22 */
+
+  /* Layout - rows 44px, a full FTE 40px, so a 10% step is 4px ---------------- */
+  --step-h: 0.25rem;
+  --fte-h: calc(10 * var(--step-h));
+  --row-h: calc(var(--fte-h) + var(--step-h));
+  --base: 0.0625rem;
+  --rail-w: 14.5rem;
+  --head-w: 10.5rem;
+  --band-month-h: 1.75rem;
+  --band-day-h: 1.5rem;
+  --radius: 0.1875rem;
+  --radius-panel: 0.25rem;
+
+  /* Motion ------------------------------------------------------------------- */
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Zoom - the drawn width of one day ---------------------------------------- */
+  --day-w: 2.75rem;   /* day: 44px */
+  --axis-h: calc(var(--band-month-h) + var(--band-day-h));
+}
+
+[data-zoom="week"]  { --day-w: 1rem; }        /* 16px */
+[data-zoom="month"] { --day-w: 0.3125rem; --axis-h: var(--band-month-h); } /* 5px, month band only */
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  font-weight: 400;
+  font-stretch: 100%;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p { margin: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+/* Topbar -------------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--canvas);
+}
+
+.wordmark {
+  font-size: var(--fs-mark);
+  font-weight: 640;
+  font-stretch: 112%;
+  letter-spacing: -0.01em;
+}
+
+.topbar__context {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.topbar__spacer { flex: 1 1 auto; }
+
+.zoom {
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.zoom__btn,
+.ghost {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: 500;
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+}
+
+.zoom__btn {
+  border-right: 1px solid var(--rule);
+  border-radius: 0;
+}
+
+.zoom__btn:last-child { border-right: 0; }
+.zoom__btn:hover,
+.ghost:hover { color: var(--ink); }
+.zoom__btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--canvas);
+}
+.ghost { border-radius: var(--radius); }
+
+/* Board --------------------------------------------------------------------- */
+
+.board {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  align-items: stretch;
+  min-height: calc(100vh - 3rem);
+}
+
+/* Stack rail ---------------------------------------------------------------- */
+
+.stack {
+  background: var(--panel);
+  border-right: 1px solid var(--rule);
+  padding-bottom: 1rem;
+}
+
+.stack__head {
+  height: var(--axis-h);
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.stack__title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  font-stretch: 110%;
+}
+
+.stack__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stack__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 0 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stack__item:hover .stack__name { color: var(--ink); }
+
+.stack__chip {
+  flex: 0 0 auto;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 0.125rem;
+  background: var(--chip);
+}
+
+.stack__name {
+  flex: 1 1 auto;
+  font-size: var(--fs-data);
+  font-weight: 500;
+}
+
+.stack__note {
+  flex: 0 0 auto;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.stack__hint {
+  margin: 0.75rem 1rem 0;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+/* Timeline scroller and grid ------------------------------------------------ */
+
+.scroller {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--canvas);
+}
+
+.tl {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--head-w) calc(var(--days) * var(--day-w));
+  grid-template-rows: var(--axis-h) auto;
+  align-content: start;
+  width: max-content;
+  min-height: 100%;
+}
+
+/* The weekend band belongs to the calendar, not to a person: one full-height
+   column band through every row and both axis bands. */
+.weekends {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.weekend {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--i) * var(--day-w));
+  width: calc(var(--n) * var(--day-w));
+  background: var(--off);
+}
+
+/* Axis ---------------------------------------------------------------------- */
+
+.tl__axis {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.axis__band {
+  display: flex;
+  width: max-content;
+}
+
+.axis__months {
+  height: var(--band-month-h);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.axis__days {
+  height: var(--band-day-h);
+  border-bottom: 1px solid var(--rule);
+}
+
+.axis__weeks {
+  height: var(--band-day-h);
+  border-bottom: 1px solid var(--rule);
+}
+
+[data-zoom="day"] .axis__weeks { display: none; }
+[data-zoom="week"] .axis__days { display: none; }
+[data-zoom="month"] .axis__days,
+[data-zoom="month"] .axis__weeks { display: none; }
+
+.ax {
+  flex: 0 0 auto;
+  width: calc(var(--n) * var(--day-w));
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* The month name sticks just right of the row-header column, so the unit you
+   are looking at stays named while time scrolls. */
+.ax-month {
+  border-right: 1px solid var(--rule-strong);
+}
+
+.ax-month__label {
+  position: sticky;
+  left: calc(var(--head-w) + 0.5rem);
+  padding-left: 0.5rem;
+  font-size: var(--fs-data);
+  font-weight: 600;
+  font-stretch: 108%;
+}
+
+.ax-day {
+  justify-content: center;
+  border-right: 1px solid var(--rule);
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+}
+
+.ax-week {
+  padding-left: 0.375rem;
+  border-right: 1px solid var(--rule-strong);
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+}
+
+/* Row-header column - sticky, the left edge of the grid ---------------------- */
+
+.tl__corner {
+  grid-column: 1;
+  grid-row: 1;
+  position: sticky;
+  left: 0;
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  background: var(--panel);
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule-strong);
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+}
+
+.tl__heads {
+  grid-column: 1;
+  grid-row: 2;
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  align-self: stretch;
+  background: var(--panel);
+  border-right: 1px solid var(--rule);
+}
+
+.rowhead {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.0625rem;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowhead__name {
+  font-size: var(--fs-data);
+  font-weight: 560;
+  font-stretch: 108%;
+}
+
+.rowhead__fig {
+  display: flex;
+  justify-content: flex-end;
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.rowhead__fig.is-over {
+  color: var(--signal);
+  font-weight: 600;
+}
+
+/* Person rows --------------------------------------------------------------- */
+
+.tl__body {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  z-index: 0;
+}
+
+.row {
+  position: relative;
+  height: var(--row-h);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* The ceiling is the only mark of availability inside the grid, and the space
+   above it is left as paper. */
+.ceiling {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--base) + var(--avail) * var(--fte-h));
+  border-top: 1px dashed var(--ink);
+  opacity: 0.5;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* Assignment blocks: height is the share, colour is the project ink. */
+.blk {
+  position: absolute;
+  left: calc(var(--i) * var(--day-w));
+  width: calc(var(--n) * var(--day-w));
+  bottom: calc(var(--base) + var(--b) * var(--fte-h));
+  height: calc(var(--h) * var(--fte-h));
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--block-ink);
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.blk.is-selected {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.blk__hatch {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--hatch) * var(--fte-h));
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--signal) 45%, transparent) 0 2px,
+    transparent 2px 6px
+  );
+  border-bottom: 1px solid var(--signal);
+  pointer-events: none;
+}
+
+.blk__tag {
+  position: absolute;
+  left: 0.375rem;
+  bottom: 0.125rem;
+  font-size: var(--fs-axis);
+  font-weight: 500;
+  color: var(--on-project);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.blk.is-tight .blk__tag,
+[data-zoom="month"] .blk__tag { display: none; }
+
+/* Marker -------------------------------------------------------------------- */
+
+/* The layer spans the axis and every row, so the line runs from the month band
+down to the last row and no further. */
+.marker-layer {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  position: relative;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--i) + 0.5) * var(--day-w));
+  width: 1px;
+  background: var(--ink);
+  cursor: ew-resize;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.marker__hit {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -0.5rem;
+  width: 1rem;
+}
+
+.marker__grip {
+  position: absolute;
+  top: 0.125rem;
+  left: -0.0625rem;
+  width: 0.1875rem;
+  height: 0.875rem;
+  background: var(--ink);
+  border-radius: 0.125rem;
+}
+
+.marker__date {
+  position: absolute;
+  top: 0.125rem;
+  left: 0.375rem;
+  padding: 0.0625rem 0.25rem;
+  background: var(--canvas);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: var(--fs-axis);
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.marker:focus-visible { outline: none; }
+.marker:focus-visible .marker__grip,
+.marker:focus-visible .marker__date {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Panels: assignment popover, person form, project form --------------------- */
+
+.panel-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.panel {
+  position: fixed;
+  width: 20rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.875rem 1rem 1rem;
+  background: var(--canvas);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-panel);
+  animation: panel-in var(--dur-fast) var(--ease);
+}
+
+.panel__title {
+  font-size: var(--fs-title);
+  font-weight: 620;
+  font-stretch: 110%;
+}
+
+.panel__sub {
+  margin-top: 0.125rem;
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.panel__close {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.375rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-title);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.panel__close:hover { color: var(--ink); }
+
+.fields {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.field dt {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.field dd {
+  margin: 0;
+  font-size: var(--fs-data);
+}
+
+.soft { color: var(--ink-soft); }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.chip {
+  padding: 0.0625rem 0.375rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+}
+
+.chip-add {
+  padding: 0.0625rem 0.375rem;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.form { margin-top: 0.75rem; }
+
+.form__row {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.form__row > span {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.form input,
+.form select,
+.form textarea {
+  width: 100%;
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.form textarea { resize: vertical; min-height: 2.5rem; }
+
+.swatches { display: flex; gap: 0.25rem; }
+
+.swatch {
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 0.125rem;
+  background: var(--pick);
+  cursor: pointer;
+}
+
+.swatch[aria-pressed="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.panel__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.875rem;
+}
+
+.btn-ghost {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-ghost:hover { border-color: var(--rule-strong); }
+
+.panel__note {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.noscript {
+  margin: 2rem;
+  font-size: var(--fs-body);
+  color: var(--ink-soft);
+}
+
+/* Motion - quiet reflow when the scale changes, nothing under a drag. */
+.blk,
+.weekend,
+.ax,
+.marker {
+  transition: left var(--dur) var(--ease), width var(--dur) var(--ease);
+}
+.is-dragging .marker { transition: none; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Reduced motion ------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
