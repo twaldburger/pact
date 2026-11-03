@@ -29,9 +29,9 @@ const MIME = {
 };
 
 const COLLECTIONS = {
-  people: { create: "createPerson", update: "updatePerson", archive: "archivePerson" },
-  projects: { create: "createProject", update: "updateProject", archive: "archiveProject" },
-  assignments: { create: "createAssignment", update: "updateAssignment", archive: "archiveAssignment" }
+  people: { create: "createPerson", update: "updatePerson", archive: "archivePerson", destroy: "destroyPerson" },
+  projects: { create: "createProject", update: "updateProject", archive: "archiveProject", destroy: "destroyProject" },
+  assignments: { create: "createAssignment", update: "updateAssignment", archive: "archiveAssignment", destroy: "destroyAssignment" }
 };
 
 function sendJSON(res, status, body) {
@@ -84,13 +84,19 @@ async function readBody(req) {
 }
 
 function matchApi(pathname) {
-  const match = /^\/api\/(people|projects|assignments)(?:\/([^/]+))?$/.exec(pathname);
+  const match = /^\/api\/(people|projects|assignments)(?:\/([^/]+))?(\/destroy)?$/.exec(pathname);
   if (!match) return null;
-  return { collection: match[1], id: match[2] || null };
+  return { collection: match[1], id: match[2] || null, destroy: match[3] === "/destroy" };
 }
 
 async function handleApi(req, res, store, route) {
   const ops = COLLECTIONS[route.collection];
+  // Deletion is its own path, not the meaning of DELETE on the collection: the
+  // bare DELETE stays the archive it has always been.
+  if (route.destroy) {
+    if (req.method !== "DELETE" || !route.id) return sendError(res, 405, "method not allowed");
+    return sendJSON(res, 200, store[ops.destroy](route.id));
+  }
   if (!route.id) {
     if (req.method !== "POST") return sendError(res, 405, "method not allowed");
     return sendJSON(res, 201, store[ops.create](await readBody(req)));

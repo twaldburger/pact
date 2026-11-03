@@ -64,6 +64,10 @@ _Avoid_: granularity, resolution, scale
 To take a Person or a Project out of the Stack and the Timeline while keeping every Assignment it ever had; an archived item can be restored.
 _Avoid_: delete, remove, hide, deactivate
 
+**Delete**:
+To permanently destroy a Person, a Project or an Assignment, with no trash and no undo; deleting a Person or a Project destroys the Assignments that referenced it too, archived ones included. It is a different act from archiving, which keeps everything and can be restored, and neither is a precondition for the other. The confirmation names the number of Assignments a Person or a Project will take with it before it happens.
+_Avoid_: remove, purge, destroy, hide
+
 **Filter**:
 The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring anywhere in the People, Projects and Assignments it is set to look in. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
 _Avoid_: search, find, search bar, query
