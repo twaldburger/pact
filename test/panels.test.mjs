@@ -9,7 +9,8 @@ import {
   withTag,
   withoutTag,
   archivedPersonRefusal,
-  archivedProjectRefusal
+  archivedProjectRefusal,
+  dropRefusal
 } from "../public/lib/panels.mjs";
 
 test("stepping Availability stays inside 10..100 in whole steps", () => {
@@ -69,4 +70,17 @@ test("a refused drop names the archived record and says why", () => {
     archivedProjectRefusal("Atlas"),
     "Atlas is archived. Restore this project before adding an assignment."
   );
+});
+
+test("an archived target is refused and a live one is not", () => {
+  assert.equal(
+    dropRefusal({ archived: true, name: "Ben Falk" }, { name: "Atlas" }),
+    "Ben Falk is archived. Restore this person before adding an assignment."
+  );
+  assert.equal(
+    dropRefusal({ name: "Anna Meier" }, { archived: true, name: "Atlas" }),
+    "Atlas is archived. Restore this project before adding an assignment."
+  );
+  assert.equal(dropRefusal({ name: "Anna Meier" }, { name: "Atlas" }), null);
+  assert.equal(dropRefusal(null, null), null);
 });

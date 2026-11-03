@@ -104,3 +104,14 @@ export function archivedPersonRefusal(name) {
 export function archivedProjectRefusal(name) {
   return name + " is archived. Restore this project before adding an assignment.";
 }
+
+/*
+ * Whether a target can take new work at all: an archived Person or Project is
+ * refused by name, and anything else may be dropped on. Returns the message,
+ * or null when the drop is allowed.
+ */
+export function dropRefusal(person, project) {
+  if (person && person.archived) return archivedPersonRefusal(person.name);
+  if (project && project.archived) return archivedProjectRefusal(project.name);
+  return null;
+}
