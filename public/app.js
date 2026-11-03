@@ -645,7 +645,7 @@
     });
   }
 
-  function removeAssignment(id) {
+  function archiveAssignment(id) {
     api("DELETE", "/api/assignments/" + encodeURIComponent(id)).then(refresh).catch(function (err) {
       showError(err);
       render();
@@ -787,28 +787,28 @@
     var foot = el("div", "panel__foot");
     var del = el("button", "btn-danger");
     del.type = "button";
-    del.textContent = "Delete assignment";
-    del.addEventListener("click", function () { confirmDelete(a, node); });
+    del.textContent = "Archive assignment";
+    del.addEventListener("click", function () { confirmArchive(a, node); });
     foot.appendChild(del);
     node.appendChild(foot);
     openPanel(node, trigger);
   }
 
-  function confirmDelete(a, node) {
+  function confirmArchive(a, node) {
     var foot = node.querySelector(".panel__foot");
     foot.innerHTML = "";
     var ask = el("span", "panel__ask");
-    ask.textContent = "Delete this assignment?";
+    ask.textContent = "Archive this assignment?";
     var keep = el("button", "btn-ghost");
     keep.type = "button";
     keep.textContent = "Keep";
     keep.addEventListener("click", function () { openAssignmentPanel(a, panelTrigger); });
     var yes = el("button", "btn-danger");
     yes.type = "button";
-    yes.textContent = "Delete";
+    yes.textContent = "Archive";
     yes.addEventListener("click", function () {
       closePanel(false);
-      removeAssignment(a.id);
+      archiveAssignment(a.id);
     });
     foot.appendChild(ask);
     foot.appendChild(keep);

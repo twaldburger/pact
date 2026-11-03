@@ -28,9 +28,9 @@ const MIME = {
 };
 
 const COLLECTIONS = {
-  people: { create: "createPerson", update: "updatePerson", remove: "deletePerson" },
-  projects: { create: "createProject", update: "updateProject", remove: "deleteProject" },
-  assignments: { create: "createAssignment", update: "updateAssignment", remove: "deleteAssignment" }
+  people: { create: "createPerson", update: "updatePerson", archive: "archivePerson" },
+  projects: { create: "createProject", update: "updateProject", archive: "archiveProject" },
+  assignments: { create: "createAssignment", update: "updateAssignment", archive: "archiveAssignment" }
 };
 
 function sendJSON(res, status, body) {
@@ -49,12 +49,19 @@ function sendError(res, status, message) {
 
 function planForClient(store) {
   const plan = store.get();
+  // Archived records stay in the file; the interface only ever sees the live
+  // plan, so an archived Person or Project takes its Assignments off the screen
+  // with it without anything being lost.
+  const archivedPeople = new Set(plan.people.filter((p) => p.archived).map((p) => p.id));
+  const archivedProjects = new Set(plan.projects.filter((p) => p.archived).map((p) => p.id));
   return {
     today: todayISO(),
     range: plan.range,
-    people: plan.people,
-    projects: plan.projects,
-    assignments: plan.assignments
+    people: plan.people.filter((p) => !p.archived),
+    projects: plan.projects.filter((p) => !p.archived),
+    assignments: plan.assignments.filter((a) =>
+      !a.archived && !archivedPeople.has(a.personId) && !archivedProjects.has(a.projectId)
+    )
   };
 }
 
@@ -88,7 +95,7 @@ async function handleApi(req, res, store, route) {
     return sendJSON(res, 201, store[ops.create](await readBody(req)));
   }
   if (req.method === "PATCH") return sendJSON(res, 200, store[ops.update](route.id, await readBody(req)));
-  if (req.method === "DELETE") return sendJSON(res, 200, store[ops.remove](route.id));
+  if (req.method === "DELETE") return sendJSON(res, 200, store[ops.archive](route.id));
   return sendError(res, 405, "method not allowed");
 }
 

@@ -57,8 +57,8 @@ test("GET /api/plan returns the whole plan", async () => {
   assert.match(res.body.today, /^\d{4}-\d{2}-\d{2}$/);
 });
 
-test("an assignment can be created, read back, changed and deleted", async () => {
-  const { base } = await server();
+test("an assignment can be created, read back, changed and archived", async () => {
+  const { base, store } = await server();
   const created = await api(base, "POST", "/api/assignments", {
     projectId: "atlas",
     personId: "anna",
@@ -83,26 +83,54 @@ test("an assignment can be created, read back, changed and deleted", async () =>
   assert.equal(patched.body.share, 70);
   assert.equal(patched.body.start, "2026-05-06");
 
-  const removed = await api(base, "DELETE", "/api/assignments/" + created.body.id);
-  assert.equal(removed.status, 200);
+  const archived = await api(base, "DELETE", "/api/assignments/" + created.body.id);
+  assert.equal(archived.status, 200);
+  assert.deepEqual(archived.body, { archived: created.body.id });
   plan = (await api(base, "GET", "/api/plan")).body;
   assert.equal(plan.assignments.some((a) => a.id === created.body.id), false);
+  // The record stays in the file, marked archived.
+  assert.equal(store.get().assignments.find((a) => a.id === created.body.id).archived, true);
 });
 
-test("people and projects can be created, changed and deleted", async () => {
-  const { base } = await server();
+test("people and projects can be created, changed and archived without losing assignments", async () => {
+  const { base, store } = await server();
   const person = await api(base, "POST", "/api/people", { name: "Dana Vo", availability: 90 });
   assert.equal(person.status, 201);
   const project = await api(base, "POST", "/api/projects", { name: "Summit", colour: "plum" });
   assert.equal(project.status, 201);
+
+  const assignment = await api(base, "POST", "/api/assignments", {
+    projectId: project.body.id,
+    personId: person.body.id,
+    start: "2026-05-04",
+    end: "2026-05-08",
+    share: 40
+  });
+  assert.equal(assignment.status, 201);
 
   const personPatch = await api(base, "PATCH", "/api/people/" + person.body.id, { availability: 60 });
   assert.equal(personPatch.body.availability, 60);
   const projectPatch = await api(base, "PATCH", "/api/projects/" + project.body.id, { name: "Summit Two" });
   assert.equal(projectPatch.body.name, "Summit Two");
 
-  assert.equal((await api(base, "DELETE", "/api/people/" + person.body.id)).status, 200);
-  assert.equal((await api(base, "DELETE", "/api/projects/" + project.body.id)).status, 200);
+  const archivedPerson = await api(base, "DELETE", "/api/people/" + person.body.id);
+  assert.equal(archivedPerson.status, 200);
+  assert.deepEqual(archivedPerson.body, { archived: person.body.id });
+  const archivedProject = await api(base, "DELETE", "/api/projects/" + project.body.id);
+  assert.equal(archivedProject.status, 200);
+  assert.deepEqual(archivedProject.body, { archived: project.body.id });
+
+  // The interface never draws an archived Person or Project, nor their work.
+  const plan = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(plan.people.some((p) => p.id === person.body.id), false);
+  assert.equal(plan.projects.some((p) => p.id === project.body.id), false);
+  assert.equal(plan.assignments.some((a) => a.id === assignment.body.id), false);
+
+  // Everything is still in the file and can be restored later.
+  const kept = store.get();
+  assert.equal(kept.people.find((p) => p.id === person.body.id).archived, true);
+  assert.equal(kept.projects.find((p) => p.id === project.body.id).archived, true);
+  assert.equal(kept.assignments.some((a) => a.id === assignment.body.id), true);
 });
 
 test("invalid input is refused with a clear error and nothing is stored", async () => {

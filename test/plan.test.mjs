@@ -40,7 +40,7 @@ test("a corrupt file refuses to load rather than being overwritten", () => {
   assert.equal(fs.readFileSync(file, "utf8"), "{ not json");
 });
 
-test("people can be created, updated and deleted, cascading assignments", () => {
+test("archiving a person keeps the record and every assignment", () => {
   const store = createStore(tempFile());
   const person = store.createPerson({ name: "Dana Vo", availability: 90, tags: ["QA"], note: "" });
   assert.ok(person.id);
@@ -60,12 +60,13 @@ test("people can be created, updated and deleted, cascading assignments", () => 
   assert.equal(updated.name, "Dana Vo-Berg");
   assert.ok(updated.id === person.id);
 
-  store.deletePerson(person.id);
-  assert.equal(store.get().people.some((p) => p.id === person.id), false);
-  assert.equal(store.get().assignments.some((a) => a.id === assignment.id), false);
+  assert.deepEqual(store.archivePerson(person.id), { archived: person.id });
+  const after = store.get();
+  assert.equal(after.people.find((p) => p.id === person.id).archived, true);
+  assert.equal(after.assignments.some((a) => a.id === assignment.id), true);
 });
 
-test("assignments can be created, updated and deleted", () => {
+test("assignments can be created, updated and archived", () => {
   const store = createStore(tempFile());
   const created = store.createAssignment({
     projectId: "borealis",
@@ -81,11 +82,12 @@ test("assignments can be created, updated and deleted", () => {
   assert.equal(moved.end, "2026-06-10");
   assert.equal(moved.share, 80);
 
-  store.deleteAssignment(created.id);
-  assert.equal(store.get().assignments.some((a) => a.id === created.id), false);
+  assert.deepEqual(store.archiveAssignment(created.id), { archived: created.id });
+  const after = store.get();
+  assert.equal(after.assignments.find((a) => a.id === created.id).archived, true);
 });
 
-test("projects can be created, updated and deleted, cascading assignments", () => {
+test("archiving a project keeps its assignments", () => {
   const store = createStore(tempFile());
   const project = store.createProject({ name: "Summit", colour: "plum", notes: "" });
   const assignment = store.createAssignment({
@@ -99,9 +101,10 @@ test("projects can be created, updated and deleted, cascading assignments", () =
   assert.equal(renamed.name, "Summit Two");
   assert.equal(renamed.colour, "umber");
 
-  store.deleteProject(project.id);
-  assert.equal(store.get().projects.some((p) => p.id === project.id), false);
-  assert.equal(store.get().assignments.some((a) => a.id === assignment.id), false);
+  assert.deepEqual(store.archiveProject(project.id), { archived: project.id });
+  const after = store.get();
+  assert.equal(after.projects.find((p) => p.id === project.id).archived, true);
+  assert.equal(after.assignments.some((a) => a.id === assignment.id), true);
 });
 
 test("invalid input is refused and leaves the plan unchanged", () => {
@@ -118,7 +121,7 @@ test("invalid input is refused and leaves the plan unchanged", () => {
   assert.throws(() => store.createAssignment({ projectId: "atlas", personId: "anna", start: "2026-13-01", end: "2026-01-02", share: 30 }), ValidationError);
   assert.throws(() => store.createPerson({ name: "Typo", availability: 100, nickname: "T" }), ValidationError);
   assert.throws(() => store.updatePerson("missing", { name: "X" }), NotFoundError);
-  assert.throws(() => store.deleteAssignment("missing"), NotFoundError);
+  assert.throws(() => store.archiveAssignment("missing"), NotFoundError);
 
   assert.equal(fs.readFileSync(file, "utf8"), before);
 });

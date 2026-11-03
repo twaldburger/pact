@@ -48,7 +48,7 @@ The three zoom states (day, week, month) change only the drawn width of a day.
 What the screen can change in this pass: drag a Project from the Stack onto a
 Person's row to create an Assignment there; drag an Assignment's left or right
 edge horizontally to change its start or end date, snapped to whole days; drag
-an edge vertically to change its Allocation in 10% steps; delete an Assignment
+an edge vertically to change its Allocation in 10% steps; archive an Assignment
 from its popover. Both drags show the value being set. Over-allocation is
 allowed and drawn: the part of a block above the Person's Availability line is
 hatched in the signal colour, and the row header's `assigned/availability`
@@ -64,8 +64,10 @@ The server exposes a small JSON API over the plan:
 - `PATCH /api/people/:id`, `PATCH /api/projects/:id`,
   `PATCH /api/assignments/:id` - update.
 - `DELETE /api/people/:id`, `DELETE /api/projects/:id`,
-  `DELETE /api/assignments/:id` - delete. Deleting a Person or a Project also
-  removes the Assignments that referenced it.
+  `DELETE /api/assignments/:id` - archive. The record and every Assignment that
+  referenced it stay in the file, marked `archived`, and disappear from the
+  plan the interface draws; nothing is destroyed. The response is
+  `{"archived": "<id>"}`.
 
 Invalid input answers `400` with `{"error": "..."}`; an unknown record answers
 `404`.
@@ -77,7 +79,7 @@ node --test
 ```
 
 Node's built-in test runner, no dependency. The tests under `test/` cover the
-API's create, update and delete paths, the atomic write (including that a failed
+API's create, update and archive paths, the atomic write (including that a failed
 write leaves the previous file intact), and the refusal of invalid input.
 
 ## The font
