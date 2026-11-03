@@ -14,10 +14,25 @@ import {
   withTag,
   withoutTag,
   archivedPersonRefusal,
-  dropRefusal
+  dropRefusal,
+  clampShare,
+  shareValues,
+  shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { DROP_DAYS, dayRange, dropRange, moveRange, rowAtY } from "./lib/timeline.mjs";
+import {
+  DROP_DAYS,
+  dayRange,
+  dropRange,
+  moveRange,
+  rowAtY,
+  ROW_HEIGHT_MIN,
+  ROW_HEIGHT_MAX,
+  ROW_HEIGHT_DEFAULT,
+  stepRowHeight,
+  rowGeometry,
+  isRowHeaderTight
+} from "./lib/timeline.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -47,8 +62,12 @@ var assignments = [];
 var markerIndex = 0;
 var marker = null;
 var markerDate = null;
-var ftePx = 40;
-var stepPx = 4;
+// The row height and the geometry derived from it. A view setting for the
+// session only: it is never written to the plan and resets on reload.
+var rowHeight = ROW_HEIGHT_DEFAULT;
+var ftePx = 0;
+var stepPx = 0;
+var BASE_PX = 1;
 var lastDragAt = 0;
 var showArchived = false;
 
@@ -121,12 +140,28 @@ function set(n, i, span) {
   n.style.setProperty("--n", span);
   return n;
 }
-function measureFte(container) {
-  var probe = el("span", "fte-probe");
-  container.appendChild(probe);
-  var h = probe.getBoundingClientRect().height;
-  probe.remove();
-  if (h > 0) { ftePx = h; stepPx = h / 10; }
+
+// Pixel offset from the bottom of a row for a share of a full FTE. Rounding
+// here keeps every drawn edge - the ceiling, a block, the hatch - on a whole
+// pixel, so a fractional row height cannot blur a hairline. All shares are
+// whole 10% steps, so stacked blocks share the same edge to the pixel.
+function yPx(share) {
+  return Math.round(BASE_PX + share * ftePx);
+}
+
+// Apply the current row height to the whole grid: the row-header column and
+// the timeline together, and nothing else. Nothing here is persisted.
+function applyRowHeight() {
+  var g = rowGeometry(rowHeight);
+  rowHeight = g.row;
+  ftePx = g.fte;
+  stepPx = g.step;
+  root.style.setProperty("--row-h", rowHeight + "px");
+  var down = document.getElementById("row-decrease");
+  var up = document.getElementById("row-increase");
+  if (down) down.disabled = rowHeight <= ROW_HEIGHT_MIN;
+  if (up) up.disabled = rowHeight >= ROW_HEIGHT_MAX;
+  root.classList.toggle("is-tight-rows", isRowHeaderTight(rowHeight));
 }
 
 /* --- the shape of the calendar ------------------------------------------ */
@@ -288,7 +323,7 @@ function drawRows() {
     var row = el("div", "row" + (person.archived ? " is-archived" : ""));
     row.setAttribute("data-person", person.id);
     var ceiling = el("span", "ceiling");
-    ceiling.style.setProperty("--avail", person.availability / 100);
+    ceiling.style.setProperty("--ceiling-px", yPx(person.availability / 100) + "px");
     row.appendChild(ceiling);
 
     layoutPerson(person).forEach(function (group) {
@@ -320,11 +355,19 @@ function blockFor(group, s) {
     ". Enter for details" + (archived ? "." : ", drag an edge to change it."));
   b.style.setProperty("--block-ink", "var(--proj-" + a.project.colour + ")");
   set(b, s.start, s.end - s.start + 1);
-  b.style.setProperty("--b", r4(s.offset));
-  b.style.setProperty("--h", r4(group.h));
-  b.style.setProperty("--hatch", r4(s.hatch));
+  b.style.setProperty("--blk-bottom", yPx(s.offset) + "px");
+  b.style.setProperty("--blk-height", (yPx(s.offset + group.h) - yPx(s.offset)) + "px");
+  b.dataset.offset = String(s.offset);
   if (s.end - s.start + 1 <= 1) b.classList.add("is-tight");
-  if (s.hatch > 0) b.appendChild(el("span", "blk__hatch"));
+  if (s.hatch > 0) {
+    // The over-allocation band runs from the block's top down to the ceiling;
+    // its bottom border shares the ceiling's pixel so the two lines agree.
+    var hatch = el("span", "blk__hatch");
+    var hatchBottom = yPx(Math.max(s.offset, a.person.availability / 100));
+    hatch.style.setProperty("--hatch-px",
+      Math.max(0, yPx(s.offset + group.h) - hatchBottom) + "px");
+    b.appendChild(hatch);
+  }
   var tag = el("span", "blk__tag");
   tag.textContent = a.project.name + " \u00b7 " + a.share + "%";
   b.appendChild(tag);
@@ -531,7 +574,8 @@ function drawStack() {
 
 // A ghost of the extent a drag would create or move: a block outline in the
 // row it would land on, with a small label carrying its dates. `--i`/`--n`
-// place it, `--h`/`--b` size it and `--block-ink` gives it the project colour.
+// place it, `--blk-bottom`/`--blk-height` size it and `--block-ink` gives it
+// the project colour.
 function makeExtentPreview() {
   var node = el("div", "preview");
   var label = el("span", "preview__label");
@@ -542,8 +586,8 @@ function makeExtentPreview() {
 function placePreview(preview, row, range, colour, height, offset) {
   preview.node.style.setProperty("--i", range.start);
   preview.node.style.setProperty("--n", range.end - range.start + 1);
-  preview.node.style.setProperty("--b", offset);
-  preview.node.style.setProperty("--h", height);
+  preview.node.style.setProperty("--blk-bottom", yPx(offset) + "px");
+  preview.node.style.setProperty("--blk-height", (yPx(offset + height) - yPx(offset)) + "px");
   preview.node.style.setProperty("--block-ink", "var(--proj-" + colour + ")");
   preview.label.textContent = fmtRange(addDays(rangeStart, range.start), addDays(rangeStart, range.end));
   if (preview.node.parentNode !== row) row.appendChild(preview.node);
@@ -692,8 +736,10 @@ function beginEdgeDrag(a, edge, block, e) {
       readout.textContent = fmtRange(addDays(rangeStart, curStart), addDays(rangeStart, curEnd));
     } else {
       var steps = Math.round(-dy / stepPx);
-      curShare = clamp(origShare + steps * 10, 10, 100);
-      block.style.setProperty("--h", r4(curShare / 100));
+      curShare = shareFromDrag(origShare, steps);
+      var offset = Number(block.dataset.offset) || 0;
+      block.style.setProperty("--blk-height",
+        (yPx(offset + curShare / 100) - yPx(offset)) + "px");
       readout.textContent = curShare + "%";
     }
     readout.style.left = (ev.clientX + 14) + "px";
@@ -769,7 +815,7 @@ function beginBodyDrag(a, block, e) {
     var person = personById[row.personId];
     if (person && person.archived) { if (preview) preview.node.remove(); return; }
     placePreview(preview, row.el, range, a.project.colour, r4(a.share / 100),
-      block.style.getPropertyValue("--b") || 0);
+      Number(block.dataset.offset) || 0);
   }
 
   function onUp(ev) {
@@ -1187,6 +1233,22 @@ function availabilityControl(value) {
 
 var tagListSeq = 0;
 
+// A menu of the ten possible shares, 10% through 100%. Choosing a value is the
+// same change a vertical edge drag makes - it lands on exactly the same number
+// - so there is nothing to type and nothing to round by hand.
+function shareSelect(current) {
+  var select = document.createElement("select");
+  select.setAttribute("aria-label", "Allocation, in steps of 10 per cent");
+  shareValues().forEach(function (value) {
+    var option = document.createElement("option");
+    option.value = String(value);
+    option.textContent = value + "%";
+    select.appendChild(option);
+  });
+  select.value = String(clampShare(current));
+  return select;
+}
+
 // Tag chips plus an input that takes a new tag or one from `suggest`.
 function tagEditor(initial, suggest) {
   var tags = (initial || []).slice();
@@ -1387,18 +1449,19 @@ function openAssignmentPanel(a, trigger) {
   var archived = !!(a.raw && a.raw.archived);
   var node = panelShell(a.project.name + " \u00b7 " + a.person.name,
     fmtRange(a.start, a.end));
-  var fields = el("dl", "fields");
-  var share = el("span");
-  share.textContent = a.share + "%";
-  if (!archived) {
-    var hint = el("span", "soft");
-    hint.textContent = "  (drag an edge to change)";
-    share.appendChild(hint);
-  }
-  fields.appendChild(field("Allocation", share));
-  node.appendChild(fields);
 
   var form = el("form", "form");
+  // The Share menu and a vertical edge drag reach the same number; the menu
+  // opens on the Assignment's current share, so the two cannot disagree.
+  var sharePick = shareSelect(a.share);
+  var shareControl = el("span", "share-control");
+  shareControl.appendChild(sharePick);
+  if (!archived) {
+    var shareHint = el("span", "soft");
+    shareHint.textContent = " or drag an edge";
+    shareControl.appendChild(shareHint);
+  }
+  form.appendChild(formRow("Share", shareControl));
   // Assignment tags are offered from that Project's other Assignments only.
   var tags = tagEditor(a.raw.tags, function () {
     return suggestAssignmentTags(data.assignments, a.project.id, a.id);
@@ -1432,6 +1495,7 @@ function openAssignmentPanel(a, trigger) {
   var save = saveButton("Save", function () {
     submitPanel(node, error, function () {
       return api("PATCH", "/api/assignments/" + encodeURIComponent(a.id), {
+        share: clampShare(Number(sharePick.value)),
         tags: tags.tags(),
         note: noteInput.value
       });
@@ -1446,9 +1510,9 @@ function openAssignmentPanel(a, trigger) {
 }
 
 // The panel a drawn range opens: the read-back of what was drawn, then the
-// choices that make it an Assignment. The dates and the 100% share are read
-// only - the range is set by drawing, never typed - and the Project is
-// required, because an Assignment cannot exist without one.
+// choices that make it an Assignment. The dates are read only - the range is
+// set by drawing, never typed - the Share menu opens on 100%, and the Project
+// is required, because an Assignment cannot exist without one.
 function openNewAssignmentPanel(person, range, rect, trigger) {
   var start = addDays(rangeStart, range.start);
   var end = addDays(rangeStart, range.end);
@@ -1456,12 +1520,6 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
 
   var fields = el("dl", "fields");
   fields.appendChild(field("Dates", fmtRange(start, end)));
-  var share = el("span");
-  share.textContent = "100%";
-  var hint = el("span", "soft");
-  hint.textContent = "  (the whole range)";
-  share.appendChild(hint);
-  fields.appendChild(field("Allocation", share));
   node.appendChild(fields);
 
   var form = el("form", "form");
@@ -1479,6 +1537,11 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
     projectSelect.appendChild(option);
   });
   form.appendChild(formRow("Project", projectSelect));
+
+  // Creating an Assignment starts at the whole range; the menu offers every
+  // other share, exactly as an edge drag would set it.
+  var sharePick = shareSelect(100);
+  form.appendChild(formRow("Share", sharePick));
 
   // Assignment tags are offered from the chosen Project's other Assignments,
   // so the list follows the Project choice.
@@ -1508,7 +1571,7 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
         personId: person.id,
         start: iso(start),
         end: iso(end),
-        share: 100,
+        share: clampShare(Number(sharePick.value)),
         tags: tags.tags(),
         note: noteInput.value
       });
@@ -1544,6 +1607,31 @@ function initZoom() {
     b.addEventListener("click", function () { choose(b.getAttribute("data-zoom")); });
   });
   choose(root.getAttribute("data-zoom") || "day");
+}
+
+/* --- row height ---------------------------------------------------------- */
+
+// The top-bar pair that changes the drawn height of every row. Each press
+// moves it by one 8px step across 32..120; it is applied to the grid and
+// remembered nowhere.
+function initRowHeight() {
+  var down = document.getElementById("row-decrease");
+  var up = document.getElementById("row-increase");
+  if (down) {
+    down.addEventListener("click", function () {
+      rowHeight = stepRowHeight(rowHeight, -1);
+      applyRowHeight();
+      render();
+    });
+  }
+  if (up) {
+    up.addEventListener("click", function () {
+      rowHeight = stepRowHeight(rowHeight, 1);
+      applyRowHeight();
+      render();
+    });
+  }
+  applyRowHeight();
 }
 
 /* --- render -------------------------------------------------------------- */
@@ -1587,7 +1675,6 @@ function render() {
   tl.appendChild(rows.body);
   tl.appendChild(drawMarker());
 
-  measureFte(rows.body);
   drawStack();
 
   markerIndex = clamp(markerIndex, 0, DAYS - 1);
@@ -1631,6 +1718,7 @@ function boot() {
     indexData();
     var today = data.today ? udate(data.today) : rangeStart;
     markerIndex = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
+    initRowHeight();
     render();
     initZoom();
     bindChrome();

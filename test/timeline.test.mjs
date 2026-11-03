@@ -5,7 +5,15 @@ import {
   dayRange,
   dropRange,
   moveRange,
-  rowAtY
+  rowAtY,
+  ROW_HEIGHT_MIN,
+  ROW_HEIGHT_MAX,
+  ROW_HEIGHT_DEFAULT,
+  ROW_HEADER_TIGHT,
+  clampRowHeight,
+  stepRowHeight,
+  rowGeometry,
+  isRowHeaderTight
 } from "../public/lib/timeline.mjs";
 
 test("a drawn range spans the days between two pointers, in either direction", () => {
@@ -57,4 +65,41 @@ test("a body drag targets the row under the pointer, or no row at all", () => {
   assert.equal(rowAtY(rows, -1), null);
   assert.equal(rowAtY([], 5), null);
   assert.equal(rowAtY(undefined, 5), null);
+});
+
+test("the row height steps by 8 and clamps at both ends and the default", () => {
+  assert.equal(ROW_HEIGHT_DEFAULT, 56);
+  assert.equal(stepRowHeight(ROW_HEIGHT_DEFAULT, 1), 64);
+  assert.equal(stepRowHeight(ROW_HEIGHT_DEFAULT, -1), 48);
+  // At each end the control stops rather than running past the range.
+  assert.equal(stepRowHeight(ROW_HEIGHT_MAX, 1), ROW_HEIGHT_MAX);
+  assert.equal(stepRowHeight(ROW_HEIGHT_MIN, -1), ROW_HEIGHT_MIN);
+  assert.equal(stepRowHeight(1000, 1), ROW_HEIGHT_MAX);
+  assert.equal(stepRowHeight(0, -1), ROW_HEIGHT_MIN);
+  // Any stray value snaps to a whole step, and a missing one is the default.
+  assert.equal(clampRowHeight(33), 32);
+  assert.equal(clampRowHeight(59), 56);
+  assert.equal(clampRowHeight(undefined), ROW_HEIGHT_DEFAULT);
+});
+
+test("the drawable height and the step are derived from the row height", () => {
+  // The original 44px row was 40px of drawable height with a 4px 10% step.
+  const original = rowGeometry(44);
+  assert.equal(original.fte, 40);
+  assert.equal(original.step, 4);
+  // The same proportion holds at every size: drawable = 10 * step.
+  [32, 56, 120].forEach((row) => {
+    const g = rowGeometry(row);
+    assert.equal(g.row, row);
+    assert.ok(Math.abs(g.fte - row * 10 / 11) < 1e-9);
+    assert.equal(g.fte, 10 * g.step);
+  });
+});
+
+test("the row header keeps two lines until it falls below 48px", () => {
+  assert.equal(ROW_HEADER_TIGHT, 48);
+  assert.equal(isRowHeaderTight(32), true);
+  assert.equal(isRowHeaderTight(40), true);
+  assert.equal(isRowHeaderTight(48), false);
+  assert.equal(isRowHeaderTight(56), false);
 });

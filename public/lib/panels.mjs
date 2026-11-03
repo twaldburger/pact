@@ -25,6 +25,38 @@ export function stepAvailability(value, delta) {
   return clampAvailability(clampAvailability(value) + direction * AVAILABILITY_STEP);
 }
 
+/*
+ * An Assignment's Allocation, in the same whole 10% steps as Availability. It
+ * is chosen from a menu of the ten values or set by dragging an edge; a typed
+ * value only ever arrives from a drag's pixel arithmetic, and is rounded to the
+ * closest step here so the two can never store a different number.
+ */
+export const SHARE_MIN = 10;
+export const SHARE_MAX = 100;
+export const SHARE_STEP = 10;
+export const SHARE_VALUES = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+export function clampShare(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return SHARE_MAX;
+  const snapped = Math.round(n / SHARE_STEP) * SHARE_STEP;
+  return Math.min(SHARE_MAX, Math.max(SHARE_MIN, snapped));
+}
+
+// The ten values the Share menu offers, as a fresh list so a caller cannot
+// change the menu for everyone.
+export function shareValues() {
+  return SHARE_VALUES.slice();
+}
+
+// Where a vertical edge drag of `steps` 10% steps from `value` settles. A menu
+// choice and the drag that reaches the same value both pass through
+// clampShare, so the number they store is the same.
+export function shareFromDrag(value, steps) {
+  const count = Number.isFinite(steps) ? Math.round(steps) : 0;
+  return clampShare(clampShare(value) + count * SHARE_STEP);
+}
+
 function tagKey(tag) {
   return String(tag).trim().toLowerCase();
 }

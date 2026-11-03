@@ -41,10 +41,13 @@
   --fs-title: 1.0625rem;  /* 17 */
   --fs-mark: 1.375rem;    /* 22 */
 
-  /* Layout - rows 44px, a full FTE 40px, so a 10% step is 4px ---------------- */
-  --step-h: 0.25rem;
-  --fte-h: calc(10 * var(--step-h));
-  --row-h: calc(var(--fte-h) + var(--step-h));
+  /* Layout - one row is one 10% step taller than the height an Assignment
+     fills: at 44px the drawable height was 40px and a step 4px. The script
+     sets --row-h to the session's row height (default 56px, 32..120 in steps
+     of 8) and derives the pixel geometry from it; --day-w is the horizontal
+     scale. The Stack rail keeps its own fixed height and does not follow. */
+  --row-h: 56px;
+  --stack-h: 2.75rem;
   --base: 0.0625rem;
   --rail-w: 14.5rem;
   --head-w: 10.5rem;
@@ -151,6 +154,32 @@ h1, h2, h3, p { margin: 0; }
 }
 .ghost { border-radius: var(--radius); }
 
+/* Row height - a quiet pair beside the zoom, disabled at each end of 32..120. */
+.rowheight {
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.rowheight__btn {
+  appearance: none;
+  min-width: 1.75rem;
+  padding: 0.25rem 0.375rem;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-data);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rowheight__btn:last-child { border-right: 0; }
+.rowheight__btn:hover:not(:disabled) { color: var(--ink); background: var(--off); }
+.rowheight__btn:disabled { opacity: 0.35; cursor: default; }
+
 /* The quiet plus that adds a Person or Project sits in that column's own
    header, beside the title it belongs to. */
 .add {
@@ -210,7 +239,7 @@ h1, h2, h3, p { margin: 0; }
   align-items: center;
   gap: 0.5rem;
   width: 100%;
-  min-height: var(--row-h);
+  min-height: var(--stack-h);
   padding: 0 1rem;
   border: 0;
   border-bottom: 1px solid var(--rule);
@@ -258,7 +287,7 @@ h1, h2, h3, p { margin: 0; }
    marked, with a Restore button in reach. */
 .stack__row { position: relative; }
 .stack__row.is-archived .stack__item {
-  min-height: calc(var(--row-h) - 0.75rem);
+  min-height: calc(var(--stack-h) - 0.75rem);
   border-bottom: 0;
 }
 .stack__row.is-archived .stack__name { color: var(--ink-soft); }
@@ -479,6 +508,29 @@ h1, h2, h3, p { margin: 0; }
   font-weight: 600;
 }
 
+/* Below the tight threshold the two lines cannot both fit, so the header
+   becomes one line: the name, truncating with an ellipsis rather than
+   overflowing, and the figure beside it in the smaller type. */
+:root.is-tight-rows .rowhead {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.375rem;
+}
+
+:root.is-tight-rows .rowhead__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root.is-tight-rows .rowhead__fig {
+  flex: 0 0 auto;
+  font-size: var(--fs-axis);
+}
+
 .rowhead-wrap {
   position: relative;
   height: var(--row-h);
@@ -536,7 +588,7 @@ h1, h2, h3, p { margin: 0; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(var(--base) + var(--avail) * var(--fte-h));
+  bottom: var(--ceiling-px);
   border-top: 1px dashed var(--ink);
   opacity: 0.5;
   z-index: 4;
@@ -548,8 +600,8 @@ h1, h2, h3, p { margin: 0; }
   position: absolute;
   left: calc(var(--i) * var(--day-w));
   width: calc(var(--n) * var(--day-w));
-  bottom: calc(var(--base) + var(--b) * var(--fte-h));
-  height: calc(var(--h) * var(--fte-h));
+  bottom: var(--blk-bottom);
+  height: var(--blk-height);
   padding: 0;
   border: 0;
   border-radius: var(--radius);
@@ -617,7 +669,7 @@ h1, h2, h3, p { margin: 0; }
   left: 0;
   right: 0;
   top: 0;
-  height: calc(var(--hatch) * var(--fte-h));
+  height: var(--hatch-px);
   background: repeating-linear-gradient(
     45deg,
     color-mix(in srgb, var(--signal) 45%, transparent) 0 2px,
@@ -657,8 +709,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .preview {
-  bottom: calc(var(--base) + var(--b, 0) * var(--fte-h));
-  height: calc(var(--h, 1) * var(--fte-h));
+  bottom: var(--blk-bottom, 0);
+  height: var(--blk-height, 0);
   background: color-mix(in srgb, var(--block-ink) 26%, transparent);
 }
 
@@ -868,6 +920,15 @@ down to the last row and no further. */
 
 .tags { display: block; }
 
+/* The Share menu with its drag hint, sized to the form column. */
+.share-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.share-control select { width: auto; }
+
 .form .tags__input {
   width: 7rem;
   padding: 0.125rem 0.375rem;
@@ -1020,16 +1081,6 @@ down to the last row and no further. */
   margin: 2rem;
   font-size: var(--fs-body);
   color: var(--ink-soft);
-}
-
-/* A hidden probe that measures one full FTE, so a vertical drag converts
-   pixels to 10% steps at whatever text scale is in force. */
-.fte-probe {
-  position: absolute;
-  width: 1px;
-  height: var(--fte-h);
-  visibility: hidden;
-  pointer-events: none;
 }
 
 /* Drag affordances ---------------------------------------------------------- */

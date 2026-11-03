@@ -47,6 +47,9 @@ no runtime dependency.
 - `public/fonts/` - the bundled Archivo variable font and its OFL licence.
 
 The three zoom states (day, week, month) change only the drawn width of a day.
+Beside the zoom, a row-height control changes the drawn height of every row in
+8px steps from 32 to 120, defaulting to 56; it is a view setting for the
+session only and is not written to the plan.
 
 What the screen can change: drag a Project from the Stack onto a Person's row to
 create an Assignment there - a ghost block shows the extent it would create and
@@ -56,8 +59,10 @@ assignment panel with the dates read back, a project to choose, tags and a note.
 Drag an Assignment's body to move it in time and onto another Person, keeping
 its Allocation, tags and note; drag its left or right edge horizontally to
 change its start or end date, snapped to whole days; drag an edge vertically to
-change its Allocation in 10% steps. Every drag shows the value being set, and
-the edge drags are the only way an Allocation is set - it is never typed.
+change its Allocation in 10% steps. Every drag shows the value being set; the
+same Allocation is chosen from a menu of the ten values in the Assignment
+popover and the New assignment panel, so it is set by dragging or by choosing a
+step, never free-typed.
 Over-allocation is allowed and drawn: the part of a block above the Person's
 Availability line is hatched in the signal colour, and the row header's
 `assigned/availability` figure turns to that colour.
@@ -65,8 +70,8 @@ Availability line is hatched in the signal colour, and the row header's
 People and Projects are edited in place. A Person carries a name, an
 Availability in steps of 10%, any number of Person tags and an optional note; a
 Project carries a name, one of the six project inks and notes. An Assignment's
-popover edits its Assignment tags and note, and offers archiving; its Allocation
-and dates are set by dragging, never typed. A Person's Person tags are suggested
+popover edits its Allocation, Assignment tags and note, and offers archiving;
+its dates are set by dragging, never typed. A Person's Person tags are suggested
 from other People and an Assignment's tags from that Project's other
 Assignments, because the two vocabularies are separate.
 
@@ -106,7 +111,9 @@ Node's built-in test runner, no dependency. The tests under `test/` cover the
 API's create, update, archive and restore paths, the atomic write (including
 that a failed write leaves the previous file intact), the refusal of invalid
 input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
-Availability stepping and refusal wording.
+Availability and Allocation stepping and refusal wording. The Timeline geometry
+in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
+steps - is covered without a browser.
 
 ## The font
 
