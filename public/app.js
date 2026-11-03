@@ -20,7 +20,7 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { blockLabel, labelText } from "./lib/label.mjs";
+import { blockLabel, labelText, rangeLabel } from "./lib/label.mjs";
 import {
   DROP_DAYS,
   dayRange,
@@ -534,10 +534,22 @@ function drawMarker() {
 
 function indexFromClientX(x) {
   var tlRect = tl.getBoundingClientRect();
+  var headW = headWidth();
+  var dayW = dayWidth();
+  return clamp(Math.floor((x - (tlRect.left + headW)) / dayW), 0, DAYS - 1);
+}
+
+// The drawn width of one day, read from the grid so it follows the zoom.
+function dayWidth() {
+  var tlRect = tl.getBoundingClientRect();
   var heads = tl.querySelector(".tl__heads");
   var headW = heads ? heads.getBoundingClientRect().width : 0;
-  var dayW = (tlRect.width - headW) / DAYS;
-  return clamp(Math.floor((x - (tlRect.left + headW)) / dayW), 0, DAYS - 1);
+  return (tlRect.width - headW) / DAYS;
+}
+
+function headWidth() {
+  var heads = tl.querySelector(".tl__heads");
+  return heads ? heads.getBoundingClientRect().width : 0;
 }
 
 var draggingMarker = false;
@@ -1038,8 +1050,15 @@ function planUrl() {
 
 function refresh() {
   return api("GET", planUrl()).then(function (plan) {
+    var previousStart = rangeStart;
     data = plan;
     render();
+    // When the range has gained days to the left, hold the owner's view in
+    // place rather than letting the restored scroll slip a whole month back.
+    if (previousStart) {
+      var shift = dayDiff(udate(plan.range.start), previousStart);
+      if (shift > 0) scroller.scrollLeft += shift * dayWidth();
+    }
   });
 }
 
@@ -1682,6 +1701,17 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
 
 /* --- zoom ---------------------------------------------------------------- */
 
+// Bring today into the middle of the day area, leaving the sticky row-header
+// column clear. It changes only the scroll, never the Marker.
+function scrollToToday() {
+  if (!data) return;
+  var today = data.today ? udate(data.today) : rangeStart;
+  var index = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
+  var visible = scroller.clientWidth - headWidth();
+  var left = (index + 0.5) * dayWidth() - visible / 2;
+  scroller.scrollLeft = Math.max(0, left);
+}
+
 function initZoom() {
   var buttons = Array.prototype.slice.call(document.querySelectorAll(".zoom__btn"));
   function choose(zoom) {
@@ -1773,9 +1803,7 @@ function render() {
   markerIndex = clamp(markerIndex, 0, DAYS - 1);
   setMarker(markerIndex);
 
-  contextEl.textContent =
-    MONTHS_SHORT[rangeStart.getUTCMonth()] + " - " +
-    MONTHS_SHORT[rangeEnd.getUTCMonth()] + " " + rangeEnd.getUTCFullYear();
+  contextEl.textContent = rangeLabel(data.range.start, data.range.end);
 
   scroller.scrollLeft = scrollLeft;
   drawBlockLabels();
@@ -1794,6 +1822,13 @@ function bindChrome() {
       archivedToggle.textContent = showArchived ? "Hide archived" : "Show archived";
       refresh().catch(showError);
     });
+  }
+  // The Today control brings today back into the middle of the view. It never
+  // moves the Marker, which is the owner's read line and stays where they put
+  // it; today is always inside the range, so the control always has work.
+  var todayBtn = document.getElementById("today");
+  if (todayBtn) {
+    todayBtn.addEventListener("click", function () { scrollToToday(); });
   }
   panelLayer.addEventListener("pointerdown", function (e) {
     if (e.target === panelLayer) closePanel(true);

@@ -49,7 +49,17 @@ no runtime dependency.
 The three zoom states (day, week, month) change only the drawn width of a day.
 Beside the zoom, a row-height control changes the drawn height of every row in
 8px steps from 32 to 120, defaulting to 56; it is a view setting for the
-session only and is not written to the plan.
+session only and is not written to the plan. A Today control scrolls the view
+so today is visible again without moving the Marker, and the range label beside
+the wordmark names the plan's own extent.
+
+The plan's date range extends itself. Every write recomputes it in the plan
+module: it holds the earliest Assignment start and the latest Assignment end
+with a clear margin, always holds today with room on both sides, and keeps
+aligned to whole months. It only ever grows, so it never slips under the
+owner's scroll position; when the start extends, the interface holds the
+visible window where it was while the axis gains days to its left. The new
+range is stored in the plan file like any other change.
 
 What the screen can change: drag a Project from the Stack onto a Person's row to
 create an Assignment there - a ghost block shows the extent it would create and
@@ -114,7 +124,9 @@ input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
 Availability and Allocation stepping and refusal wording. The Timeline geometry
 in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
 steps - is covered without a browser, as is the block-label rule in
-`public/lib/label.mjs` - how much of a title a block has room to draw.
+`public/lib/label.mjs` - how much of a title a block has room to draw - and its
+range label. The grow-only range rule in `lib/plan.mjs` is a pure function the
+tests call directly.
 
 ## The font
 

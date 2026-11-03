@@ -19,6 +19,28 @@ export const LABEL_SEPARATOR = " \u00b7 ";
 // What marks a title that had to be cut.
 export const ELLIPSIS = "\u2026";
 
+// The months as the range label and the axis name them.
+export const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
+  "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/*
+ * The plan's own extent, named unambiguously from its two ISO dates: both
+ * years when they differ ("Sep 2026 - Oct 2027"), a single year when the
+ * months share one ("Sep - Oct 2026"), and a single month when the range is
+ * one ("Sep 2026"). A year is never left to be inferred from the end alone.
+ */
+export function rangeLabel(startISO, endISO) {
+  const startMonth = +startISO.slice(5, 7) - 1;
+  const endMonth = +endISO.slice(5, 7) - 1;
+  const startYear = startISO.slice(0, 4);
+  const endYear = endISO.slice(0, 4);
+  const startName = MONTHS_SHORT[startMonth];
+  const endName = MONTHS_SHORT[endMonth];
+  if (startYear !== endYear) return startName + " " + startYear + " - " + endName + " " + endYear;
+  if (startMonth !== endMonth) return startName + " - " + endName + " " + startYear;
+  return startName + " " + startYear;
+}
+
 // A cut title keeps at least this many characters. Below it the block would
 // show a fragment with no name left in it, which is worse than showing nothing.
 export const LABEL_MIN_CHARS = 3;
