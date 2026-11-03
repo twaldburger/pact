@@ -50,8 +50,8 @@ The three zoom states (day, week, month) change only the drawn width of a day.
 Beside the zoom, a row-height control changes the drawn height of every row in
 8px steps from 32 to 120, defaulting to 56; it is a view setting for the
 session only and is not written to the plan. A Today control scrolls the view
-so today is visible again without moving the Marker, and the range label beside
-the wordmark names the plan's own extent.
+so today is visible again and moves the Marker back onto today, and the range
+label beside the wordmark names the plan's own extent.
 
 The plan's date range extends itself. Every write recomputes it in the plan
 module: it holds the earliest Assignment start and the latest Assignment end

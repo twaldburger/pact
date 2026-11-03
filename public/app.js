@@ -1726,11 +1726,14 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
 /* --- zoom ---------------------------------------------------------------- */
 
 // Bring today into the middle of the day area, leaving the sticky row-header
-// column clear. It changes only the scroll, never the Marker.
-function scrollToToday() {
-  if (!data || !marker) return;
+// column clear, and put the Marker back on today so the row headers read as of
+// now again. Both effects happen in one press; today is always inside the
+// range, so the control always has work.
+function goToToday() {
+  if (!data) return;
   var today = data.today ? udate(data.today) : rangeStart;
   var index = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
+  setMarker(index);
   var visible = scroller.clientWidth - headWidth();
   var left = (index + 0.5) * dayWidth() - visible / 2;
   scroller.scrollLeft = Math.max(0, left);
@@ -1878,12 +1881,12 @@ function bindChrome() {
       refresh().catch(showError);
     });
   }
-  // The Today control brings today back into the middle of the view. It never
-  // moves the Marker, which is the owner's read line and stays where they put
-  // it; today is always inside the range, so the control always has work.
+  // The Today control returns the owner to now: it brings today back into the
+  // middle of the view and puts the Marker back on today. Today is always
+  // inside the range, so the control always has work.
   var todayBtn = document.getElementById("today");
   if (todayBtn) {
-    todayBtn.addEventListener("click", function () { scrollToToday(); });
+    todayBtn.addEventListener("click", function () { goToToday(); });
   }
   panelLayer.addEventListener("pointerdown", function (e) {
     if (e.target === panelLayer) closePanel(true);
