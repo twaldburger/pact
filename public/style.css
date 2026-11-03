@@ -635,7 +635,7 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* The weekend band belongs to the calendar, not to a person: one full-height
-   column band through every row and both axis bands. */
+   column band through every row and the day band. */
 .weekends {
   grid-column: 2;
   grid-row: 1 / 3;
@@ -669,8 +669,11 @@ h1, h2, h3, p { margin: 0; }
   width: max-content;
 }
 
+/* The month band carries month names and nothing else, so it is opaque: the
+   calendar's weekend band runs underneath and must not show through it. */
 .axis__months {
   height: var(--band-month-h);
+  background: var(--canvas);
   border-bottom: 1px solid var(--rule-strong);
 }
 
