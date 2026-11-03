@@ -8,6 +8,9 @@ import {
   seedPlan,
   validatePlan,
   atomicWrite,
+  growRange,
+  fromISO,
+  todayISO,
   ValidationError,
   NotFoundError
 } from "../lib/plan.mjs";
@@ -19,6 +22,79 @@ function tempFile() {
 
 test("the seeded plan is valid", () => {
   assert.deepEqual(validatePlan(seedPlan()), []);
+});
+
+// A range wide enough for its assignments and for today: the two months before
+// today through the next eleven months, both ends on whole months.
+const RANGE = { start: "2026-09-01", end: "2027-10-31" };
+const TODAY = "2026-11-03";
+const assignment = (start, end) => ({ start: start, end: end });
+
+function isMonthAligned(date) {
+  const d = fromISO(date);
+  const start = date.slice(8) === "01";
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  return start || d.getUTCDate() === lastDay;
+}
+
+test("work inside the range leaves it alone", () => {
+  const grown = growRange(RANGE, [assignment("2026-10-01", "2027-08-31")], TODAY);
+  assert.deepEqual(grown, RANGE);
+});
+
+test("work past either end extends it, with a clear margin", () => {
+  const earlier = growRange(RANGE, [assignment("2026-05-15", "2026-06-15")], TODAY);
+  assert.equal(earlier.start, "2026-04-01");
+  assert.equal(earlier.end, RANGE.end);
+
+  const later = growRange(RANGE, [assignment("2027-01-01", "2027-10-15")], TODAY);
+  assert.equal(later.start, RANGE.start);
+  assert.equal(later.end, "2027-11-30");
+
+  const both = growRange(RANGE, [assignment("2024-01-01", "2029-12-31")], TODAY);
+  assert.equal(both.start, "2023-12-01");
+  assert.equal(both.end, "2030-01-31");
+});
+
+test("today near an edge extends it on both sides", () => {
+  const stored = { start: "2026-11-01", end: "2026-12-31" };
+  const grown = growRange(stored, [], "2026-11-03");
+  assert.equal(grown.start, "2026-09-01");
+  assert.equal(grown.end, "2027-10-31");
+});
+
+test("both ends of the grown range land on whole months", () => {
+  const grown = growRange({ start: "2026-11-10", end: "2026-12-05" }, [assignment("2025-03-17", "2028-08-02")], TODAY);
+  assert.ok(isMonthAligned(grown.start), grown.start);
+  assert.ok(isMonthAligned(grown.end), grown.end);
+  assert.equal(grown.start.slice(8), "01");
+  assert.equal(grown.end, "2028-09-30");
+});
+
+test("growing is idempotent and keeps a wider stored range as a floor", () => {
+  const once = growRange(RANGE, [assignment("2024-01-01", "2029-12-31")], TODAY);
+  assert.deepEqual(growRange(once, [assignment("2024-01-01", "2029-12-31")], TODAY), once);
+
+  const wide = { start: "2000-01-01", end: "2040-12-31" };
+  assert.deepEqual(growRange(wide, [assignment("2026-06-01", "2026-06-30")], TODAY), wide);
+});
+
+test("a write past the edge grows the stored range", () => {
+  const store = createStore(tempFile());
+  const before = store.get().range;
+  // A date safely before any range the seed can hold, whatever today is.
+  const longAgo = (+todayISO().slice(0, 4) - 2) + "-01-05";
+  store.createAssignment({
+    projectId: "atlas",
+    personId: "anna",
+    start: longAgo,
+    end: longAgo.slice(0, 8) + "05",
+    share: 10
+  });
+  const after = store.get().range;
+  assert.ok(after.start < before.start, after.start + " should precede " + before.start);
+  assert.ok(isMonthAligned(after.start), after.start);
+  assert.ok(isMonthAligned(after.end), after.end);
 });
 
 test("the store seeds a missing file and reloads it", () => {

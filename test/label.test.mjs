@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   blockLabel,
   labelText,
+  rangeLabel,
   ELLIPSIS,
   LABEL_MIN_CHARS
 } from "../public/lib/label.mjs";
@@ -80,4 +81,16 @@ test("the width and the height are both needed, at any zoom", () => {
   assert.equal(blockLabel({ ...room, width: 300, height: 30 }), FULL);
   // The same block with no room for a line draws nothing.
   assert.equal(blockLabel({ ...room, width: 300, height: 4 }), "");
+});
+
+test("the range label names both years when they differ", () => {
+  assert.equal(rangeLabel("2026-09-01", "2027-10-31"), "Sep 2026 - Oct 2027");
+});
+
+test("the range label names the year once when the months share it", () => {
+  assert.equal(rangeLabel("2026-09-01", "2026-10-31"), "Sep - Oct 2026");
+});
+
+test("the range label names a single month on its own", () => {
+  assert.equal(rangeLabel("2026-09-01", "2026-09-30"), "Sep 2026");
 });
