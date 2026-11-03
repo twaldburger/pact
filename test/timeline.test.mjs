@@ -10,10 +10,13 @@ import {
   ROW_HEIGHT_MAX,
   ROW_HEIGHT_DEFAULT,
   ROW_HEADER_TIGHT,
+  ZOOM_LEVELS,
+  ZOOM_DEFAULT,
   clampRowHeight,
   stepRowHeight,
   rowGeometry,
-  isRowHeaderTight
+  isRowHeaderTight,
+  isZoom
 } from "../public/lib/timeline.mjs";
 
 test("a drawn range spans the days between two pointers, in either direction", () => {
@@ -113,4 +116,16 @@ test("that threshold follows the reader's text size", () => {
   // A scale that cannot be read falls back to the interface's own size.
   assert.equal(isRowHeaderTight(40, 0), true);
   assert.equal(isRowHeaderTight(56, undefined), false);
+});
+
+test("the plan opens at month zoom", () => {
+  assert.equal(ZOOM_DEFAULT, "month");
+  assert.deepEqual(ZOOM_LEVELS, ["day", "week", "month"]);
+});
+
+test("only the three named levels are zoom", () => {
+  ZOOM_LEVELS.forEach((level) => assert.equal(isZoom(level), true));
+  ["", "Month", "year", undefined, null].forEach((level) => {
+    assert.equal(isZoom(level), false);
+  });
 });

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-zoom="day">
+<html lang="en" data-zoom="month">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,22 +9,24 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar__brand">
-      <span class="wordmark">PACT</span>
-      <span class="topbar__context" id="context"></span>
+    <div class="topbar__left">
+      <div class="topbar__brand">
+        <span class="wordmark">PACT</span>
+        <span class="topbar__context" id="context"></span>
+      </div>
+      <div class="topbar__controls">
+        <div class="zoom" role="group" aria-label="Zoom - the width of one day">
+          <button type="button" class="zoom__btn" data-zoom="day" aria-pressed="false">Day</button>
+          <button type="button" class="zoom__btn" data-zoom="week" aria-pressed="false">Week</button>
+          <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="true">Month</button>
+        </div>
+        <button type="button" class="ghost" id="today">Today</button>
+        <div class="rowheight" role="group" aria-label="Row height - the height of one person's row">
+          <button type="button" class="rowheight__btn" id="row-decrease" aria-label="Shorter rows">−</button>
+          <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows">+</button>
+        </div>
+      </div>
     </div>
-    <div class="topbar__spacer"></div>
-    <div class="zoom" role="group" aria-label="Zoom - the width of one day">
-      <button type="button" class="zoom__btn" data-zoom="day" aria-pressed="true">Day</button>
-      <button type="button" class="zoom__btn" data-zoom="week" aria-pressed="false">Week</button>
-      <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="false">Month</button>
-    </div>
-    <button type="button" class="ghost" id="today">Today</button>
-    <div class="rowheight" role="group" aria-label="Row height - the height of one person's row">
-      <button type="button" class="rowheight__btn" id="row-decrease" aria-label="Shorter rows">−</button>
-      <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows">+</button>
-    </div>
-    <button type="button" class="ghost" id="show-archived" aria-pressed="false">Show archived</button>
     <div class="filter" id="filter">
       <input type="text" class="filter__input" id="filter-input" placeholder="Filter"
         aria-label="Filter the plan" autocomplete="off" role="combobox"
@@ -40,6 +42,9 @@
       </div>
       <div class="filter__suggest" id="filter-suggest" role="listbox"
         aria-label="Filter suggestions" hidden></div>
+    </div>
+    <div class="topbar__right">
+      <button type="button" class="ghost" id="show-archived" aria-pressed="false">Show archived</button>
     </div>
   </header>
 
