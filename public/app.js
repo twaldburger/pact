@@ -20,6 +20,7 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
+import { blockLabel, labelText } from "./lib/label.mjs";
 import {
   DROP_DAYS,
   dayRange,
@@ -358,7 +359,6 @@ function blockFor(group, s) {
   b.style.setProperty("--blk-bottom", yPx(s.offset) + "px");
   b.style.setProperty("--blk-height", (yPx(s.offset + group.h) - yPx(s.offset)) + "px");
   b.dataset.offset = String(s.offset);
-  if (s.end - s.start + 1 <= 1) b.classList.add("is-tight");
   if (s.hatch > 0) {
     // The over-allocation band runs from the block's top down to the ceiling;
     // its bottom border shares the ceiling's pixel so the two lines agree.
@@ -369,7 +369,9 @@ function blockFor(group, s) {
     b.appendChild(hatch);
   }
   var tag = el("span", "blk__tag");
-  tag.textContent = a.project.name + " \u00b7 " + a.share + "%";
+  tag.dataset.title = a.project.name;
+  tag.dataset.share = String(a.share);
+  tag.textContent = labelText(a.project.name, a.share);
   b.appendChild(tag);
   if (archived) {
     // The same marked treatment the archived lists use, so an archived
@@ -414,6 +416,88 @@ function blockFor(group, s) {
     });
 
   return b;
+}
+
+/* --- drawing: block labels ----------------------------------------------- */
+
+// Whether a block draws its title is decided from the room it actually has -
+// its measured box against the label's measured width - never from the zoom
+// or from how many days it spans. The rule lives in ./lib/label.mjs; this is
+// the thin DOM reading around it: measure, decide, write.
+
+var labelCanvas = null;
+
+// A measure of the label's own font, from a canvas, so a pass is arithmetic
+// rather than a reflow per candidate width.
+function labelMeasurer(font) {
+  if (!labelCanvas) labelCanvas = document.createElement("canvas");
+  var ctx = labelCanvas.getContext("2d");
+  ctx.font = font;
+  return function (text) { return ctx.measureText(text).width; };
+}
+
+// The label's font, the inset that keeps it off the block's edges and the
+// height one line of it needs - all read from a drawn tag, so the decision is
+// made in the same pixels the label is drawn in. Every tag is styled alike, so
+// one of them describes them all.
+function readLabelMetrics(tag, block) {
+  var style = window.getComputedStyle(tag);
+  var box = block.getBoundingClientRect();
+  var line = tag.getBoundingClientRect();
+  return {
+    font: style.fontWeight + " " + style.fontSize + " " + style.fontFamily,
+    inset: Math.max(0, line.left - box.left),
+    bottom: Math.max(0, box.bottom - line.bottom),
+    textHeight: parseFloat(style.fontSize) || 0
+  };
+}
+
+function drawBlockLabels() {
+  var blocks = tl.querySelectorAll(".blk");
+  if (!blocks.length) return;
+  var metrics = readLabelMetrics(blocks[0].querySelector(".blk__tag"), blocks[0]);
+  var measure = labelMeasurer(metrics.font);
+
+  // Read every block's box before writing any label, so the whole pass turns
+  // on one layout rather than one per block.
+  var room = [];
+  for (var i = 0; i < blocks.length; i++) {
+    var tag = blocks[i].querySelector(".blk__tag");
+    if (!tag) continue;
+    room.push({
+      tag: tag,
+      title: tag.dataset.title || "",
+      share: tag.dataset.share,
+      width: blocks[i].clientWidth - 2 * metrics.inset,
+      height: blocks[i].clientHeight - metrics.bottom
+    });
+  }
+
+  room.forEach(function (r) {
+    var text = blockLabel({
+      width: r.width,
+      height: r.height,
+      textHeight: metrics.textHeight,
+      title: r.title,
+      share: r.share,
+      measure: measure
+    });
+    // A block with no room keeps its whole label in the DOM, hidden, so the
+    // next pass can still measure the tag when the block grows again.
+    r.tag.textContent = text || labelText(r.title, r.share);
+    r.tag.style.visibility = text ? "" : "hidden";
+  });
+}
+
+// One pass a frame at most: a resize or a scale change arrives as a burst.
+var labelsQueued = false;
+function queueBlockLabels() {
+  if (labelsQueued) return;
+  labelsQueued = true;
+  window.requestAnimationFrame(function () {
+    labelsQueued = false;
+    drawBlockLabels();
+  });
 }
 
 /* --- drawing: marker ----------------------------------------------------- */
@@ -1602,6 +1686,7 @@ function initZoom() {
     });
     var after = marker.getBoundingClientRect().left - sRect.left;
     scroller.scrollLeft += after - before;
+    queueBlockLabels();
   }
   buttons.forEach(function (b) {
     b.addEventListener("click", function () { choose(b.getAttribute("data-zoom")); });
@@ -1685,6 +1770,7 @@ function render() {
     MONTHS_SHORT[rangeEnd.getUTCMonth()] + " " + rangeEnd.getUTCFullYear();
 
   scroller.scrollLeft = scrollLeft;
+  drawBlockLabels();
 }
 
 /* --- wiring -------------------------------------------------------------- */
@@ -1710,6 +1796,18 @@ function bindChrome() {
   scroller.addEventListener("scroll", function () {
     if (panel) closePanel(false);
   });
+
+  // Everything a label's room is decided from: the window, a scale change
+  // (whose block widths animate, so the pass runs again when they settle)
+  // and the bundled font, which may arrive after the first paint. None of
+  // them reloads the page.
+  window.addEventListener("resize", queueBlockLabels);
+  tl.addEventListener("transitionend", function (e) {
+    if (e.propertyName === "width") queueBlockLabels();
+  });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { drawBlockLabels(); });
+  }
 }
 
 function boot() {

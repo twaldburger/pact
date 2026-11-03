@@ -690,9 +690,6 @@ h1, h2, h3, p { margin: 0; }
   pointer-events: none;
 }
 
-.blk.is-tight .blk__tag,
-[data-zoom="month"] .blk__tag { display: none; }
-
 /* Drag previews: the extent a Stack drop or a body move would create, and the
    range being drawn in a row. They sit above the blocks, take no pointer, and
    carry their own dates so the outcome is legible before the pointer is

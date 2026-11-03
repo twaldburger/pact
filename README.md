@@ -113,7 +113,8 @@ that a failed write leaves the previous file intact), the refusal of invalid
 input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
 Availability and Allocation stepping and refusal wording. The Timeline geometry
 in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
-steps - is covered without a browser.
+steps - is covered without a browser, as is the block-label rule in
+`public/lib/label.mjs` - how much of a title a block has room to draw.
 
 ## The font
 
