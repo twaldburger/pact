@@ -103,3 +103,14 @@ test("the row header keeps two lines until it falls below 48px", () => {
   assert.equal(isRowHeaderTight(48), false);
   assert.equal(isRowHeaderTight(56), false);
 });
+
+test("that threshold follows the reader's text size", () => {
+  assert.equal(isRowHeaderTight(64, 1.5), true);
+  assert.equal(isRowHeaderTight(72, 1.5), false);
+  assert.equal(isRowHeaderTight(88, 2), true);
+  assert.equal(isRowHeaderTight(96, 2), false);
+  assert.equal(isRowHeaderTight(120, 2), false);
+  // A scale that cannot be read falls back to the interface's own size.
+  assert.equal(isRowHeaderTight(40, 0), true);
+  assert.equal(isRowHeaderTight(56, undefined), false);
+});

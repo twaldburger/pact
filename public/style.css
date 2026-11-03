@@ -1,7 +1,9 @@
 /* ============================================================================
    PACT - interface pass 2
-   The whole token set lives here, once. Nothing below invents a colour, a
-   size or a duration: everything reads from these custom properties.
+   The whole token set lives here, once: the palette, the type ramp, the
+   spacing scale, the control sizes, one value per state and the durations.
+   Nothing below invents a colour, a size, a space, a radius or a duration -
+   everything reads from these custom properties.
    ========================================================================= */
 
 @font-face {
@@ -40,6 +42,9 @@
   --fs-body: 0.875rem;    /* 14 */
   --fs-title: 1.0625rem;  /* 17 */
   --fs-mark: 1.375rem;    /* 22 */
+  --fw-ui: 500;           /* interface labels and figures */
+  --fw-title: 600;        /* the wordmark and every section title */
+  --wd-title: 110%;       /* semi-expanded: one width for every title */
 
   /* Layout - one row is one 10% step taller than the height an Assignment
      fills: at 44px the drawable height was 40px and a step 4px. The script
@@ -48,13 +53,38 @@
      scale. The Stack rail keeps its own fixed height and does not follow. */
   --row-h: 56px;
   --stack-h: 2.75rem;
-  --base: 0.0625rem;
+  --bar-h: 3rem;          /* the top bar, and what the board sits under */
   --rail-w: 14.5rem;
   --head-w: 10.5rem;
   --band-month-h: 1.75rem;
   --band-day-h: 1.5rem;
+  --control-h: 1.75rem;   /* one height for every control in the top bar */
+  --add-size: 1.5rem;     /* the square hit area of a header's add control */
   --radius: 0.1875rem;
+  --radius-chip: 0.125rem;
   --radius-panel: 0.25rem;
+
+  /* Spacing - the whole scale. Every gap, padding and margin the interface
+     draws is one of these, or --base, the hairline. */
+  --base: 0.0625rem;      /* 1 */
+  --sp-1: 0.125rem;       /* 2 */
+  --sp-2: 0.25rem;        /* 4 */
+  --sp-3: 0.5rem;         /* 8 */
+  --sp-4: 0.75rem;        /* 12 */
+  --sp-5: 1rem;           /* 16 */
+  --sp-6: 1.5rem;         /* 24 */
+
+  /* States - one value per state, shared by every control that has it. */
+  --mix-hover: 6%;        /* the quiet tint under a control being hovered */
+  --mix-drop: 7%;         /* the row under a drag from the Stack */
+  --mix-band: 8%;         /* the rubber band of a range being drawn */
+  --mix-hatch: 42%;       /* the over-allocation hatch, drawn in --signal */
+  --op-disabled: 0.45;    /* a control at the end of its range */
+  --op-archived: 0.6;     /* history: an archived Assignment, and its chip */
+  /* A text glyph is not centred in its line box, and a "+" sits below the cap
+     centre of the title beside it. This is that distance for a 17px title, in
+     rem, so it follows the root and survives text zoom. */
+  --optical-plus: -0.105rem;
 
   /* Motion ------------------------------------------------------------------- */
   --dur-fast: 120ms;
@@ -99,17 +129,25 @@ h1, h2, h3, p { margin: 0; }
 .topbar {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  height: 3rem;
-  padding: 0 1rem;
+  gap: var(--sp-4);
+  height: var(--bar-h);
+  padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--rule);
   background: var(--canvas);
 }
 
+/* The wordmark and the range it names are one unit, so the gap inside the
+   pair is tighter than the gap between the control groups that follow it. */
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
 .wordmark {
   font-size: var(--fs-mark);
-  font-weight: 640;
-  font-stretch: 112%;
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
   letter-spacing: -0.01em;
 }
 
@@ -120,81 +158,109 @@ h1, h2, h3, p { margin: 0; }
 
 .topbar__spacer { flex: 1 1 auto; }
 
-.zoom {
+/* One control language for the whole bar. The zoom segments, the row-height
+   stepper and the archive toggle share a height, a border, a radius, a type
+   role and a state set; only their width differs, and the archive toggle is
+   the one of them that also carries a pressed state. */
+.zoom,
+.rowheight,
+.ghost {
   display: flex;
+  align-items: stretch;
+  height: var(--control-h);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  overflow: hidden;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.zoom,
+.rowheight { overflow: hidden; }
+
+.ghost {
+  appearance: none;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  cursor: pointer;
 }
 
 .zoom__btn,
-.ghost {
+.rowheight__btn {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 var(--sp-4);
   border: 0;
+  border-right: 1px solid var(--rule);
   background: transparent;
-  color: var(--ink-soft);
+  color: inherit;
   font: inherit;
   font-size: var(--fs-data);
-  font-weight: 500;
-  padding: 0.25rem 0.625rem;
+  font-weight: var(--fw-ui);
+  line-height: 1;
   cursor: pointer;
 }
 
-.zoom__btn {
-  border-right: 1px solid var(--rule);
-  border-radius: 0;
+.zoom__btn:last-child,
+.rowheight__btn:last-child { border-right: 0; }
+
+/* Row height - a quiet pair beside the zoom, disabled at each end of 32..120. */
+.rowheight__btn {
+  min-width: var(--control-h);
+  padding: 0;
 }
 
-.zoom__btn:last-child { border-right: 0; }
-.zoom__btn:hover,
-.ghost:hover { color: var(--ink); }
-.zoom__btn[aria-pressed="true"] {
+/* Hover is one quiet tint for every transparent control in the bar; a control
+   that is already pressed keeps the ink fill instead. */
+.zoom__btn:hover:not([aria-pressed="true"]),
+.rowheight__btn:hover:not(:disabled),
+.ghost:hover:not([aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
+}
+
+.zoom__btn[aria-pressed="true"],
+.ghost[aria-pressed="true"] {
   background: var(--ink);
   color: var(--canvas);
 }
-.ghost { border-radius: var(--radius); }
 
-/* Row height - a quiet pair beside the zoom, disabled at each end of 32..120. */
-.rowheight {
-  display: flex;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.rowheight__btn {
-  appearance: none;
-  min-width: 1.75rem;
-  padding: 0.25rem 0.375rem;
-  border: 0;
-  border-right: 1px solid var(--rule);
-  background: transparent;
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: var(--fs-data);
-  line-height: 1;
-  cursor: pointer;
-}
-
-.rowheight__btn:last-child { border-right: 0; }
-.rowheight__btn:hover:not(:disabled) { color: var(--ink); background: var(--off); }
-.rowheight__btn:disabled { opacity: 0.35; cursor: default; }
+.rowheight__btn:disabled { opacity: var(--op-disabled); cursor: default; }
 
 /* The quiet plus that adds a Person or Project sits in that column's own
-   header, beside the title it belongs to. */
+   header, beside the title it belongs to. A square hit area with the glyph
+   centred in it, lifted as a whole onto the title's cap line so the two read
+   as one line of type rather than as a word and a box beside it. */
 .add {
-  padding: 0.125rem 0.375rem;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--add-size);
+  height: var(--add-size);
+  padding: 0;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   color: var(--ink-soft);
   font: inherit;
   font-size: var(--fs-data);
-  font-weight: 600;
+  font-weight: var(--fw-ui);
   line-height: 1;
+  transform: translateY(var(--optical-plus));
   cursor: pointer;
 }
-.add:hover { color: var(--ink); background: var(--off); }
+
+.add:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
+}
 
 /* Board --------------------------------------------------------------------- */
 
@@ -202,7 +268,7 @@ h1, h2, h3, p { margin: 0; }
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
   align-items: stretch;
-  min-height: calc(100vh - 3rem);
+  min-height: calc(100vh - var(--bar-h));
 }
 
 /* Stack rail ---------------------------------------------------------------- */
@@ -210,22 +276,28 @@ h1, h2, h3, p { margin: 0; }
 .stack {
   background: var(--panel);
   border-right: 1px solid var(--rule);
-  padding-bottom: 1rem;
+  padding-bottom: var(--sp-5);
 }
 
 .stack__head {
   height: var(--axis-h);
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0 1rem;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--rule-strong);
 }
 
-.stack__title {
+/* One section-title role. The Stack rail's head and the row-header column's
+   head are the same kind of thing, so they are set identically - the band they
+   sit in is --axis-h, which is shared with the axis bands above the grid, so
+   the two columns stay on one line at every zoom. */
+.stack__title,
+.tl__corner-label {
   font-size: var(--fs-title);
-  font-weight: 600;
-  font-stretch: 110%;
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
+  color: var(--ink);
 }
 
 .stack__list {
@@ -237,10 +309,10 @@ h1, h2, h3, p { margin: 0; }
 .stack__item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sp-3);
   width: 100%;
   min-height: var(--stack-h);
-  padding: 0 1rem;
+  padding: 0 var(--sp-5);
   border: 0;
   border-bottom: 1px solid var(--rule);
   background: transparent;
@@ -252,13 +324,19 @@ h1, h2, h3, p { margin: 0; }
   touch-action: none;
 }
 
+.stack__item:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+/* An archived entry is already drawn in --ink-soft, so its hover still has a
+   name to darken; a live one is already --ink. */
 .stack__item:hover .stack__name { color: var(--ink); }
 
 .stack__chip {
   flex: 0 0 auto;
   width: 0.625rem;
   height: 0.625rem;
-  border-radius: 0.125rem;
+  border-radius: var(--radius-chip);
   background: var(--chip);
 }
 
@@ -276,8 +354,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .stack__hint {
-  margin: 0.75rem 1rem 0;
-  font-size: 0.75rem;
+  margin: var(--sp-4) var(--sp-5) 0;
+  font-size: var(--fs-data);
   color: var(--ink-soft);
 }
 
@@ -291,20 +369,20 @@ h1, h2, h3, p { margin: 0; }
   border-bottom: 0;
 }
 .stack__row.is-archived .stack__name { color: var(--ink-soft); }
-.stack__row.is-archived .stack__chip { opacity: 0.5; }
+.stack__row.is-archived .stack__chip { opacity: var(--op-archived); }
 
 .stack__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0 1rem 0.5rem;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-5) var(--sp-3);
   border-bottom: 1px solid var(--rule);
 }
 
 .stack__badge,
 .rowhead__badge {
-  padding: 0 0.25rem;
+  padding: 0 var(--sp-2);
   border: 1px dashed var(--rule-strong);
   border-radius: var(--radius);
   color: var(--ink-soft);
@@ -316,14 +394,14 @@ h1, h2, h3, p { margin: 0; }
 
 .stack__restore,
 .rowhead__restore {
-  padding: 0.0625rem 0.375rem;
+  padding: var(--base) var(--sp-2);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   background: var(--canvas);
   color: var(--ink);
   font: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
   cursor: pointer;
 }
 
@@ -422,11 +500,11 @@ h1, h2, h3, p { margin: 0; }
 
 .ax-month__label {
   position: sticky;
-  left: calc(var(--head-w) + 0.5rem);
-  padding-left: 0.5rem;
+  left: calc(var(--head-w) + var(--sp-3));
+  padding-left: var(--sp-3);
   font-size: var(--fs-data);
-  font-weight: 600;
-  font-stretch: 108%;
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
 }
 
 .ax-day {
@@ -437,7 +515,7 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .ax-week {
-  padding-left: 0.375rem;
+  padding-left: var(--sp-3);
   border-right: 1px solid var(--rule-strong);
   font-size: var(--fs-axis);
   color: var(--ink-soft);
@@ -453,13 +531,11 @@ h1, h2, h3, p { margin: 0; }
   z-index: 22;
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0 0.75rem;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4);
   background: var(--panel);
   border-right: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule-strong);
-  font-size: var(--fs-axis);
-  color: var(--ink-soft);
 }
 
 .tl__heads {
@@ -477,10 +553,10 @@ h1, h2, h3, p { margin: 0; }
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 0.0625rem;
+  gap: var(--base);
   width: 100%;
   height: var(--row-h);
-  padding: 0 0.75rem;
+  padding: 0 var(--sp-4);
   border: 0;
   border-bottom: 1px solid var(--rule);
   background: transparent;
@@ -490,22 +566,28 @@ h1, h2, h3, p { margin: 0; }
   cursor: pointer;
 }
 
-.rowhead__name {
-  font-size: var(--fs-data);
-  font-weight: 560;
-  font-stretch: 108%;
+.rowhead:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
 }
 
-.rowhead__fig {
-  display: flex;
-  justify-content: flex-end;
+/* A Person's name and a Project's name are the same role in the two columns,
+   set the same way. */
+.rowhead__name {
   font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+}
+
+/* On its own line, left-aligned under the name so the two read as one column,
+   and never against a right edge. */
+.rowhead__fig {
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
   color: var(--ink-soft);
 }
 
 .rowhead__fig.is-over {
   color: var(--signal);
-  font-weight: 600;
+  font-weight: var(--fw-title);
 }
 
 /* Below the tight threshold the two lines cannot both fit, so the header
@@ -515,11 +597,14 @@ h1, h2, h3, p { margin: 0; }
   flex-direction: row;
   align-items: baseline;
   justify-content: flex-start;
-  gap: 0.375rem;
+  gap: var(--sp-3);
 }
 
+/* The name takes only the room it needs, so the figure stays beside it rather
+   than being pushed against the right edge of the column; it gives room up
+   when the name is long enough to need all of it. */
 :root.is-tight-rows .rowhead__name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -537,21 +622,28 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .rowhead-wrap .rowhead { height: 100%; }
+/* Room at the right of an archived row for the Archived badge and the Restore
+   button, which both hang off the row header rather than inside it. */
 .rowhead-wrap.is-archived .rowhead { padding-right: 5.25rem; }
 .rowhead-wrap.is-archived .rowhead__name { color: var(--ink-soft); }
 
 .rowhead__badge {
   position: absolute;
-  top: 0.25rem;
-  right: 0.5rem;
+  top: var(--sp-1);
+  right: var(--sp-3);
   pointer-events: none;
 }
 
 .rowhead__restore {
   position: absolute;
-  right: 0.5rem;
-  bottom: 0.25rem;
+  right: var(--sp-3);
+  bottom: var(--sp-1);
 }
+
+/* A 32px row cannot hold the badge and the Restore button on one line. The
+   badge yields: the row is already drawn muted, and Restore is the action
+   that marks it as archived. */
+:root.is-tight-rows .rowhead__badge { display: none; }
 
 /* Person rows --------------------------------------------------------------- */
 
@@ -571,7 +663,7 @@ h1, h2, h3, p { margin: 0; }
 /* The row under a drag from the Stack, before the drop creates anything. */
 .row.is-drop,
 .rowhead.is-drop {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  background: color-mix(in srgb, var(--ink) var(--mix-drop), transparent);
 }
 
 /* An archived Person's row is drawn, but quieter: the work is history until
@@ -580,7 +672,7 @@ h1, h2, h3, p { margin: 0; }
   background: color-mix(in srgb, var(--off) 55%, transparent);
 }
 
-.row.is-archived .blk { opacity: 0.62; }
+.row.is-archived .blk { opacity: var(--op-archived); }
 
 /* The ceiling is the only mark of availability inside the grid, and the space
    above it is left as paper. */
@@ -631,8 +723,6 @@ h1, h2, h3, p { margin: 0; }
   background: color-mix(in srgb, var(--on-project) 35%, transparent);
 }
 
-.blk:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-
 .blk.is-selected {
   outline: 1px solid var(--ink);
   outline-offset: 2px;
@@ -645,16 +735,16 @@ h1, h2, h3, p { margin: 0; }
 /* An archived Assignment is drawn as history: muted, outlined, marked, and
    with no edges to change it until it is restored. */
 .blk.is-archived {
-  opacity: 0.55;
+  opacity: var(--op-archived);
   outline: 1px dashed var(--rule-strong);
   outline-offset: 2px;
 }
 
 .blk__archived {
   position: absolute;
-  top: 0.125rem;
-  right: 0.25rem;
-  padding: 0 0.25rem;
+  top: var(--sp-1);
+  right: var(--sp-2);
+  padding: 0 var(--sp-2);
   border: 1px dashed var(--rule-strong);
   border-radius: var(--radius);
   background: var(--canvas);
@@ -672,7 +762,7 @@ h1, h2, h3, p { margin: 0; }
   height: var(--hatch-px);
   background: repeating-linear-gradient(
     45deg,
-    color-mix(in srgb, var(--signal) 45%, transparent) 0 2px,
+    color-mix(in srgb, var(--signal) var(--mix-hatch), transparent) 0 2px,
     transparent 2px 6px
   );
   border-bottom: 1px solid var(--signal);
@@ -714,20 +804,20 @@ h1, h2, h3, p { margin: 0; }
 .range-band {
   top: var(--base);
   bottom: var(--base);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  background: color-mix(in srgb, var(--ink) var(--mix-band), transparent);
 }
 
 .preview__label,
 .range-band__label {
   position: absolute;
   left: 0;
-  bottom: calc(100% + 0.125rem);
-  padding: 0.0625rem 0.25rem;
+  bottom: calc(100% + var(--sp-1));
+  padding: var(--base) var(--sp-2);
   background: var(--ink);
   color: var(--canvas);
   border-radius: var(--radius);
   font-size: var(--fs-axis);
-  font-weight: 500;
+  font-weight: var(--fw-ui);
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -771,14 +861,14 @@ down to the last row and no further. */
   width: 0.1875rem;
   height: 0.875rem;
   background: var(--ink);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-chip);
 }
 
 .marker__date {
   position: absolute;
-  top: 0.125rem;
-  left: 0.375rem;
-  padding: 0.0625rem 0.25rem;
+  top: var(--sp-1);
+  left: var(--sp-3);
+  padding: var(--base) var(--sp-2);
   background: var(--canvas);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -791,8 +881,8 @@ down to the last row and no further. */
 .marker:focus-visible { outline: none; }
 .marker:focus-visible .marker__grip,
 .marker:focus-visible .marker__date {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+  outline: var(--sp-1) solid var(--ink);
+  outline-offset: var(--sp-1);
 }
 
 /* Panels: assignment popover, person form, project form --------------------- */
@@ -806,8 +896,8 @@ down to the last row and no further. */
 .panel {
   position: fixed;
   width: 20rem;
-  max-width: calc(100vw - 2rem);
-  padding: 0.875rem 1rem 1rem;
+  max-width: calc(100vw - var(--sp-6));
+  padding: var(--sp-5);
   background: var(--canvas);
   border: 1px solid var(--rule);
   border-radius: var(--radius-panel);
@@ -816,22 +906,26 @@ down to the last row and no further. */
 
 .panel__title {
   font-size: var(--fs-title);
-  font-weight: 620;
-  font-stretch: 110%;
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
 }
 
 .panel__sub {
-  margin-top: 0.125rem;
+  margin-top: var(--sp-1);
   font-size: var(--fs-data);
   color: var(--ink-soft);
 }
 
 .panel__close {
+  appearance: none;
   position: absolute;
-  top: 0.375rem;
-  right: 0.375rem;
-  width: 1.5rem;
-  height: 1.5rem;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--add-size);
+  height: var(--add-size);
   padding: 0;
   border: 0;
   border-radius: var(--radius);
@@ -843,19 +937,25 @@ down to the last row and no further. */
   cursor: pointer;
 }
 
-.panel__close:hover { color: var(--ink); }
+.panel__close:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
+}
 
 .fields {
   display: grid;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 
-.field {
+/* One label-and-value column, shared by the read-only fields and the form
+   rows, so a panel's labels all start at the same edge. */
+.field,
+.form__row {
   display: grid;
-  grid-template-columns: 4.5rem 1fr;
-  gap: 0.5rem;
-  align-items: baseline;
+  grid-template-columns: 5rem 1fr;
+  gap: var(--sp-3);
+  align-items: center;
 }
 
 .field dt {
@@ -873,75 +973,67 @@ down to the last row and no further. */
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: var(--sp-2);
   align-items: center;
-}
-
-.chip {
-  padding: 0.0625rem 0.375rem;
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  font-size: 0.75rem;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--sp-2);
+  padding: var(--base) var(--sp-2);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: var(--fs-data);
 }
 
 .chip__remove {
-  padding: 0 0.0625rem;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--base);
   border: 0;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--ink-soft);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--fs-data);
   line-height: 1;
   cursor: pointer;
 }
 
-.chip__remove:hover { color: var(--ink); }
-
-.chip-add {
-  padding: 0.0625rem 0.375rem;
-  border: 1px dashed var(--rule-strong);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
+.chip__remove:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
 }
 
 .tags { display: block; }
 
-/* The Share menu with its drag hint, sized to the form column. */
+/* The Share menu with its drag hint. The menu keeps its own width rather than
+   filling the value column, and the hint drops to a second line inside that
+   column rather than overflowing the panel. */
 .share-control {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--sp-2);
 }
 
-.share-control select { width: auto; }
+.form .share-control select { width: auto; }
 
+/* Sized to the tag chips it sits beside, so the row is one height. */
 .form .tags__input {
   width: 7rem;
-  padding: 0.125rem 0.375rem;
-  font-size: 0.75rem;
+  padding: var(--base) var(--sp-2);
+  font-size: var(--fs-data);
 }
 
-.form { margin-top: 0.75rem; }
+.form { margin-top: var(--sp-4); }
 
-.form__row {
-  display: grid;
-  grid-template-columns: 5rem 1fr;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
+.form__row { margin-bottom: var(--sp-3); }
 
+.field dt,
 .form__row > span {
   font-size: var(--fs-data);
   color: var(--ink-soft);
@@ -951,7 +1043,7 @@ down to the last row and no further. */
 .form select,
 .form textarea {
   width: 100%;
-  padding: 0.25rem 0.375rem;
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   background: var(--canvas);
@@ -966,12 +1058,16 @@ down to the last row and no further. */
 .avail {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--sp-2);
 }
 
 .avail__btn {
-  width: 1.5rem;
-  height: 1.5rem;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--add-size);
+  height: var(--add-size);
   padding: 0;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -985,44 +1081,44 @@ down to the last row and no further. */
 
 .avail__btn:hover { border-color: var(--rule-strong); }
 
+/* A figure, right-aligned inside a fixed column so its edge holds still as
+   the value steps. */
 .avail__value {
   min-width: 3rem;
-  padding: 0.125rem 0.25rem;
+  padding: var(--sp-1) var(--sp-2);
   border-radius: var(--radius);
   font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
   text-align: right;
 }
 
-.avail__value:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-
-.swatches { display: flex; gap: 0.25rem; }
+.swatches { display: flex; gap: var(--sp-2); }
 
 .swatch {
   width: 1rem;
   height: 1rem;
   padding: 0;
   border: 1px solid var(--rule);
-  border-radius: 0.125rem;
+  border-radius: var(--radius-chip);
   background: var(--pick);
   cursor: pointer;
 }
 
 .swatch[aria-pressed="true"] {
   outline: 2px solid var(--ink);
-  outline-offset: 1px;
+  outline-offset: var(--base);
 }
 
 .panel__foot {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  margin-top: 0.875rem;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 
 .btn-ghost {
-  padding: 0.25rem 0.625rem;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   background: transparent;
@@ -1036,7 +1132,7 @@ down to the last row and no further. */
 .btn-ghost:hover { border-color: var(--rule-strong); }
 
 .btn-primary {
-  padding: 0.25rem 0.75rem;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--ink);
   border-radius: var(--radius);
   background: var(--ink);
@@ -1048,13 +1144,13 @@ down to the last row and no further. */
 }
 
 .btn-primary:hover { background: color-mix(in srgb, var(--ink) 88%, transparent); }
-.btn-primary:disabled { opacity: 0.55; cursor: default; }
+.btn-primary:disabled { opacity: var(--op-disabled); cursor: default; }
 
 .panel__spacer { flex: 1 1 auto; }
 
 .panel__badge {
   align-self: center;
-  padding: 0 0.25rem;
+  padding: 0 var(--sp-2);
   border: 1px dashed var(--rule-strong);
   border-radius: var(--radius);
   color: var(--ink-soft);
@@ -1063,19 +1159,13 @@ down to the last row and no further. */
 }
 
 .form__error {
-  margin-top: 0.5rem;
-  font-size: 0.75rem;
+  margin-top: var(--sp-3);
+  font-size: var(--fs-data);
   color: var(--signal);
 }
 
-.panel__note {
-  margin-top: 0.75rem;
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-}
-
 .noscript {
-  margin: 2rem;
+  margin: var(--sp-6);
   font-size: var(--fs-body);
   color: var(--ink-soft);
 }
@@ -1087,13 +1177,13 @@ down to the last row and no further. */
   z-index: 200;
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   background: var(--canvas);
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius);
   font-size: var(--fs-data);
-  font-weight: 500;
+  font-weight: var(--fw-ui);
   pointer-events: none;
   transform: translate(12px, 12px);
 }
@@ -1101,19 +1191,22 @@ down to the last row and no further. */
 .drag-ghost__chip {
   width: 0.625rem;
   height: 0.625rem;
-  border-radius: 0.125rem;
+  border-radius: var(--radius-chip);
   background: var(--chip);
 }
 
+/* The drag read-out and the labels that ride a preview are the same floating
+   dark chip, so they are the same size. */
 .readout {
   position: fixed;
   z-index: 200;
-  padding: 0.125rem 0.375rem;
+  padding: var(--base) var(--sp-2);
   background: var(--ink);
   color: var(--canvas);
   border-radius: var(--radius);
   font-size: var(--fs-axis);
-  font-weight: 500;
+  font-weight: var(--fw-ui);
+  line-height: 1.35;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -1121,7 +1214,7 @@ down to the last row and no further. */
 /* Delete ------------------------------------------------------------------- */
 
 .btn-danger {
-  padding: 0.25rem 0.625rem;
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid color-mix(in srgb, var(--signal) 55%, var(--rule));
   border-radius: var(--radius);
   background: transparent;
@@ -1142,23 +1235,21 @@ down to the last row and no further. */
   color: var(--signal);
 }
 
-.panel__foot { gap: 0.5rem; }
-
 /* Toast -------------------------------------------------------------------- */
 
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 1rem;
+  bottom: var(--sp-5);
   z-index: 300;
-  max-width: calc(100vw - 2rem);
-  padding: 0.375rem 0.75rem;
+  max-width: calc(100vw - var(--sp-6));
+  padding: var(--sp-2) var(--sp-4);
   background: var(--ink);
   color: var(--canvas);
   border-radius: var(--radius);
   font-size: var(--fs-data);
   opacity: 0;
-  transform: translate(-50%, 0.5rem);
+  transform: translate(-50%, var(--sp-3));
   pointer-events: none;
   transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
@@ -1179,7 +1270,7 @@ down to the last row and no further. */
 .is-dragging .blk { transition: none; }
 
 @keyframes panel-in {
-  from { opacity: 0; transform: translateY(-2px); }
+  from { opacity: 0; transform: translateY(calc(-1 * var(--sp-1))); }
   to { opacity: 1; transform: none; }
 }
 
