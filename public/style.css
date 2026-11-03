@@ -44,6 +44,7 @@
   --fs-mark: 1.375rem;    /* 22 */
   --fw-ui: 500;           /* interface labels and figures */
   --fw-title: 600;        /* the wordmark and every section title */
+  --wd-data: 84%;         /* narrowed: the width every scanned element reads */
   --wd-title: 110%;       /* semi-expanded: one width for every title */
 
   /* Layout - one row is one 10% step taller than the height an Assignment
@@ -110,7 +111,7 @@ body {
   font-family: var(--font);
   font-size: var(--fs-body);
   font-weight: 400;
-  font-stretch: 100%;
+  font-stretch: var(--wd-data);
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -892,6 +893,7 @@ h1, h2, h3, p { margin: 0; }
 .rowhead__name {
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
+  line-height: 1.2;
 }
 
 /* On its own line, left-aligned under the name so the two read as one column,
@@ -899,6 +901,7 @@ h1, h2, h3, p { margin: 0; }
 .rowhead__fig {
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
+  line-height: 1.2;
   color: var(--ink-soft);
 }
 

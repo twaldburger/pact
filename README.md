@@ -48,7 +48,7 @@ no runtime dependency.
 
 The three zoom states (day, week, month) change only the drawn width of a day.
 Beside the zoom, a row-height control changes the drawn height of every row in
-8px steps from 32 to 120, defaulting to 56; it is a view setting for the
+8px steps from 32 to 120, defaulting to 48; it is a view setting for the
 session only and is not written to the plan. A Today control scrolls the view
 so today is visible again and moves the Marker back onto today, and the range
 label beside the wordmark names the plan's own extent. The bar is two zones:

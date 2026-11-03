@@ -71,9 +71,9 @@ test("a body drag targets the row under the pointer, or no row at all", () => {
 });
 
 test("the row height steps by 8 and clamps at both ends and the default", () => {
-  assert.equal(ROW_HEIGHT_DEFAULT, 56);
-  assert.equal(stepRowHeight(ROW_HEIGHT_DEFAULT, 1), 64);
-  assert.equal(stepRowHeight(ROW_HEIGHT_DEFAULT, -1), 48);
+  assert.equal(ROW_HEIGHT_DEFAULT, 48);
+  assert.equal(stepRowHeight(ROW_HEIGHT_DEFAULT, 1), 56);
+  assert.equal(stepRowHeight(ROW_HEIGHT_DEFAULT, -1), 40);
   // At each end the control stops rather than running past the range.
   assert.equal(stepRowHeight(ROW_HEIGHT_MAX, 1), ROW_HEIGHT_MAX);
   assert.equal(stepRowHeight(ROW_HEIGHT_MIN, -1), ROW_HEIGHT_MIN);
