@@ -55,7 +55,10 @@
   --row-h: 56px;
   --stack-h: 2.75rem;
   --bar-h: 3rem;          /* the top bar, and what the board sits under */
-  --rail-w: 14.5rem;
+  /* 232px is 14.5rem at the type's own 16px, the width the rail keeps when
+     text grows: past that it would take more of a narrow window from the grid
+     than it does at 1x, so its contents wrap inside it instead. */
+  --rail-w: min(14.5rem, 232px);
   --head-w: 10.5rem;
   --band-month-h: 1.75rem;
   --band-day-h: 1.5rem;
@@ -563,7 +566,7 @@ h1, h2, h3, p { margin: 0; }
 
 .board {
   display: grid;
-  grid-template-columns: var(--rail-w) 1fr;
+  grid-template-columns: minmax(0, var(--rail-w)) minmax(0, 1fr);
   align-items: stretch;
   min-height: calc(100vh - var(--bar-h));
 }
@@ -571,6 +574,8 @@ h1, h2, h3, p { margin: 0; }
 /* Stack rail ---------------------------------------------------------------- */
 
 .stack {
+  min-width: 0;
+  overflow-x: hidden;
   background: var(--panel);
   border-right: 1px solid var(--rule);
   padding-bottom: var(--sp-5);
@@ -639,6 +644,8 @@ h1, h2, h3, p { margin: 0; }
 
 .stack__name {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
   font-size: var(--fs-data);
   font-weight: 500;
 }
@@ -670,6 +677,7 @@ h1, h2, h3, p { margin: 0; }
 
 .stack__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--sp-3);
