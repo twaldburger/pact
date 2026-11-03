@@ -66,6 +66,21 @@ test("archiving a person keeps the record and every assignment", () => {
   assert.equal(after.assignments.some((a) => a.id === assignment.id), true);
 });
 
+test("an archived person and project can be restored", () => {
+  const store = createStore(tempFile());
+  const person = store.createPerson({ name: "Erin Sol", availability: 70 });
+  const project = store.createProject({ name: "Summit", colour: "plum", notes: "" });
+  store.archivePerson(person.id);
+  store.archiveProject(project.id);
+  assert.equal(store.get().people.find((p) => p.id === person.id).archived, true);
+  assert.equal(store.get().projects.find((p) => p.id === project.id).archived, true);
+
+  assert.equal(store.updatePerson(person.id, { archived: false }).archived, false);
+  assert.equal(store.updateProject(project.id, { archived: false }).archived, false);
+  assert.equal(store.get().people.find((p) => p.id === person.id).archived, false);
+  assert.equal(store.get().projects.find((p) => p.id === project.id).archived, false);
+});
+
 test("assignments can be created, updated and archived", () => {
   const store = createStore(tempFile());
   const created = store.createAssignment({
