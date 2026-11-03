@@ -13,9 +13,10 @@ import {
   dropRefusal,
   assignmentCount,
   deleteConfirmation,
-  SHARE_VALUES,
   clampShare,
-  shareValues,
+  SHARE_MIN,
+  SHARE_MAX,
+  stepShare,
   shareFromDrag
 } from "../public/lib/panels.mjs";
 
@@ -118,26 +119,31 @@ test("a deletion counts every assignment, archived ones included", () => {
   assert.equal(assignmentCount(assignments, "projectId", "x"), 3);
 });
 
-test("the Share menu offers the ten values from 10% to 100%", () => {
-  assert.deepEqual(shareValues(), [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
-  assert.deepEqual(SHARE_VALUES, shareValues());
+test("stepping a Share moves exactly ten in each direction, inside 10..100", () => {
+  assert.equal(stepShare(50, 1), 60);
+  assert.equal(stepShare(50, -1), 40);
+  assert.equal(stepShare(100, 1), 100);
+  assert.equal(stepShare(10, -1), 10);
+  assert.equal(SHARE_MIN, 10);
+  assert.equal(SHARE_MAX, 100);
 });
 
-test("choosing a Share from the menu stores the same number a drag would", () => {
-  // A drag from 40% three steps up settles on 70%; choosing 70% stores 70%.
+test("a stepped Share stores the same number a drag would", () => {
+  // A drag from 40% three steps up settles on 70%; stepping up stores 70%.
   assert.equal(shareFromDrag(40, 3), 70);
   assert.equal(clampShare(70), 70);
-  // Every menu value is already a whole step, and choosing it changes nothing.
-  shareValues().forEach((value) => {
+  // Every reachable value is already a whole step, so a step and a drag onto
+  // it pass through clampShare and cannot drift apart.
+  for (let value = SHARE_MIN; value <= SHARE_MAX; value += 10) {
     assert.equal(clampShare(value), value);
     assert.equal(shareFromDrag(value, 0), value);
-  });
+  }
   // A stray value snaps to the closest step, and the range is clamped.
   assert.equal(clampShare(37), 40);
   assert.equal(clampShare(34), 30);
   assert.equal(clampShare(0), 10);
   assert.equal(clampShare(1000), 100);
-  // A drag that would run past either end stops at it, like the menu does.
+  // A drag that would run past either end stops at it, like the stepper does.
   assert.equal(shareFromDrag(90, 5), 100);
   assert.equal(shareFromDrag(20, -5), 10);
 });
