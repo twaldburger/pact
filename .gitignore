@@ -1,0 +1,5 @@
+# The live plan: created on first run from the seed, backed up by the owner.
+data/pact.json
+
+# Leftovers from an interrupted atomic write, if the process is killed.
+data/.*.tmp-*

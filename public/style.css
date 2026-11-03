@@ -202,6 +202,8 @@ h1, h2, h3, p { margin: 0; }
   font: inherit;
   text-align: left;
   cursor: pointer;
+  user-select: none;
+  touch-action: none;
 }
 
 .stack__item:hover .stack__name { color: var(--ink); }
@@ -423,6 +425,12 @@ h1, h2, h3, p { margin: 0; }
   border-bottom: 1px solid var(--rule);
 }
 
+/* The row under a drag from the Stack, before the drop creates anything. */
+.row.is-drop,
+.rowhead.is-drop {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
 /* The ceiling is the only mark of availability inside the grid, and the space
    above it is left as paper. */
 .ceiling {
@@ -450,8 +458,29 @@ h1, h2, h3, p { margin: 0; }
   overflow: hidden;
   text-align: left;
   cursor: pointer;
+  user-select: none;
   z-index: 2;
 }
+
+/* The grab edges: horizontally they move a date, vertically they move the
+   share. They are drawn only as the pointer finds them. */
+.blk__edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0.375rem;
+  cursor: ew-resize;
+  z-index: 3;
+  user-select: none;
+  touch-action: none;
+}
+.blk__edge--start { left: 0; }
+.blk__edge--end { right: 0; }
+.blk__edge:hover {
+  background: color-mix(in srgb, var(--on-project) 35%, transparent);
+}
+
+.blk:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 .blk.is-selected {
   outline: 1px solid var(--ink);
@@ -730,6 +759,104 @@ down to the last row and no further. */
   color: var(--ink-soft);
 }
 
+/* A hidden probe that measures one full FTE, so a vertical drag converts
+   pixels to 10% steps at whatever text scale is in force. */
+.fte-probe {
+  position: absolute;
+  width: 1px;
+  height: var(--fte-h);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Drag affordances ---------------------------------------------------------- */
+
+.drag-ghost {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--canvas);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  font-size: var(--fs-data);
+  font-weight: 500;
+  pointer-events: none;
+  transform: translate(12px, 12px);
+}
+
+.drag-ghost__chip {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 0.125rem;
+  background: var(--chip);
+}
+
+.readout {
+  position: fixed;
+  z-index: 200;
+  padding: 0.125rem 0.375rem;
+  background: var(--ink);
+  color: var(--canvas);
+  border-radius: var(--radius);
+  font-size: var(--fs-axis);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Delete ------------------------------------------------------------------- */
+
+.btn-danger {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--signal) 55%, var(--rule));
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--signal);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--signal) 8%, transparent);
+}
+
+.panel__ask {
+  margin-right: auto;
+  font-size: var(--fs-data);
+  color: var(--signal);
+}
+
+.panel__foot { gap: 0.5rem; }
+
+/* Toast -------------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 300;
+  max-width: calc(100vw - 2rem);
+  padding: 0.375rem 0.75rem;
+  background: var(--ink);
+  color: var(--canvas);
+  border-radius: var(--radius);
+  font-size: var(--fs-data);
+  opacity: 0;
+  transform: translate(-50%, 0.5rem);
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+.toast.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 /* Motion - quiet reflow when the scale changes, nothing under a drag. */
 .blk,
 .weekend,
@@ -737,7 +864,8 @@ down to the last row and no further. */
 .marker {
   transition: left var(--dur) var(--ease), width var(--dur) var(--ease);
 }
-.is-dragging .marker { transition: none; }
+.is-dragging .marker,
+.is-dragging .blk { transition: none; }
 
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(-2px); }
