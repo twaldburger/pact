@@ -127,13 +127,44 @@ h1, h2, h3, p { margin: 0; }
 /* Topbar -------------------------------------------------------------------- */
 
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--sp-4);
   height: var(--bar-h);
   padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--rule);
   background: var(--canvas);
+}
+
+/* Three zones: the brand and the secondary controls in the left half, the
+   filter in the true centre, the archive toggle in the right half. The two
+   outer zones take equal shares, so the filter's centre stays the bar's centre
+   at every width. The left zone pins the brand to the start and the controls
+   to its end, beside the filter. */
+.topbar__left {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.topbar__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.topbar__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* The wordmark and the range it names are one unit, so the gap inside the
@@ -155,8 +186,6 @@ h1, h2, h3, p { margin: 0; }
   font-size: var(--fs-data);
   color: var(--ink-soft);
 }
-
-.topbar__spacer { flex: 1 1 auto; }
 
 /* One control language for the whole bar. The zoom segments, the row-height
    stepper and the archive toggle share a height, a border, a radius, a type
@@ -281,7 +310,9 @@ h1, h2, h3, p { margin: 0; }
 .filter:focus-within { border-color: var(--rule-strong); }
 
 .filter__input {
+  flex: 1 1 auto;
   width: 9.5rem;
+  min-width: 0;
   height: 100%;
   padding: 0 var(--sp-3);
   border: 0;
@@ -386,13 +417,18 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* The suggestions, drawn from the plan's own vocabulary: source, value, and
-   how much choosing it would match. */
+   how much choosing it would match. The popover is centred on the field and
+   capped to the viewport, so a long list floats over the page instead of
+   widening it: the field is centred in the bar, so the popover stays inside
+   the window even at twice the text size. */
 .filter__suggest {
   position: absolute;
-  left: 0;
+  left: 50%;
   top: calc(100% + var(--sp-2));
   z-index: 60;
-  min-width: 22rem;
+  transform: translateX(-50%);
+  min-width: min(22rem, calc(100vw - 2 * var(--sp-5)));
+  max-width: calc(100vw - 2 * var(--sp-5));
   max-height: 16rem;
   overflow-y: auto;
   background: var(--canvas);

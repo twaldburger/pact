@@ -42,6 +42,8 @@ import {
   ROW_HEIGHT_MIN,
   ROW_HEIGHT_MAX,
   ROW_HEIGHT_DEFAULT,
+  ZOOM_DEFAULT,
+  isZoom,
   stepRowHeight,
   rowGeometry,
   isRowHeaderTight
@@ -1875,7 +1877,8 @@ function initZoom() {
   buttons.forEach(function (b) {
     b.addEventListener("click", function () { choose(b.getAttribute("data-zoom")); });
   });
-  choose(root.getAttribute("data-zoom") || "day");
+  var initial = root.getAttribute("data-zoom");
+  choose(isZoom(initial) ? initial : ZOOM_DEFAULT);
 }
 
 /* --- row height ---------------------------------------------------------- */

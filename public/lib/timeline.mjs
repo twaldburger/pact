@@ -22,6 +22,19 @@ export const ROW_HEIGHT_MAX = 120;
 export const ROW_HEIGHT_STEP = 8;
 export const ROW_HEIGHT_DEFAULT = 56;
 
+/*
+ * The zoom control: the drawn width of one day, one of three named levels.
+ * The interface opens at month - the recent past plus the next eleven months
+ * at a glance - as the plan's default view. Like the row height it is a view
+ * setting only, never written to the plan.
+ */
+export const ZOOM_LEVELS = ["day", "week", "month"];
+export const ZOOM_DEFAULT = "month";
+
+export function isZoom(level) {
+  return ZOOM_LEVELS.indexOf(level) !== -1;
+}
+
 // Below this the two lines of a row header cannot both fit, so the header
 // collapses to its name and figure on one line. It is measured in the
 // interface's own pixels, not the row's, so it has to be read alongside the
