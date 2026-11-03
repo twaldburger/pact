@@ -150,6 +150,14 @@ function yPx(share) {
   return Math.round(BASE_PX + share * ftePx);
 }
 
+// How much larger than the interface's own 16px the root font is. The row
+// height is in real pixels, so the row-header threshold has to be read in the
+// same unit before the two can be compared.
+function textScale() {
+  var size = parseFloat(window.getComputedStyle(root).fontSize);
+  return Number.isFinite(size) && size > 0 ? size / 16 : 1;
+}
+
 // Apply the current row height to the whole grid: the row-header column and
 // the timeline together, and nothing else. Nothing here is persisted.
 function applyRowHeight() {
@@ -162,7 +170,7 @@ function applyRowHeight() {
   var up = document.getElementById("row-increase");
   if (down) down.disabled = rowHeight <= ROW_HEIGHT_MIN;
   if (up) up.disabled = rowHeight >= ROW_HEIGHT_MAX;
-  root.classList.toggle("is-tight-rows", isRowHeaderTight(rowHeight));
+  root.classList.toggle("is-tight-rows", isRowHeaderTight(rowHeight, textScale()));
 }
 
 /* --- the shape of the calendar ------------------------------------------ */
@@ -1801,7 +1809,12 @@ function bindChrome() {
   // (whose block widths animate, so the pass runs again when they settle)
   // and the bundled font, which may arrive after the first paint. None of
   // them reloads the page.
-  window.addEventListener("resize", queueBlockLabels);
+  window.addEventListener("resize", function () {
+    // The reader's text size can change here, which moves the row height at
+    // which the row header's two lines stop fitting.
+    applyRowHeight();
+    queueBlockLabels();
+  });
   tl.addEventListener("transitionend", function (e) {
     if (e.propertyName === "width") queueBlockLabels();
   });
