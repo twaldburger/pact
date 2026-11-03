@@ -20,7 +20,7 @@ export const DROP_DAYS = 5;
 export const ROW_HEIGHT_MIN = 32;
 export const ROW_HEIGHT_MAX = 120;
 export const ROW_HEIGHT_STEP = 8;
-export const ROW_HEIGHT_DEFAULT = 56;
+export const ROW_HEIGHT_DEFAULT = 48;
 
 /*
  * The zoom control: the drawn width of one day, one of three named levels.
