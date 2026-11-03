@@ -157,6 +157,31 @@ test("archived records appear only on request and can be restored", async () => 
   assert.equal(bad.status, 400);
 });
 
+test("an archived assignment appears with the archive view and can be restored", async () => {
+  const { base, store } = await server();
+  const created = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+  assert.equal(created.status, 201);
+  await api(base, "DELETE", "/api/assignments/" + created.body.id);
+
+  const live = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(live.assignments.some((a) => a.id === created.body.id), false);
+
+  const withArchived = (await api(base, "GET", "/api/plan?archived=1")).body;
+  const found = withArchived.assignments.find((a) => a.id === created.body.id);
+  assert.ok(found, "the archived assignment should be drawn on request");
+  assert.equal(found.archived, true);
+
+  const restored = await api(base, "PATCH", "/api/assignments/" + created.body.id, { archived: false });
+  assert.equal(restored.status, 200);
+  assert.equal(restored.body.archived, false);
+  const after = (await api(base, "GET", "/api/plan")).body;
+  assert.ok(after.assignments.some((a) => a.id === created.body.id));
+  // The record was never destroyed at any point.
+  assert.ok(store.get().assignments.some((a) => a.id === created.body.id));
+});
+
 test("invalid input is refused with a clear error and nothing is stored", async () => {
   const { base, store } = await server();
   const before = JSON.stringify(store.get());

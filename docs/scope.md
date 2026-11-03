@@ -17,7 +17,7 @@ Confirmed by the owner on 2026-11-02. The first version is locked except for the
 - **Tags** - Person tags and Assignment tags are separate vocabularies. A new one is typed, or an existing one chosen from the same kind: for a Person, tags already used on other People; for an Assignment, tags already used on that Project's other Assignments. The vocabulary is derived from use and matched case-insensitively. Tags are recorded and shown in v1; grouping, filtering and colour-coding by tag are later.
 - **Tag display** - a compact marker on the Assignment's rectangle and the Person's row header, with full editing in the Assignment popover and the Person form; the marker is hidden in month zoom, where a rectangle is a few pixels wide.
 - **Zoom** - day, week and month views, changing only the drawn width of a day; stored dates stay exact days.
-- **Archive** - a Show archived toggle for People and Projects, with restore; archived entries are hidden while it is off and cannot take new Assignments until restored.
+- **Archive** - a Show archived toggle for People, Projects and Assignments, with restore; archived entries are hidden while it is off and cannot take new Assignments until restored.
 - **Persistence** - every change is written to the JSON file; starting the app loads it. The app keeps no backups of its own: one file, backed up by the owner however they choose.
 
 ## The interface

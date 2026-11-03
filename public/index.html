@@ -18,14 +18,13 @@
       <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="false">Month</button>
     </div>
     <button type="button" class="ghost" id="show-archived" aria-pressed="false">Show archived</button>
-    <button type="button" class="ghost" id="add-person">Add person</button>
-    <button type="button" class="ghost" id="add-project">Add project</button>
   </header>
 
   <main class="board">
     <aside class="stack" aria-label="Stack - the projects available to plan">
       <div class="stack__head">
         <h1 class="stack__title">Stack</h1>
+        <button type="button" class="add" id="add-project" aria-label="Add project" title="Add project">+</button>
       </div>
       <ul class="stack__list" id="stack-list"></ul>
       <p class="stack__hint" id="stack-hint">Drag a project onto a row to plan it.</p>
