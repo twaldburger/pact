@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createStore, todayISO, ValidationError, NotFoundError } from "./lib/plan.mjs";
+import { visiblePlan } from "./public/lib/visibility.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,18 +54,15 @@ function planForClient(store, includeArchived) {
   // the live plan, so an archived Person or Project takes its Assignments off
   // the screen with it without anything being lost. The archive view asks for
   // them back with ?archived=1, marked as archived, so they can be restored.
-  const people = plan.people.filter((p) => includeArchived || !p.archived);
-  const projects = plan.projects.filter((p) => includeArchived || !p.archived);
-  const visiblePeople = new Set(people.map((p) => p.id));
-  const visibleProjects = new Set(projects.map((p) => p.id));
+  // What a given toggle state draws is the shared rule in
+  // public/lib/visibility.mjs, so the server and the interface cannot drift.
+  const visible = visiblePlan(plan, includeArchived);
   return {
     today: todayISO(),
     range: plan.range,
-    people: people,
-    projects: projects,
-    assignments: plan.assignments.filter((a) =>
-      !a.archived && visiblePeople.has(a.personId) && visibleProjects.has(a.projectId)
-    )
+    people: visible.people,
+    projects: visible.projects,
+    assignments: visible.assignments
   };
 }
 

@@ -16,6 +16,7 @@ import {
   archivedPersonRefusal,
   archivedProjectRefusal
 } from "./lib/panels.mjs";
+import { planQuery } from "./lib/visibility.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -307,12 +308,15 @@ function drawRows() {
 
 function blockFor(group, s) {
   var a = group.a;
-  var b = el("div", "blk");
+  var archived = !!(a.raw && a.raw.archived);
+  var b = el("div", "blk" + (archived ? " is-archived" : ""));
   b.setAttribute("role", "button");
   b.setAttribute("tabindex", "0");
   b.setAttribute("data-assignment", a.id);
   b.setAttribute("aria-label", a.project.name + " on " + a.person.name + ", " +
-    a.share + "% from " + fmtRange(a.start, a.end) + ". Enter for details, drag an edge to change it.");
+    a.share + "% from " + fmtRange(a.start, a.end) +
+    (archived ? ", archived" : "") +
+    ". Enter for details" + (archived ? "." : ", drag an edge to change it."));
   b.style.setProperty("--block-ink", "var(--proj-" + a.project.colour + ")");
   set(b, s.start, s.end - s.start + 1);
   b.style.setProperty("--b", r4(s.offset));
@@ -323,6 +327,13 @@ function blockFor(group, s) {
   var tag = el("span", "blk__tag");
   tag.textContent = a.project.name + " \u00b7 " + a.share + "%";
   b.appendChild(tag);
+  if (archived) {
+    // The same marked treatment the archived lists use, so an archived
+    // Assignment reads as history rather than as live work.
+    var badge = el("span", "blk__archived");
+    badge.textContent = "Archived";
+    b.appendChild(badge);
+  }
 
   b.addEventListener("click", function () {
     if (Date.now() - lastDragAt < 300) return;
@@ -336,6 +347,10 @@ function blockFor(group, s) {
       openAssignmentPanel(a, b);
     }
   });
+
+  // An archived Assignment is history: it is drawn, but its edges carry no
+  // change - restoring it comes first.
+  if (archived) return b;
 
   [{ edge: "start", cls: "blk__edge--start" }, { edge: "end", cls: "blk__edge--end" }]
     .forEach(function (handle) {
@@ -674,7 +689,7 @@ function api(method, url, body) {
 }
 
 function planUrl() {
-  return "/api/plan" + (showArchived ? "?archived=1" : "");
+  return planQuery(showArchived);
 }
 
 function refresh() {
@@ -735,6 +750,10 @@ function archiveProject(id) {
 
 function restoreProject(project) {
   api("PATCH", "/api/projects/" + encodeURIComponent(project.id), { archived: false }).then(refresh).catch(showError);
+}
+
+function restoreAssignment(id) {
+  api("PATCH", "/api/assignments/" + encodeURIComponent(id), { archived: false }).then(refresh).catch(showError);
 }
 
 function focusAssignment(id) {
@@ -1151,14 +1170,17 @@ function openProjectPanel(project, trigger) {
 }
 
 function openAssignmentPanel(a, trigger) {
+  var archived = !!(a.raw && a.raw.archived);
   var node = panelShell(a.project.name + " \u00b7 " + a.person.name,
     fmtRange(a.start, a.end));
   var fields = el("dl", "fields");
   var share = el("span");
   share.textContent = a.share + "%";
-  var hint = el("span", "soft");
-  hint.textContent = "  (drag an edge to change)";
-  share.appendChild(hint);
+  if (!archived) {
+    var hint = el("span", "soft");
+    hint.textContent = "  (drag an edge to change)";
+    share.appendChild(hint);
+  }
   fields.appendChild(field("Allocation", share));
   node.appendChild(fields);
 
@@ -1174,12 +1196,24 @@ function openAssignmentPanel(a, trigger) {
   var error = errorLine(node);
 
   var foot = el("div", "panel__foot");
-  var archive = button("btn-danger", "Archive assignment", function () {
-    confirmArchive(node, "Archive this assignment?",
-      function () { openAssignmentPanel(a, trigger); },
-      function () { closePanel(false); archiveAssignment(a.id); });
-  });
-  foot.appendChild(archive);
+  if (archived) {
+    var badge = el("span", "panel__badge");
+    badge.textContent = "Archived";
+    foot.appendChild(badge);
+    var restore = button("btn-primary", "Restore", function () {
+      closePanel(false);
+      restoreAssignment(a.id);
+    });
+    restore.setAttribute("aria-label", "Restore " + a.project.name + " on " + a.person.name);
+    foot.appendChild(restore);
+  } else {
+    var archive = button("btn-danger", "Archive assignment", function () {
+      confirmArchive(node, "Archive this assignment?",
+        function () { openAssignmentPanel(a, trigger); },
+        function () { closePanel(false); archiveAssignment(a.id); });
+    });
+    foot.appendChild(archive);
+  }
   foot.appendChild(el("span", "panel__spacer"));
   var save = saveButton("Save", function () {
     submitPanel(node, error, function () {
@@ -1235,7 +1269,20 @@ function render() {
   });
 
   var corner = el("div", "tl__corner");
-  corner.textContent = "Person";
+  var cornerLabel = el("span", "tl__corner-label");
+  cornerLabel.textContent = "Person";
+  corner.appendChild(cornerLabel);
+  // The add action sits in the column header it belongs to. Its visible label
+  // is the plus, so the accessible name carries the meaning.
+  var addPerson = el("button", "add");
+  addPerson.type = "button";
+  addPerson.setAttribute("aria-label", "Add person");
+  addPerson.setAttribute("title", "Add person");
+  addPerson.textContent = "+";
+  addPerson.addEventListener("click", function (e) {
+    openPersonPanel(null, e.currentTarget);
+  });
+  corner.appendChild(addPerson);
 
   var rows = drawRows();
 
@@ -1262,9 +1309,6 @@ function render() {
 /* --- wiring -------------------------------------------------------------- */
 
 function bindChrome() {
-  document.getElementById("add-person").addEventListener("click", function (e) {
-    openPersonPanel(null, e.currentTarget);
-  });
   document.getElementById("add-project").addEventListener("click", function (e) {
     openProjectPanel(null, e.currentTarget);
   });
