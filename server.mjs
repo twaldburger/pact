@@ -47,20 +47,23 @@ function sendError(res, status, message) {
   sendJSON(res, status, { error: message });
 }
 
-function planForClient(store) {
+function planForClient(store, includeArchived) {
   const plan = store.get();
-  // Archived records stay in the file; the interface only ever sees the live
-  // plan, so an archived Person or Project takes its Assignments off the screen
-  // with it without anything being lost.
-  const archivedPeople = new Set(plan.people.filter((p) => p.archived).map((p) => p.id));
-  const archivedProjects = new Set(plan.projects.filter((p) => p.archived).map((p) => p.id));
+  // Archived records stay in the file. By default the interface only ever sees
+  // the live plan, so an archived Person or Project takes its Assignments off
+  // the screen with it without anything being lost. The archive view asks for
+  // them back with ?archived=1, marked as archived, so they can be restored.
+  const people = plan.people.filter((p) => includeArchived || !p.archived);
+  const projects = plan.projects.filter((p) => includeArchived || !p.archived);
+  const visiblePeople = new Set(people.map((p) => p.id));
+  const visibleProjects = new Set(projects.map((p) => p.id));
   return {
     today: todayISO(),
     range: plan.range,
-    people: plan.people.filter((p) => !p.archived),
-    projects: plan.projects.filter((p) => !p.archived),
+    people: people,
+    projects: projects,
     assignments: plan.assignments.filter((a) =>
-      !a.archived && !archivedPeople.has(a.personId) && !archivedProjects.has(a.projectId)
+      !a.archived && visiblePeople.has(a.personId) && visibleProjects.has(a.projectId)
     )
   };
 }
@@ -125,8 +128,11 @@ export function createServer(store, options) {
   const publicDir = (options && options.publicDir) || path.join(HERE, "public");
   return http.createServer((req, res) => {
     let pathname;
+    let includeArchived = false;
     try {
-      pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+      const url = new URL(req.url, "http://localhost");
+      pathname = decodeURIComponent(url.pathname);
+      includeArchived = url.searchParams.get("archived") === "1";
     } catch (_) {
       return sendError(res, 400, "bad request");
     }
@@ -134,7 +140,7 @@ export function createServer(store, options) {
       .then(() => {
         if (pathname === "/api/plan") {
           if (req.method !== "GET") return sendError(res, 405, "method not allowed");
-          return sendJSON(res, 200, planForClient(store));
+          return sendJSON(res, 200, planForClient(store, includeArchived));
         }
         const route = matchApi(pathname);
         if (route) return handleApi(req, res, store, route);

@@ -235,6 +235,57 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink-soft);
 }
 
+/* Archived entries ---------------------------------------------------------- */
+
+/* While Show archived is on, an archived Person or Project stays in its list,
+   marked, with a Restore button in reach. */
+.stack__row { position: relative; }
+.stack__row.is-archived .stack__item {
+  min-height: calc(var(--row-h) - 0.75rem);
+  border-bottom: 0;
+}
+.stack__row.is-archived .stack__name { color: var(--ink-soft); }
+.stack__row.is-archived .stack__chip { opacity: 0.5; }
+
+.stack__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0 1rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.stack__badge,
+.rowhead__badge {
+  padding: 0 0.25rem;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-size: var(--fs-axis);
+  white-space: nowrap;
+}
+
+.stack__badge { pointer-events: none; }
+
+.stack__restore,
+.rowhead__restore {
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.stack__restore:hover,
+.rowhead__restore:hover { border-color: var(--rule-strong); }
+
+
+
 /* Timeline scroller and grid ------------------------------------------------ */
 
 .scroller {
@@ -410,6 +461,28 @@ h1, h2, h3, p { margin: 0; }
   font-weight: 600;
 }
 
+.rowhead-wrap {
+  position: relative;
+  height: var(--row-h);
+}
+
+.rowhead-wrap .rowhead { height: 100%; }
+.rowhead-wrap.is-archived .rowhead { padding-right: 5.25rem; }
+.rowhead-wrap.is-archived .rowhead__name { color: var(--ink-soft); }
+
+.rowhead__badge {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.5rem;
+  pointer-events: none;
+}
+
+.rowhead__restore {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.25rem;
+}
+
 /* Person rows --------------------------------------------------------------- */
 
 .tl__body {
@@ -430,6 +503,14 @@ h1, h2, h3, p { margin: 0; }
 .rowhead.is-drop {
   background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
+
+/* An archived Person's row is drawn, but quieter: the work is history until
+   the Person is restored, and the drop onto it is refused. */
+.row.is-archived {
+  background: color-mix(in srgb, var(--off) 55%, transparent);
+}
+
+.row.is-archived .blk { opacity: 0.62; }
 
 /* The ceiling is the only mark of availability inside the grid, and the space
    above it is left as paper. */
@@ -669,6 +750,25 @@ down to the last row and no further. */
   font-size: 0.75rem;
 }
 
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.chip__remove {
+  padding: 0 0.0625rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip__remove:hover { color: var(--ink); }
+
 .chip-add {
   padding: 0.0625rem 0.375rem;
   border: 1px dashed var(--rule-strong);
@@ -678,6 +778,14 @@ down to the last row and no further. */
   font: inherit;
   font-size: 0.75rem;
   cursor: pointer;
+}
+
+.tags { display: block; }
+
+.form .tags__input {
+  width: 7rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
 }
 
 .form { margin-top: 0.75rem; }
@@ -709,6 +817,42 @@ down to the last row and no further. */
 }
 
 .form textarea { resize: vertical; min-height: 2.5rem; }
+
+/* Availability: whole 10% steps, never typed. */
+.avail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.avail__btn {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.avail__btn:hover { border-color: var(--rule-strong); }
+
+.avail__value {
+  min-width: 3rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: var(--radius);
+  font-size: var(--fs-data);
+  text-align: right;
+}
+
+.avail__value:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
 
 .swatches { display: flex; gap: 0.25rem; }
 
@@ -746,6 +890,29 @@ down to the last row and no further. */
 }
 
 .btn-ghost:hover { border-color: var(--rule-strong); }
+
+.btn-primary {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--canvas);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-primary:hover { background: color-mix(in srgb, var(--ink) 88%, transparent); }
+.btn-primary:disabled { opacity: 0.55; cursor: default; }
+
+.panel__spacer { flex: 1 1 auto; }
+
+.form__error {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--signal);
+}
 
 .panel__note {
   margin-top: 0.75rem;

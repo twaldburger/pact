@@ -133,6 +133,30 @@ test("people and projects can be created, changed and archived without losing as
   assert.equal(kept.assignments.some((a) => a.id === assignment.body.id), true);
 });
 
+test("archived records appear only on request and can be restored", async () => {
+  const { base } = await server();
+  const person = await api(base, "POST", "/api/people", { name: "Erin Sol", availability: 70 });
+  assert.equal(person.status, 201);
+  await api(base, "DELETE", "/api/people/" + person.body.id);
+
+  const live = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(live.people.some((p) => p.id === person.body.id), false);
+
+  const withArchived = (await api(base, "GET", "/api/plan?archived=1")).body;
+  const found = withArchived.people.find((p) => p.id === person.body.id);
+  assert.ok(found);
+  assert.equal(found.archived, true);
+
+  const restored = await api(base, "PATCH", "/api/people/" + person.body.id, { archived: false });
+  assert.equal(restored.status, 200);
+  assert.equal(restored.body.archived, false);
+  const after = (await api(base, "GET", "/api/plan")).body;
+  assert.ok(after.people.some((p) => p.id === person.body.id));
+
+  const bad = await api(base, "PATCH", "/api/people/" + person.body.id, { archived: "yes" });
+  assert.equal(bad.status, 400);
+});
+
 test("invalid input is refused with a clear error and nothing is stored", async () => {
   const { base, store } = await server();
   const before = JSON.stringify(store.get());
