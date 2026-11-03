@@ -12,6 +12,53 @@
 
 export const DROP_DAYS = 5;
 
+/*
+ * The row-height control: the drawn height of one Person's row, in whole
+ * pixels, in steps of eight. It is a view setting only - it is never written
+ * to the plan and returns to its default when the interface reloads.
+ */
+export const ROW_HEIGHT_MIN = 32;
+export const ROW_HEIGHT_MAX = 120;
+export const ROW_HEIGHT_STEP = 8;
+export const ROW_HEIGHT_DEFAULT = 56;
+
+// Below this the two lines of a row header cannot both fit, so the header
+// collapses to its name and figure on one line.
+export const ROW_HEADER_TIGHT = 48;
+
+// Snap any value to the nearest whole step and keep it inside the range, so a
+// control press can never leave the row at a height the interface does not
+// draw.
+export function clampRowHeight(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return ROW_HEIGHT_DEFAULT;
+  const snapped = Math.round(n / ROW_HEIGHT_STEP) * ROW_HEIGHT_STEP;
+  return Math.min(ROW_HEIGHT_MAX, Math.max(ROW_HEIGHT_MIN, snapped));
+}
+
+export function stepRowHeight(value, delta) {
+  const direction = delta < 0 ? -1 : 1;
+  return clampRowHeight(clampRowHeight(value) + direction * ROW_HEIGHT_STEP);
+}
+
+/*
+ * The drawable height and the per-step size for a given row height. At the
+ * original 44px row the drawable height was 40px and a 10% step 4px, so the
+ * row is one step taller than the height an Assignment fills and a step is a
+ * tenth of that drawable height: row = drawable + step, step = drawable / 10.
+ * Given the row alone, step = row / 11 and drawable = 10 * step.
+ */
+export function rowGeometry(rowHeight) {
+  const row = Number.isFinite(Number(rowHeight)) ? Number(rowHeight) : ROW_HEIGHT_DEFAULT;
+  const step = row / 11;
+  return { row: row, fte: 10 * step, step: step };
+}
+
+export function isRowHeaderTight(rowHeight) {
+  const row = Number.isFinite(Number(rowHeight)) ? Number(rowHeight) : ROW_HEIGHT_DEFAULT;
+  return row < ROW_HEADER_TIGHT;
+}
+
 function clampIndex(index, dayCount) {
   const last = Math.max(0, dayCount - 1);
   const n = Number.isFinite(index) ? Math.round(index) : 0;
