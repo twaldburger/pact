@@ -18,7 +18,9 @@ import {
   assignmentCount,
   deleteConfirmation,
   clampShare,
-  shareValues,
+  SHARE_MIN,
+  SHARE_MAX,
+  stepShare,
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
@@ -407,7 +409,7 @@ function blockFor(group, s) {
   b.setAttribute("aria-label", a.project.name + " on " + a.person.name + ", " +
     a.share + "% from " + fmtRange(a.start, a.end) +
     (archived ? ", archived" : "") +
-    ". Enter for details" + (archived ? "." : ", drag an edge to change it."));
+    ". Enter for details.");
   b.style.setProperty("--block-ink", "var(--proj-" + a.project.colour + ")");
   set(b, s.start, s.end - s.start + 1);
   b.style.setProperty("--blk-bottom", yPx(s.offset) + "px");
@@ -1415,24 +1417,26 @@ function countAssignments(field, id) {
   });
 }
 
-// A Person's Availability in whole 10% steps, with buttons and arrow keys.
-function availabilityControl(value) {
-  var wrap = el("span", "avail");
-  var current = clampAvailability(value);
+// A whole-10% value with minus and plus buttons and the arrow keys: one control
+// serves a Person's Availability and an Assignment's Share, so the two read and
+// behave alike, down to the disabled button at either end of the range.
+function stepperControl(opts) {
+  var wrap = el("span", "stepper");
+  var current = opts.clamp(opts.value);
 
-  var down = el("button", "avail__btn");
+  var down = el("button", "stepper__btn");
   down.type = "button";
   down.textContent = "\u2212";
   down.setAttribute("aria-label", "One step less");
 
-  var out = el("span", "avail__value");
+  var out = el("span", "stepper__value");
   out.setAttribute("role", "spinbutton");
   out.setAttribute("tabindex", "0");
-  out.setAttribute("aria-label", "Availability, in steps of 10 per cent");
-  out.setAttribute("aria-valuemin", String(AVAILABILITY_MIN));
-  out.setAttribute("aria-valuemax", String(AVAILABILITY_MAX));
+  out.setAttribute("aria-label", opts.label);
+  out.setAttribute("aria-valuemin", String(opts.min));
+  out.setAttribute("aria-valuemax", String(opts.max));
 
-  var up = el("button", "avail__btn");
+  var up = el("button", "stepper__btn");
   up.type = "button";
   up.textContent = "+";
   up.setAttribute("aria-label", "One step more");
@@ -1440,16 +1444,18 @@ function availabilityControl(value) {
   function show() {
     out.textContent = current + "%";
     out.setAttribute("aria-valuenow", String(current));
+    down.disabled = current <= opts.min;
+    up.disabled = current >= opts.max;
   }
-  function move(delta) { current = stepAvailability(current, delta); show(); }
+  function move(delta) { current = opts.step(current, delta); show(); }
 
   down.addEventListener("click", function () { move(-1); });
   up.addEventListener("click", function () { move(1); });
   out.addEventListener("keydown", function (e) {
     if (e.key === "ArrowUp" || e.key === "ArrowRight") { move(1); e.preventDefault(); }
     else if (e.key === "ArrowDown" || e.key === "ArrowLeft") { move(-1); e.preventDefault(); }
-    else if (e.key === "Home") { current = AVAILABILITY_MIN; show(); e.preventDefault(); }
-    else if (e.key === "End") { current = AVAILABILITY_MAX; show(); e.preventDefault(); }
+    else if (e.key === "Home") { current = opts.min; show(); e.preventDefault(); }
+    else if (e.key === "End") { current = opts.max; show(); e.preventDefault(); }
   });
 
   show();
@@ -1459,23 +1465,32 @@ function availabilityControl(value) {
   return { node: wrap, value: function () { return current; } };
 }
 
-var tagListSeq = 0;
-
-// A menu of the ten possible shares, 10% through 100%. Choosing a value is the
-// same change a vertical edge drag makes - it lands on exactly the same number
-// - so there is nothing to type and nothing to round by hand.
-function shareSelect(current) {
-  var select = document.createElement("select");
-  select.setAttribute("aria-label", "Allocation, in steps of 10 per cent");
-  shareValues().forEach(function (value) {
-    var option = document.createElement("option");
-    option.value = String(value);
-    option.textContent = value + "%";
-    select.appendChild(option);
+// A Person's Availability in whole 10% steps.
+function availabilityControl(value) {
+  return stepperControl({
+    value: value,
+    label: "Availability, in steps of 10 per cent",
+    min: AVAILABILITY_MIN,
+    max: AVAILABILITY_MAX,
+    clamp: clampAvailability,
+    step: stepAvailability
   });
-  select.value = String(clampShare(current));
-  return select;
 }
+
+// An Assignment's Share, in the same whole 10% steps as Availability and set by
+// the same control, so stepping and an edge drag can never disagree.
+function shareControl(value) {
+  return stepperControl({
+    value: value,
+    label: "Allocation, in steps of 10 per cent",
+    min: SHARE_MIN,
+    max: SHARE_MAX,
+    clamp: clampShare,
+    step: stepShare
+  });
+}
+
+var tagListSeq = 0;
 
 // Tag chips plus an input that takes a new tag or one from `suggest`.
 function tagEditor(initial, suggest) {
@@ -1695,17 +1710,10 @@ function openAssignmentPanel(a, trigger) {
     fmtRange(a.start, a.end));
 
   var form = el("form", "form");
-  // The Share menu and a vertical edge drag reach the same number; the menu
-  // opens on the Assignment's current share, so the two cannot disagree.
-  var sharePick = shareSelect(a.share);
-  var shareControl = el("span", "share-control");
-  shareControl.appendChild(sharePick);
-  if (!archived) {
-    var shareHint = el("span", "soft");
-    shareHint.textContent = " or drag an edge";
-    shareControl.appendChild(shareHint);
-  }
-  form.appendChild(formRow("Share", shareControl));
+  // The Share stepper and a vertical edge drag reach the same number; it opens
+  // on the Assignment's current share, so the two cannot disagree.
+  var share = shareControl(a.share);
+  form.appendChild(formRow("Share", share.node));
   // Assignment tags are offered from that Project's other Assignments only.
   var tags = tagEditor(a.raw.tags, function () {
     return suggestAssignmentTags(data.assignments, a.project.id, a.id);
@@ -1751,7 +1759,7 @@ function openAssignmentPanel(a, trigger) {
   var save = saveButton("Save", function () {
     submitPanel(node, error, function () {
       return api("PATCH", "/api/assignments/" + encodeURIComponent(a.id), {
-        share: clampShare(Number(sharePick.value)),
+        share: share.value(),
         tags: tags.tags(),
         note: noteInput.value
       });
@@ -1767,7 +1775,7 @@ function openAssignmentPanel(a, trigger) {
 
 // The panel a drawn range opens: the read-back of what was drawn, then the
 // choices that make it an Assignment. The dates are read only - the range is
-// set by drawing, never typed - the Share menu opens on 100%, and the Project
+// set by drawing, never typed - the Share stepper opens on 100%, and the Project
 // is required, because an Assignment cannot exist without one.
 function openNewAssignmentPanel(person, range, rect, trigger) {
   var start = addDays(rangeStart, range.start);
@@ -1794,10 +1802,10 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
   });
   form.appendChild(formRow("Project", projectSelect));
 
-  // Creating an Assignment starts at the whole range; the menu offers every
+  // Creating an Assignment starts at the whole range; the stepper walks to every
   // other share, exactly as an edge drag would set it.
-  var sharePick = shareSelect(100);
-  form.appendChild(formRow("Share", sharePick));
+  var share = shareControl(100);
+  form.appendChild(formRow("Share", share.node));
 
   // Assignment tags are offered from the chosen Project's other Assignments,
   // so the list follows the Project choice.
@@ -1827,7 +1835,7 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
         personId: person.id,
         start: iso(start),
         end: iso(end),
-        share: clampShare(Number(sharePick.value)),
+        share: share.value(),
         tags: tags.tags(),
         note: noteInput.value
       });

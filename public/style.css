@@ -1343,18 +1343,6 @@ down to the last row and no further. */
 
 .tags { display: block; }
 
-/* The Share menu with its drag hint. The menu keeps its own width rather than
-   filling the value column, and the hint drops to a second line inside that
-   column rather than overflowing the panel. */
-.share-control {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.form .share-control select { width: auto; }
-
 /* Sized to the tag chips it sits beside, so the row is one height. */
 .form .tags__input {
   width: 7rem;
@@ -1387,14 +1375,15 @@ down to the last row and no further. */
 
 .form textarea { resize: vertical; min-height: 2.5rem; }
 
-/* Availability: whole 10% steps, never typed. */
-.avail {
+/* A whole-10% value - a Person's Availability or an Assignment's Share - never
+   typed: minus and plus buttons either side of the figure. */
+.stepper {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
 }
 
-.avail__btn {
+.stepper__btn {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -1412,11 +1401,13 @@ down to the last row and no further. */
   cursor: pointer;
 }
 
-.avail__btn:hover { border-color: var(--rule-strong); }
+.stepper__btn:hover:not(:disabled) { border-color: var(--rule-strong); }
+
+.stepper__btn:disabled { opacity: var(--op-disabled); cursor: default; }
 
 /* A figure, right-aligned inside a fixed column so its edge holds still as
    the value steps. */
-.avail__value {
+.stepper__value {
   min-width: 3rem;
   padding: var(--sp-1) var(--sp-2);
   border-radius: var(--radius);

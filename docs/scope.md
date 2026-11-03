@@ -9,7 +9,7 @@ Confirmed by the owner on 2026-11-02. The first version is locked except for the
 - **Project stack** - Projects with name, colour and notes; add and edit them here.
 - **Drag to create** - dragging a Project from the stack onto a Person's row creates an Assignment over a date range.
 - **Horizontal drag** - dragging an Assignment's edge changes its start or end date, snapped to whole days with a readout while dragging.
-- **Vertical drag** - dragging an Assignment's edge changes its share of the Person's Availability in 10% steps, between 10% and 100%. The same share is chosen from a menu of the ten values in the Assignment popover and the New assignment panel, so an Allocation is set by dragging or by choosing a step, never free-typed.
+- **Vertical drag** - dragging an Assignment's edge changes its share of the Person's Availability in 10% steps, between 10% and 100%. The same share is set by the plus-and-minus stepper a Person's Availability uses, in the Assignment popover and the New assignment panel, so an Allocation is set by dragging or by stepping, never free-typed.
 - **One share per Assignment** - the share holds for the whole range; a change of share, or a gap, is a second Assignment.
 - **Assignment extras** - any number of Assignment tags and an optional note.
 - **The Marker** - a draggable vertical line on the Timeline, starting on today, with the date it sits on being the date the per-Person totals are read at. Each Person's row header reads their absolute assigned total together with their Availability - "96% of 80%" - with a warning state when the total passes the Availability.

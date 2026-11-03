@@ -73,9 +73,9 @@ Drag an Assignment's body to move it in time and onto another Person, keeping
 its Allocation, tags and note; drag its left or right edge horizontally to
 change its start or end date, snapped to whole days; drag an edge vertically to
 change its Allocation in 10% steps. Every drag shows the value being set; the
-same Allocation is chosen from a menu of the ten values in the Assignment
-popover and the New assignment panel, so it is set by dragging or by choosing a
-step, never free-typed.
+same Allocation is set by the plus-and-minus stepper a Person's Availability
+uses, in the Assignment popover and the New assignment panel, so it is set by
+dragging or by stepping, never free-typed.
 Over-allocation is allowed and drawn: the part of a block above the Person's
 Availability line is hatched in the signal colour, and the row header's
 `assigned/availability` figure turns to that colour.
