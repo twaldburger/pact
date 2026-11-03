@@ -127,52 +127,37 @@ h1, h2, h3, p { margin: 0; }
 /* Topbar -------------------------------------------------------------------- */
 
 .topbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
   gap: var(--sp-4);
   height: var(--bar-h);
   padding: 0 var(--sp-5);
   border-bottom: 1px solid var(--rule);
   background: var(--canvas);
-}
-
-/* Three zones: the brand and the secondary controls in the left half, the
-   filter in the true centre, the archive toggle in the right half. The two
-   outer zones take equal shares, so the filter's centre stays the bar's centre
-   at every width. The left zone pins the brand to the start and the controls
-   to its end, beside the filter. */
-.topbar__left {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  min-width: 0;
+  /* Two zones. The identity holds the wordmark and the range it names; the
+     instruments hold the controls, right-aligned. When the window cannot hold
+     both the bar scrolls on its own, so it never wraps and never pushes the
+     page sideways. */
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-.topbar__controls {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-
-.topbar__right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-/* The wordmark and the range it names are one unit, so the gap inside the
-   pair is tighter than the gap between the control groups that follow it. */
-.topbar__brand {
+.topbar__identity {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  flex: 0 0 auto;
+}
+
+/* The instruments sit at the end of the bar when there is room, and run off
+   the end in this order when there is not: Filter, Zoom, Row height, Today,
+   then the Options control. */
+.topbar__instruments {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .wordmark {
@@ -297,7 +282,6 @@ h1, h2, h3, p { margin: 0; }
    language: same height, border, radius and type role as the controls beside
    it, and the pressed ink fill is reserved for the switches inside. */
 .filter {
-  position: relative;
   display: flex;
   align-items: center;
   height: var(--control-h);
@@ -368,10 +352,12 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink);
 }
 
+/* The bar can scroll on its own when the window is narrow, so a popover is
+   fixed to the viewport and placed against its trigger by the script rather
+   than by an absolutely-positioned ancestor: that keeps it out of the
+   scroller and out of the page's own width. */
 .filter__scopes {
-  position: absolute;
-  top: calc(100% + var(--sp-2));
-  right: 0;
+  position: fixed;
   z-index: 60;
   min-width: 12rem;
   padding: var(--sp-2) 0;
@@ -417,16 +403,12 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* The suggestions, drawn from the plan's own vocabulary: source, value, and
-   how much choosing it would match. The popover is centred on the field and
-   capped to the viewport, so a long list floats over the page instead of
-   widening it: the field is centred in the bar, so the popover stays inside
-   the window even at twice the text size. */
+   how much choosing it would match. Fixed and centred on the field by the
+   script, and capped to the viewport, so a long list floats over the page
+   instead of widening it even at twice the text size. */
 .filter__suggest {
-  position: absolute;
-  left: 50%;
-  top: calc(100% + var(--sp-2));
+  position: fixed;
   z-index: 60;
-  transform: translateX(-50%);
   min-width: min(22rem, calc(100vw - 2 * var(--sp-5)));
   max-width: calc(100vw - 2 * var(--sp-5));
   max-height: 16rem;
@@ -478,6 +460,79 @@ h1, h2, h3, p { margin: 0; }
   font-size: var(--fs-axis);
   color: var(--ink-soft);
   white-space: nowrap;
+}
+
+/* Options ------------------------------------------------------------------- */
+
+/* The infrequent controls, at the far right of the bar behind one symbol. The
+   button keeps the bar's control language; the menu is built like the filter's
+   scope popover, and a checkable item states its own state with a tick and
+   aria-checked, the way the switches inside that popover do. */
+.options {
+  display: flex;
+  align-items: center;
+}
+
+.options__btn {
+  min-width: var(--control-h);
+  padding: 0;
+  justify-content: center;
+}
+
+.options__btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
+}
+
+.options__glyph {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  line-height: 1;
+}
+
+.options__menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 12rem;
+  padding: var(--sp-2) 0;
+  background: var(--canvas);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+}
+
+.options__item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.options__item:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+.options__tick {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-chip);
+}
+
+.options__item[aria-checked="true"] .options__tick {
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
 /* The empty result: the grid steps aside and names the filter that emptied it. */

@@ -51,7 +51,10 @@ Beside the zoom, a row-height control changes the drawn height of every row in
 8px steps from 32 to 120, defaulting to 56; it is a view setting for the
 session only and is not written to the plan. A Today control scrolls the view
 so today is visible again and moves the Marker back onto today, and the range
-label beside the wordmark names the plan's own extent.
+label beside the wordmark names the plan's own extent. The bar is two zones:
+the wordmark and range on the left, and on the right the Filter, Zoom, Row
+height and Today controls in that order, then the Options menu that holds the
+less frequent controls.
 
 The plan's date range extends itself. Every write recomputes it in the plan
 module: it holds the earliest Assignment start and the latest Assignment end
@@ -86,8 +89,9 @@ from other People and an Assignment's tags from that Project's other
 Assignments, because the two vocabularies are separate.
 
 Archiving a Person or a Project keeps every Assignment and takes it out of the
-plan. The `Show archived` toggle reveals archived People and Projects in their
-lists, marked as archived, each with a Restore button. An archived Person cannot
+plan. The `Show archived` item in the top bar's Options menu reveals archived
+People and Projects in their lists, marked as archived, each with a Restore
+button. An archived Person cannot
 take a new Assignment: a drop onto one is refused with a message until the
 Person is restored.
 

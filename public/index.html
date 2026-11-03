@@ -9,42 +9,44 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar__left">
-      <div class="topbar__brand">
-        <span class="wordmark">PACT</span>
-        <span class="topbar__context" id="context"></span>
-      </div>
-      <div class="topbar__controls">
-        <div class="zoom" role="group" aria-label="Zoom - the width of one day">
-          <button type="button" class="zoom__btn" data-zoom="day" aria-pressed="false">Day</button>
-          <button type="button" class="zoom__btn" data-zoom="week" aria-pressed="false">Week</button>
-          <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="true">Month</button>
-        </div>
-        <button type="button" class="ghost" id="today">Today</button>
-        <div class="rowheight" role="group" aria-label="Row height - the height of one person's row">
-          <button type="button" class="rowheight__btn" id="row-decrease" aria-label="Shorter rows">−</button>
-          <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows">+</button>
-        </div>
-      </div>
+    <div class="topbar__identity">
+      <span class="wordmark">PACT</span>
+      <span class="topbar__context" id="context"></span>
     </div>
-    <div class="filter" id="filter">
-      <input type="text" class="filter__input" id="filter-input" placeholder="Filter"
-        aria-label="Filter the plan" autocomplete="off" role="combobox"
-        aria-expanded="false" aria-autocomplete="list" aria-controls="filter-suggest">
-      <button type="button" class="filter__clear" id="filter-clear"
-        aria-label="Clear the filter" hidden>&times;</button>
-      <button type="button" class="filter__scope" id="filter-scope"
-        aria-haspopup="true" aria-expanded="false" aria-label="Look in - all 3">Look in: all 3</button>
-      <div class="filter__scopes" id="filter-scopes" hidden>
-        <button type="button" class="filter__switch" role="switch" data-scope="people" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>People</button>
-        <button type="button" class="filter__switch" role="switch" data-scope="projects" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>Projects</button>
-        <button type="button" class="filter__switch" role="switch" data-scope="assignments" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>Assignments</button>
+    <div class="topbar__instruments">
+      <div class="filter" id="filter">
+        <input type="text" class="filter__input" id="filter-input" placeholder="Filter"
+          aria-label="Filter the plan" autocomplete="off" role="combobox"
+          aria-expanded="false" aria-autocomplete="list" aria-controls="filter-suggest">
+        <button type="button" class="filter__clear" id="filter-clear"
+          aria-label="Clear the filter" hidden>&times;</button>
+        <button type="button" class="filter__scope" id="filter-scope"
+          aria-haspopup="true" aria-expanded="false" aria-label="Look in - all 3">Look in: all 3</button>
+        <div class="filter__scopes" id="filter-scopes" hidden>
+          <button type="button" class="filter__switch" role="switch" data-scope="people" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>People</button>
+          <button type="button" class="filter__switch" role="switch" data-scope="projects" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>Projects</button>
+          <button type="button" class="filter__switch" role="switch" data-scope="assignments" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>Assignments</button>
+        </div>
+        <div class="filter__suggest" id="filter-suggest" role="listbox"
+          aria-label="Filter suggestions" hidden></div>
       </div>
-      <div class="filter__suggest" id="filter-suggest" role="listbox"
-        aria-label="Filter suggestions" hidden></div>
-    </div>
-    <div class="topbar__right">
-      <button type="button" class="ghost" id="show-archived" aria-pressed="false">Show archived</button>
+      <div class="zoom" role="group" aria-label="Zoom - the width of one day">
+        <button type="button" class="zoom__btn" data-zoom="day" aria-pressed="false">Day</button>
+        <button type="button" class="zoom__btn" data-zoom="week" aria-pressed="false">Week</button>
+        <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="true">Month</button>
+      </div>
+      <div class="rowheight" role="group" aria-label="Row height - the height of one person's row">
+        <button type="button" class="rowheight__btn" id="row-decrease" aria-label="Shorter rows">−</button>
+        <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows">+</button>
+      </div>
+      <button type="button" class="ghost" id="today">Today</button>
+      <div class="options" id="options">
+        <button type="button" class="ghost options__btn" id="options-btn"
+          aria-haspopup="true" aria-expanded="false" aria-label="Options" title="Options">
+          <span class="options__glyph" aria-hidden="true">&hellip;</span>
+        </button>
+        <div class="options__menu" id="options-menu" role="menu" aria-label="Options" hidden></div>
+      </div>
     </div>
   </header>
 

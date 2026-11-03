@@ -22,6 +22,7 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
+import { optionsItems } from "./lib/options.mjs";
 import {
   defaultScopes,
   filterPlan,
@@ -55,7 +56,6 @@ var scroller = document.getElementById("scroller");
 var stackList = document.getElementById("stack-list");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
-var archivedToggle = document.getElementById("show-archived");
 
 if (!tl || !scroller) throw new Error("PACT: the timeline is missing");
 
@@ -1995,14 +1995,6 @@ function bindChrome() {
   document.getElementById("add-project").addEventListener("click", function (e) {
     openProjectPanel(null, e.currentTarget);
   });
-  if (archivedToggle) {
-    archivedToggle.addEventListener("click", function () {
-      showArchived = !showArchived;
-      archivedToggle.setAttribute("aria-pressed", showArchived ? "true" : "false");
-      archivedToggle.textContent = showArchived ? "Hide archived" : "Show archived";
-      refresh().catch(showError);
-    });
-  }
   // The Today control returns the owner to now: it brings today back into the
   // middle of the view and puts the Marker back on today. Today is always
   // inside the range, so the control always has work.
@@ -2024,6 +2016,9 @@ function bindChrome() {
   // (whose block widths animate, so the pass runs again when they settle)
   // and the bundled font, which may arrive after the first paint. None of
   // them reloads the page.
+  window.addEventListener("resize", repositionPopovers);
+  var topbar = document.querySelector(".topbar");
+  if (topbar) topbar.addEventListener("scroll", repositionPopovers);
   window.addEventListener("resize", function () {
     // The reader's text size can change here, which moves the row height at
     // which the row header's two lines stop fitting.
@@ -2118,6 +2113,7 @@ function updateSuggestions() {
     filterSuggestEl.appendChild(row);
   });
   filterSuggestEl.hidden = false;
+  placePopover(filterSuggestEl, filterInput, "center");
   filterInput.setAttribute("aria-expanded", "true");
   highlightSuggestion();
 }
@@ -2147,8 +2143,13 @@ function setScope(key, on) {
 }
 
 function openScopes(open) {
+  if (open && optionsMenu && !optionsMenu.hidden) openOptions(false);
   filterScopesEl.hidden = !open;
   filterScopeBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) {
+    hideSuggestions();
+    placePopover(filterScopesEl, filterScopeBtn, "right");
+  }
 }
 
 function initFilter() {
@@ -2213,6 +2214,114 @@ function initFilter() {
   updateFilterChrome();
 }
 
+/* --- options menu -------------------------------------------------------- */
+
+var optionsEl = null;
+var optionsBtn = null;
+var optionsMenu = null;
+var optionButtons = {};
+
+// Every popover in the bar is fixed to the viewport and placed against its
+// trigger. The bar can scroll on its own when the window is narrow, so this
+// keeps a popover out of that scroller - it is never clipped by it and never
+// adds to the page's own width.
+function placePopover(node, trigger, align) {
+  var r = trigger.getBoundingClientRect();
+  var vw = document.documentElement.clientWidth;
+  var vh = document.documentElement.clientHeight;
+  var w = node.offsetWidth;
+  var h = node.offsetHeight;
+  var left = align === "center" ? r.left + r.width / 2 - w / 2 : r.right - w;
+  left = Math.min(Math.max(8, left), Math.max(8, vw - w - 8));
+  var top = r.bottom + 8;
+  if (top + h > vh - 8) top = Math.max(8, r.top - h - 8);
+  node.style.left = left + "px";
+  node.style.top = top + "px";
+}
+
+function repositionPopovers() {
+  if (optionsMenu && !optionsMenu.hidden) placePopover(optionsMenu, optionsBtn, "right");
+  if (filterScopesEl && !filterScopesEl.hidden) placePopover(filterScopesEl, filterScopeBtn, "right");
+  if (filterSuggestEl && !filterSuggestEl.hidden) placePopover(filterSuggestEl, filterInput, "center");
+}
+
+// What each item does. The list and its checks come from optionsItems; adding
+// a future infrequent control is one entry there and one handler here.
+var OPTION_ACTIONS = {
+  archived: function () { setShowArchived(!showArchived); }
+};
+
+function setShowArchived(on) {
+  showArchived = on;
+  updateOptionsMenu();
+  refresh().catch(showError);
+}
+
+function updateOptionsMenu() {
+  optionsItems(showArchived).forEach(function (item) {
+    var btn = optionButtons[item.key];
+    if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+  });
+}
+
+function buildOptionsMenu() {
+  optionsMenu.innerHTML = "";
+  optionsItems(false).forEach(function (item) {
+    var btn = el("button", "options__item");
+    btn.type = "button";
+    btn.id = "option-" + item.key;
+    btn.setAttribute("role", "menuitemcheckbox");
+    btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+    var tick = el("span", "options__tick");
+    tick.setAttribute("aria-hidden", "true");
+    btn.appendChild(tick);
+    btn.appendChild(document.createTextNode(item.label));
+    btn.addEventListener("click", function () {
+      var action = OPTION_ACTIONS[item.key];
+      if (action) action();
+    });
+    optionButtons[item.key] = btn;
+    optionsMenu.appendChild(btn);
+  });
+}
+
+// One popover at a time: opening the menu closes the filter's scope popover
+// (and the suggestions), and opening the scope popover closes the menu.
+function openOptions(open) {
+  if (open) {
+    hideSuggestions();
+    if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
+    updateOptionsMenu();
+  }
+  optionsMenu.hidden = !open;
+  optionsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) placePopover(optionsMenu, optionsBtn, "right");
+}
+
+function initOptions() {
+  optionsEl = document.getElementById("options");
+  optionsBtn = document.getElementById("options-btn");
+  optionsMenu = document.getElementById("options-menu");
+  if (!optionsEl || !optionsBtn || !optionsMenu) return;
+  buildOptionsMenu();
+  optionsBtn.addEventListener("click", function () { openOptions(optionsMenu.hidden); });
+  optionsBtn.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { openOptions(true); e.preventDefault(); }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !optionsMenu.hidden) {
+      openOptions(false);
+      optionsBtn.focus();
+      e.preventDefault();
+    }
+  });
+  document.addEventListener("pointerdown", function (e) {
+    if (optionsMenu.hidden) return;
+    if (optionsEl.contains(e.target)) return;
+    openOptions(false);
+  });
+}
+
 function boot() {
   api("GET", planUrl()).then(function (plan) {
     data = plan;
@@ -2224,6 +2333,7 @@ function boot() {
     initZoom();
     bindChrome();
     initFilter();
+    initOptions();
     window.requestAnimationFrame(function () {
       var tlRect = tl.getBoundingClientRect();
       var heads = tl.querySelector(".tl__heads");
