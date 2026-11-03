@@ -20,6 +20,16 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
+import {
+  defaultScopes,
+  filterPlan,
+  filterIsEmpty,
+  filterSuggestions,
+  personAssignedShare,
+  scopeSummary,
+  searchedAreas,
+  SUGGESTION_LIMIT
+} from "./lib/filter.mjs";
 import { blockLabel, labelText, rangeLabel } from "./lib/label.mjs";
 import {
   DROP_DAYS,
@@ -71,6 +81,14 @@ var stepPx = 0;
 var BASE_PX = 1;
 var lastDragAt = 0;
 var showArchived = false;
+// The Filter: session-only text and scope, never written to the plan. The
+// whole plan stays in `assignments` for the row-header figures; `grid*` hold
+// what the filter leaves to draw.
+var filterQuery = "";
+var filterScopes = defaultScopes();
+var gridPeople = [];
+var gridProjects = [];
+var gridAssignments = [];
 
 /* --- dates (UTC, so day arithmetic never crosses a DST edge) ------------- */
 
@@ -127,6 +145,16 @@ function indexData() {
       share: a.share
     };
   }).filter(function (a) { return a.project && a.person; });
+
+  // What the Filter leaves to draw. The mapped assignments keep their project
+  // and person objects, so the filtered view is a subset of `assignments`
+  // rather than a second mapping.
+  var view = filterPlan(data, filterQuery, filterScopes);
+  gridPeople = view.people;
+  gridProjects = view.projects;
+  var shown = {};
+  view.assignments.forEach(function (a) { shown[a.id] = true; });
+  gridAssignments = assignments.filter(function (a) { return shown[a.id]; });
 }
 
 /* --- tiny DOM helpers ---------------------------------------------------- */
@@ -249,8 +277,8 @@ function drawAxis() {
 
 // Stack a person's assignments by start order, one rectangle per run of equal
 // offset and over-allocation, so a block only ever sits where its share does.
-function layoutPerson(person) {
-  var mine = assignments.filter(function (a) { return a.person === person; })
+function layoutPerson(person, list) {
+  var mine = (list || assignments).filter(function (a) { return a.person === person; })
     .sort(function (a, b) {
       if (a.startIdx !== b.startIdx) return a.startIdx - b.startIdx;
       if (a.endIdx !== b.endIdx) return a.endIdx - b.endIdx;
@@ -295,7 +323,7 @@ function drawRows() {
   var heads = el("div", "tl__heads");
   var body = el("div", "tl__body");
 
-  data.people.forEach(function (person) {
+  gridPeople.forEach(function (person) {
     var wrap = el("div", "rowhead-wrap" + (person.archived ? " is-archived" : ""));
     wrap.setAttribute("data-person", person.id);
 
@@ -335,7 +363,7 @@ function drawRows() {
     ceiling.style.setProperty("--ceiling-px", yPx(person.availability / 100) + "px");
     row.appendChild(ceiling);
 
-    layoutPerson(person).forEach(function (group) {
+    layoutPerson(person, gridAssignments).forEach(function (group) {
       group.segs.forEach(function (s) {
         row.appendChild(blockFor(group, s));
       });
@@ -594,13 +622,9 @@ function setMarker(i) {
 }
 
 function totalAt(person, dayIdx) {
-  var total = 0;
-  assignments.forEach(function (a) {
-    if (a.person === person && a.startIdx <= dayIdx && a.endIdx >= dayIdx) {
-      total += a.share / 100;
-    }
-  });
-  return total;
+  // The figure is the Person's own load, read from the whole plan: a filter
+  // must not narrow the number that answers "can this person take more?"
+  return personAssignedShare(data, person.id, iso(addDays(rangeStart, dayIdx)));
 }
 
 function updateFigures() {
@@ -629,7 +653,7 @@ var NOTE_ICON =
   'stroke-linecap="round"/></svg>';
 
 function drawStack() {
-  data.projects.forEach(function (project) {
+  gridProjects.forEach(function (project) {
     var row = el("li", "stack__row" + (project.archived ? " is-archived" : ""));
 
     var item = el("button", "stack__item");
@@ -1720,12 +1744,12 @@ function initZoom() {
   function choose(zoom) {
     // Hold the Marker where it sits on screen while the scale changes.
     var sRect = scroller.getBoundingClientRect();
-    var before = marker.getBoundingClientRect().left - sRect.left;
+    var before = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
     root.setAttribute("data-zoom", zoom);
     buttons.forEach(function (b) {
       b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
     });
-    var after = marker.getBoundingClientRect().left - sRect.left;
+    var after = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
     scroller.scrollLeft += after - before;
     queueBlockLabels();
   }
@@ -1762,6 +1786,24 @@ function initRowHeight() {
 
 /* --- render -------------------------------------------------------------- */
 
+// The empty result: it names what was typed, says which areas were looked in,
+// and offers a way out. The filter is still on, so the field stays as it is.
+function buildEmptyState() {
+  var box = el("div", "filter-empty");
+  var line = el("div", "filter-empty__line");
+  line.appendChild(document.createTextNode("Nothing matches "));
+  var typed = el("b");
+  typed.textContent = filterQuery.trim();
+  line.appendChild(typed);
+  line.appendChild(document.createTextNode(" in " + searchedAreas(filterScopes) + "."));
+  box.appendChild(line);
+  var hint = el("p", "filter-empty__hint");
+  hint.textContent = "Check the spelling, or switch off a lookup area you do not need.";
+  box.appendChild(hint);
+  box.appendChild(button("btn-ghost", "Clear the filter", function () { clearFilter(); }));
+  return box;
+}
+
 function render() {
   if (!data) return;
   var scrollLeft = scroller.scrollLeft;
@@ -1769,6 +1811,21 @@ function render() {
   tl.innerHTML = "";
   stackList.innerHTML = "";
   indexData();
+  contextEl.textContent = rangeLabel(data.range.start, data.range.end);
+
+  if (filterQuery.trim() !== "" && filterIsEmpty({
+    people: gridPeople,
+    projects: gridProjects,
+    assignments: gridAssignments
+  })) {
+    tl.classList.add("is-empty");
+    tl.appendChild(buildEmptyState());
+    drawStack();
+    marker = null;
+    scroller.scrollLeft = 0;
+    return;
+  }
+  tl.classList.remove("is-empty");
   tl.style.setProperty("--days", DAYS);
 
   var overlay = el("div", "weekends");
@@ -1805,8 +1862,6 @@ function render() {
 
   markerIndex = clamp(markerIndex, 0, DAYS - 1);
   setMarker(markerIndex);
-
-  contextEl.textContent = rangeLabel(data.range.start, data.range.end);
 
   scroller.scrollLeft = scrollLeft;
   drawBlockLabels();
@@ -1861,6 +1916,181 @@ function bindChrome() {
   }
 }
 
+/* --- filter control ------------------------------------------------------ */
+
+var filterEl = null;
+var filterInput = null;
+var filterClear = null;
+var filterScopeBtn = null;
+var filterScopesEl = null;
+var filterSuggestEl = null;
+var suggestionList = [];
+var suggestionIndex = -1;
+
+function scopeSwitches() {
+  return filterScopesEl.querySelectorAll("[data-scope]");
+}
+
+// The rest of the control follows the session's filter: the scope summary, the
+// clear affordance and each switch's announced state.
+function updateFilterChrome() {
+  if (!filterEl) return;
+  filterScopeBtn.textContent = "Look in: " + scopeSummary(filterScopes);
+  filterScopeBtn.setAttribute("aria-label", "Look in - " + scopeSummary(filterScopes));
+  filterClear.hidden = filterInput.value === "";
+  scopeSwitches().forEach(function (btn) {
+    var on = !!filterScopes[btn.getAttribute("data-scope")];
+    btn.setAttribute("aria-checked", on ? "true" : "false");
+  });
+}
+
+function hideSuggestions() {
+  suggestionList = [];
+  suggestionIndex = -1;
+  filterSuggestEl.hidden = true;
+  filterSuggestEl.innerHTML = "";
+  filterInput.setAttribute("aria-expanded", "false");
+  filterInput.removeAttribute("aria-activedescendant");
+}
+
+function highlightSuggestion() {
+  var rows = filterSuggestEl.querySelectorAll(".filter__hit");
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.toggle("is-sel", i === suggestionIndex);
+    rows[i].setAttribute("aria-selected", i === suggestionIndex ? "true" : "false");
+  }
+  var active = rows[suggestionIndex];
+  if (active) {
+    filterInput.setAttribute("aria-activedescendant", active.id);
+    active.scrollIntoView({ block: "nearest" });
+  } else {
+    filterInput.removeAttribute("aria-activedescendant");
+  }
+}
+
+function updateSuggestions() {
+  if (!filterEl) return;
+  var q = filterInput.value.trim();
+  if (q === "") { hideSuggestions(); return; }
+  suggestionList = filterSuggestions(data, q, filterScopes).slice(0, SUGGESTION_LIMIT);
+  if (suggestionList.length === 0) { hideSuggestions(); return; }
+  suggestionIndex = 0;
+  filterSuggestEl.innerHTML = "";
+  suggestionList.forEach(function (item, i) {
+    var row = el("button", "filter__hit");
+    row.type = "button";
+    row.id = "filter-hit-" + i;
+    row.setAttribute("role", "option");
+    var src = el("span", "filter__src");
+    src.textContent = item.source;
+    var val = el("span", "filter__val");
+    val.textContent = item.value;
+    var n = el("span", "filter__n");
+    n.textContent = item.matchLabel;
+    row.appendChild(src);
+    row.appendChild(val);
+    row.appendChild(n);
+    // Keep the input focused so the click lands and the dropdown stays put.
+    row.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    row.addEventListener("click", function () { applySuggestion(item.value); });
+    filterSuggestEl.appendChild(row);
+  });
+  filterSuggestEl.hidden = false;
+  filterInput.setAttribute("aria-expanded", "true");
+  highlightSuggestion();
+}
+
+function applySuggestion(value) {
+  filterInput.value = value;
+  filterQuery = value;
+  hideSuggestions();
+  updateFilterChrome();
+  render();
+}
+
+function clearFilter() {
+  filterInput.value = "";
+  filterQuery = "";
+  hideSuggestions();
+  updateFilterChrome();
+  render();
+  filterInput.focus();
+}
+
+function setScope(key, on) {
+  filterScopes[key] = on;
+  updateFilterChrome();
+  updateSuggestions();
+  render();
+}
+
+function openScopes(open) {
+  filterScopesEl.hidden = !open;
+  filterScopeBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function initFilter() {
+  filterEl = document.getElementById("filter");
+  filterInput = document.getElementById("filter-input");
+  filterClear = document.getElementById("filter-clear");
+  filterScopeBtn = document.getElementById("filter-scope");
+  filterScopesEl = document.getElementById("filter-scopes");
+  filterSuggestEl = document.getElementById("filter-suggest");
+  if (!filterEl || !filterInput) return;
+
+  filterInput.addEventListener("input", function () {
+    filterQuery = filterInput.value;
+    updateFilterChrome();
+    updateSuggestions();
+    render();
+  });
+  filterInput.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown" && suggestionList.length) {
+      suggestionIndex = Math.min(suggestionIndex + 1, suggestionList.length - 1);
+      highlightSuggestion();
+      e.preventDefault();
+    } else if (e.key === "ArrowUp" && suggestionList.length) {
+      suggestionIndex = Math.max(suggestionIndex - 1, 0);
+      highlightSuggestion();
+      e.preventDefault();
+    } else if (e.key === "Enter" && suggestionIndex >= 0 && suggestionList[suggestionIndex]) {
+      applySuggestion(suggestionList[suggestionIndex].value);
+      e.preventDefault();
+    } else if (e.key === "Escape") {
+      if (!filterSuggestEl.hidden) hideSuggestions();
+      else if (!filterScopesEl.hidden) openScopes(false);
+      else clearFilter();
+      e.preventDefault();
+    } else if (e.key === "Tab") {
+      hideSuggestions();
+    }
+  });
+  filterInput.addEventListener("blur", function () {
+    window.setTimeout(function () {
+      if (!filterEl.contains(document.activeElement)) hideSuggestions();
+    }, 0);
+  });
+
+  filterClear.addEventListener("click", function () { clearFilter(); });
+  filterScopeBtn.addEventListener("click", function () {
+    openScopes(filterScopesEl.hidden);
+  });
+  scopeSwitches().forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var key = btn.getAttribute("data-scope");
+      setScope(key, !filterScopes[key]);
+    });
+  });
+
+  document.addEventListener("pointerdown", function (e) {
+    if (filterEl.contains(e.target)) return;
+    if (!filterScopesEl.hidden) openScopes(false);
+    hideSuggestions();
+  });
+
+  updateFilterChrome();
+}
+
 function boot() {
   api("GET", planUrl()).then(function (plan) {
     data = plan;
@@ -1871,6 +2101,7 @@ function boot() {
     render();
     initZoom();
     bindChrome();
+    initFilter();
     window.requestAnimationFrame(function () {
       var tlRect = tl.getBoundingClientRect();
       var heads = tl.querySelector(".tl__heads");

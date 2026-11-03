@@ -42,7 +42,7 @@ _Avoid_: engagement, job, client, ticket
 
 **Assignment**:
 One Project placed on one Person for a continuous date range at an Allocation - the rectangle drawn on the Timeline. A change of share or a gap means a second Assignment. It carries any number of Assignment tags and an optional note.
-_Avoid_: booking, block, slot, shift
+_Avoid_: booking, block, slot, shift, work
 
 **Stack**:
 The list of Projects available to drag onto the Timeline; it holds no dates of its own.
@@ -63,3 +63,7 @@ _Avoid_: granularity, resolution, scale
 **Archive**:
 To take a Person or a Project out of the Stack and the Timeline while keeping every Assignment it ever had; an archived item can be restored.
 _Avoid_: delete, remove, hide, deactivate
+
+**Filter**:
+The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring anywhere in the People, Projects and Assignments it is set to look in. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
+_Avoid_: search, find, search bar, query

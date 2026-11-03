@@ -14,10 +14,11 @@ Confirmed by the owner on 2026-11-02. The first version is locked except for the
 - **Assignment extras** - any number of Assignment tags and an optional note.
 - **The Marker** - a draggable vertical line on the Timeline, starting on today, with the date it sits on being the date the per-Person totals are read at. Each Person's row header reads their absolute assigned total together with their Availability - "96% of 80%" - with a warning state when the total passes the Availability.
 - **Default view** - opens on the past plus the next eleven months at month resolution, with free scrolling in both directions.
-- **Tags** - Person tags and Assignment tags are separate vocabularies. A new one is typed, or an existing one chosen from the same kind: for a Person, tags already used on other People; for an Assignment, tags already used on that Project's other Assignments. The vocabulary is derived from use and matched case-insensitively. Tags are recorded and shown in v1; grouping, filtering and colour-coding by tag are later.
+- **Tags** - Person tags and Assignment tags are separate vocabularies. A new one is typed, or an existing one chosen from the same kind: for a Person, tags already used on other People; for an Assignment, tags already used on that Project's other Assignments. The vocabulary is derived from use and matched case-insensitively. Tags are recorded and shown in v1; grouping and colour-coding by tag are later.
 - **Tag display** - a compact marker on the Assignment's rectangle and the Person's row header, with full editing in the Assignment popover and the Person form; the marker is hidden in month zoom, where a rectangle is a few pixels wide.
 - **Zoom** - day, week and month views, changing only the drawn width of a day; stored dates stay exact days. Beside the zoom sits a row-height control that changes the drawn height of every row in 8px steps from 32 to 120, defaulting to 56; it is a view setting for the session only, not written to the plan, and returns to its default when the interface reloads.
 - **Archive** - a Show archived toggle for People, Projects and Assignments, with restore; archived entries are hidden while it is off and cannot take new Assignments until restored.
+- **Filter** - one field in the top bar that hides everything on the grid not matching a case-insensitive substring, with People, Projects and Assignments all looked in by default and each switchable behind a scope popover that states how many areas are being searched; a matching Project appears in the Stack with all of its Assignments, a matching Person with all of their work, and a matching Assignment brings its Person's row and its Project. Typing offers a keyboard-navigable list of the plan's own vocabulary - project names, people's names, Assignment tags, Person tags and notes - each labelled with its source and how much it would match, prefix matches first. Row-header figures keep describing the whole plan, the filter is session-only and respects Show archived, and an empty result names what was typed and offers to clear it.
 - **Persistence** - every change is written to the JSON file; starting the app loads it. The app keeps no backups of its own: one file, backed up by the owner however they choose.
 
 ## The interface
@@ -28,7 +29,6 @@ Brief given to that pass: **a calm planning instrument** - the grid is the hero,
 
 ## Later, deliberately not in v1
 
-- Filtering the grid by Person, Project, Person tag or Assignment tag.
 - Grouping, reporting and colour-coding by tag.
 - Public holidays and non-working days.
 - Rates and cost, and therefore budget views.

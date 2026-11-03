@@ -25,6 +25,22 @@
       <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows">+</button>
     </div>
     <button type="button" class="ghost" id="show-archived" aria-pressed="false">Show archived</button>
+    <div class="filter" id="filter">
+      <input type="text" class="filter__input" id="filter-input" placeholder="Filter"
+        aria-label="Filter the plan" autocomplete="off" role="combobox"
+        aria-expanded="false" aria-autocomplete="list" aria-controls="filter-suggest">
+      <button type="button" class="filter__clear" id="filter-clear"
+        aria-label="Clear the filter" hidden>&times;</button>
+      <button type="button" class="filter__scope" id="filter-scope"
+        aria-haspopup="true" aria-expanded="false" aria-label="Look in - all 3">Look in: all 3</button>
+      <div class="filter__scopes" id="filter-scopes" hidden>
+        <button type="button" class="filter__switch" role="switch" data-scope="people" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>People</button>
+        <button type="button" class="filter__switch" role="switch" data-scope="projects" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>Projects</button>
+        <button type="button" class="filter__switch" role="switch" data-scope="assignments" aria-checked="true"><span class="filter__tick" aria-hidden="true"></span>Assignments</button>
+      </div>
+      <div class="filter__suggest" id="filter-suggest" role="listbox"
+        aria-label="Filter suggestions" hidden></div>
+    </div>
   </header>
 
   <main class="board">
