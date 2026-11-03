@@ -14,9 +14,10 @@ import {
   withTag,
   withoutTag,
   archivedPersonRefusal,
-  archivedProjectRefusal
+  dropRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
+import { DROP_DAYS, dayRange, dropRange, moveRange, rowAtY } from "./lib/timeline.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -34,10 +35,6 @@ var MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
   "Sep", "Oct", "Nov", "Dec"];
 var DAY_MS = 86400000;
 var INKS = ["steel", "moss", "teal", "iris", "plum", "umber"];
-// A drop spans a working week at full allocation; the value is stated in the
-// pull request. Edges clamp to one whole day, so an assignment can never be
-// dragged shorter than a day.
-var DROP_DAYS = 5;
 
 var data = null;
 var rangeStart = null;
@@ -303,6 +300,10 @@ function drawRows() {
     body.appendChild(row);
   });
 
+  // Empty row space is where a new Assignment is drawn; blocks and their edges
+  // handle their own pointerdown first.
+  body.addEventListener("pointerdown", onBodyPointerDown);
+
   return { heads: heads, body: body };
 }
 
@@ -351,6 +352,13 @@ function blockFor(group, s) {
   // An archived Assignment is history: it is drawn, but its edges carry no
   // change - restoring it comes first.
   if (archived) return b;
+
+  // Dragging the body carries the whole Assignment along time and across
+  // rows. The edges stop the event before it reaches here, so their own
+  // drags are untouched.
+  b.addEventListener("pointerdown", function (e) {
+    beginBodyDrag(a, b, e);
+  });
 
   [{ edge: "start", cls: "blk__edge--start" }, { edge: "end", cls: "blk__edge--end" }]
     .forEach(function (handle) {
@@ -521,16 +529,49 @@ function drawStack() {
 
 /* --- interaction: drag a project from the Stack onto a row --------------- */
 
+// A ghost of the extent a drag would create or move: a block outline in the
+// row it would land on, with a small label carrying its dates. `--i`/`--n`
+// place it, `--h`/`--b` size it and `--block-ink` gives it the project colour.
+function makeExtentPreview() {
+  var node = el("div", "preview");
+  var label = el("span", "preview__label");
+  node.appendChild(label);
+  return { node: node, label: label };
+}
+
+function placePreview(preview, row, range, colour, height, offset) {
+  preview.node.style.setProperty("--i", range.start);
+  preview.node.style.setProperty("--n", range.end - range.start + 1);
+  preview.node.style.setProperty("--b", offset);
+  preview.node.style.setProperty("--h", height);
+  preview.node.style.setProperty("--block-ink", "var(--proj-" + colour + ")");
+  preview.label.textContent = fmtRange(addDays(rangeStart, range.start), addDays(rangeStart, range.end));
+  if (preview.node.parentNode !== row) row.appendChild(preview.node);
+}
+
 function beginStackDrag(e, project) {
   if (e.pointerType === "mouse" && e.button !== 0) return;
   var startX = e.clientX, startY = e.clientY;
   var dragging = false;
   var ghost = null;
   var dropRow = null;
+  var preview = null;
 
   function clearRow() {
     if (dropRow) dropRow.classList.remove("is-drop");
     dropRow = null;
+  }
+  function clearPreview() {
+    if (preview) { preview.node.remove(); preview = null; }
+  }
+
+  // The row under the pointer is highlighted as the person signal; the ghost
+  // only appears where a drop could actually create something.
+  function showPreview(row, dayIndex) {
+    var person = personById[row.personId];
+    if (project.archived || (person && person.archived)) { clearPreview(); return; }
+    if (!preview) preview = makeExtentPreview();
+    placePreview(preview, row.el, dropRange(dayIndex, DAYS, DROP_DAYS), project.colour, 1, 0);
   }
 
   function onMove(ev) {
@@ -550,8 +591,13 @@ function beginStackDrag(e, project) {
     ghost.style.left = ev.clientX + "px";
     ghost.style.top = ev.clientY + "px";
     var row = rowInfoAt(ev.clientX, ev.clientY);
-    if (row && row.el !== dropRow) { clearRow(); dropRow = row.el; dropRow.classList.add("is-drop"); }
-    else if (!row) clearRow();
+    if (row) {
+      if (row.el !== dropRow) { clearRow(); dropRow = row.el; dropRow.classList.add("is-drop"); }
+      showPreview(row, indexFromClientX(ev.clientX));
+    } else {
+      clearRow();
+      clearPreview();
+    }
   }
 
   function onUp(ev) {
@@ -561,19 +607,17 @@ function beginStackDrag(e, project) {
     if (ghost) ghost.remove();
     root.classList.remove("is-dragging");
     clearRow();
+    clearPreview();
     if (!dragging) return;
     lastDragAt = Date.now();
     var row = rowInfoAt(ev.clientX, ev.clientY);
     if (!row) return;
     // An archived Person or Project cannot take new work: the drop is refused
     // with a message rather than reviving it or doing nothing.
-    var person = personById[row.personId];
-    if (person && person.archived) {
-      showError(new Error(archivedPersonRefusal(person.name)));
-      return;
-    }
-    if (project.archived) {
-      showError(new Error(archivedProjectRefusal(project.name)));
+    var refusal = dropRefusal(personById[row.personId], project);
+    if (refusal) {
+      showError(new Error(refusal));
+      render();
       return;
     }
     createAssignment(project, row.personId, indexFromClientX(ev.clientX));
@@ -584,28 +628,38 @@ function beginStackDrag(e, project) {
   window.addEventListener("pointercancel", onUp);
 }
 
+// Which row the pointer is over: the Person is decided by the pointer's height
+// through the shared rule, then the pointer must be inside that row's grid or
+// its header. The row-header column belongs to its Person's row.
 function rowInfoAt(x, y) {
   var body = tl.querySelector(".tl__body");
   if (!body) return null;
-  var rows = body.querySelectorAll(".row");
-  for (var i = 0; i < rows.length; i++) {
-    var r = rows[i].getBoundingClientRect();
-    if (y >= r.top && y <= r.bottom && x >= r.left && x <= r.right) {
-      var id = rows[i].getAttribute("data-person");
-      if (id) return { el: rows[i], personId: id };
+  var rows = [];
+  var rowEls = body.querySelectorAll(".row");
+  for (var i = 0; i < rowEls.length; i++) {
+    var r = rowEls[i].getBoundingClientRect();
+    rows.push({
+      id: rowEls[i].getAttribute("data-person"), el: rowEls[i],
+      top: r.top, bottom: r.bottom, left: r.left, right: r.right
+    });
+  }
+  var id = rowAtY(rows, y);
+  if (!id) return null;
+  var hit = null;
+  rows.forEach(function (row) { if (row.id === id) hit = row; });
+  if (!hit) return null;
+
+  var inside = x >= hit.left && x <= hit.right;
+  if (!inside) {
+    var headEls = tl.querySelectorAll(".rowhead");
+    for (var j = 0; j < headEls.length; j++) {
+      if (headEls[j].getAttribute("data-person") !== id) continue;
+      var hr = headEls[j].getBoundingClientRect();
+      if (y >= hr.top && y <= hr.bottom && x >= hr.left && x <= hr.right) { inside = true; break; }
     }
   }
-  // Dropping on the row-header column also belongs to that person's row.
-  var heads = tl.querySelectorAll(".rowhead");
-  for (var j = 0; j < heads.length; j++) {
-    var hr = heads[j].getBoundingClientRect();
-    if (y >= hr.top && y <= hr.bottom && x >= hr.left && x <= hr.right) {
-      var hid = heads[j].getAttribute("data-person");
-      var match = tl.querySelector('.row[data-person="' + hid + '"]');
-      if (match) return { el: match, personId: hid };
-    }
-  }
-  return null;
+  if (!inside) return null;
+  return { el: hit.el, personId: id };
 }
 
 /* --- interaction: drag an assignment's edges ----------------------------- */
@@ -670,6 +724,158 @@ function beginEdgeDrag(a, edge, block, e) {
   window.addEventListener("pointercancel", onUp);
 }
 
+/* --- interaction: drag an assignment's body (move and reassign) ---------- */
+
+function beginBodyDrag(a, block, e) {
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  if (a.raw && a.raw.archived) return;
+  var startX = e.clientX, startY = e.clientY;
+  var fromIndex = indexFromClientX(startX);
+  var origStart = a.startIdx, origEnd = a.endIdx, origPersonId = a.person.id;
+  var started = false;
+  var preview = null;
+  var dropRow = null;
+  var range = { start: origStart, end: origEnd };
+
+  function clearRow() {
+    if (dropRow) dropRow.classList.remove("is-drop");
+    dropRow = null;
+  }
+  function endDrag() {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    document.removeEventListener("keydown", onKey);
+    root.classList.remove("is-dragging");
+    block.classList.remove("is-moving");
+    clearRow();
+    if (preview) { preview.node.remove(); preview = null; }
+  }
+
+  function onMove(ev) {
+    var dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if (!started) {
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      started = true;
+      root.classList.add("is-dragging");
+      block.classList.add("is-moving");
+      select(block);
+      preview = makeExtentPreview();
+    }
+    range = moveRange(origStart, origEnd, indexFromClientX(ev.clientX) - fromIndex, DAYS);
+    var row = rowInfoAt(ev.clientX, ev.clientY);
+    if (!row) { clearRow(); if (preview) preview.node.remove(); return; }
+    if (row.el !== dropRow) { clearRow(); dropRow = row.el; dropRow.classList.add("is-drop"); }
+    var person = personById[row.personId];
+    if (person && person.archived) { if (preview) preview.node.remove(); return; }
+    placePreview(preview, row.el, range, a.project.colour, r4(a.share / 100),
+      block.style.getPropertyValue("--b") || 0);
+  }
+
+  function onUp(ev) {
+    endDrag();
+    if (!started) return;
+    lastDragAt = Date.now();
+    var row = rowInfoAt(ev.clientX, ev.clientY);
+    if (!row) { render(); return; }
+    var person = personById[row.personId];
+    if (person && person.archived) {
+      showError(new Error(archivedPersonRefusal(person.name)));
+      render();
+      return;
+    }
+    var patch = {};
+    if (row.personId !== origPersonId) patch.personId = row.personId;
+    if (range.start !== origStart) patch.start = iso(addDays(rangeStart, range.start));
+    if (range.end !== origEnd) patch.end = iso(addDays(rangeStart, range.end));
+    if (Object.keys(patch).length) updateAssignment(a.id, patch);
+    else render();
+  }
+
+  function onKey(ev) {
+    if (ev.key !== "Escape") return;
+    endDrag();
+    render();
+  }
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+  document.addEventListener("keydown", onKey);
+}
+
+/* --- interaction: draw a range in a Person's row -------------------------- */
+
+function onBodyPointerDown(e) {
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  // A block starts its own drag; only empty row space draws a new range.
+  if (e.target.closest && e.target.closest(".blk")) return;
+  var row = e.target.closest ? e.target.closest(".row") : null;
+  if (!row) return;
+  var person = personById[row.getAttribute("data-person")];
+  if (!person) return;
+  if (person.archived) {
+    showError(new Error(archivedPersonRefusal(person.name)));
+    return;
+  }
+  beginRangeDraw(person, row, e);
+}
+
+function beginRangeDraw(person, row, e) {
+  var startX = e.clientX, startY = e.clientY;
+  var fromIndex = indexFromClientX(startX);
+  var started = false;
+  var range = { start: fromIndex, end: fromIndex };
+  var band = el("div", "range-band");
+  var label = el("span", "range-band__label");
+  band.appendChild(label);
+
+  function show(ev) {
+    range = dayRange(fromIndex, indexFromClientX(ev.clientX), DAYS);
+    band.style.setProperty("--i", range.start);
+    band.style.setProperty("--n", range.end - range.start + 1);
+    label.textContent = fmtRange(addDays(rangeStart, range.start), addDays(rangeStart, range.end));
+  }
+
+  function endDrag() {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    document.removeEventListener("keydown", onKey);
+    root.classList.remove("is-dragging");
+    band.remove();
+  }
+
+  function onMove(ev) {
+    if (!started) {
+      if (Math.abs(ev.clientX - startX) < 3 && Math.abs(ev.clientY - startY) < 3) return;
+      started = true;
+      root.classList.add("is-dragging");
+      row.appendChild(band);
+    }
+    show(ev);
+  }
+
+  function onUp(ev) {
+    endDrag();
+    if (!started) return;
+    lastDragAt = Date.now();
+    openNewAssignmentPanel(person, range, { left: ev.clientX, top: ev.clientY, right: ev.clientX, bottom: ev.clientY }, row);
+  }
+
+  function onCancel() { endDrag(); }
+
+  function onKey(ev) {
+    if (ev.key !== "Escape") return;
+    endDrag();
+  }
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
+  document.addEventListener("keydown", onKey);
+}
+
 /* --- API ----------------------------------------------------------------- */
 
 function api(method, url, body) {
@@ -700,8 +906,11 @@ function refresh() {
 }
 
 function createAssignment(project, personId, dayIdx) {
-  var start = addDays(rangeStart, clamp(dayIdx, 0, DAYS - 1));
-  var end = addDays(start, DROP_DAYS - 1);
+  // The extent the preview drew is the extent that lands, because both come
+  // from the same rule in ./lib/timeline.mjs.
+  var range = dropRange(dayIdx, DAYS, DROP_DAYS);
+  var start = addDays(rangeStart, range.start);
+  var end = addDays(rangeStart, range.end);
   var created = null;
   api("POST", "/api/assignments", {
     projectId: project.id,
@@ -800,7 +1009,9 @@ function closePanel(restoreFocus) {
   panelTrigger = null;
 }
 
-function openPanel(node, trigger) {
+// `rect` anchors the panel where a gesture happened (a released rubber band,
+// say) while `trigger` is what focus returns to when the panel closes.
+function openPanel(node, trigger, rect) {
   closePanel(false);
   panelTrigger = trigger || null;
   panelLayer.hidden = false;
@@ -809,7 +1020,7 @@ function openPanel(node, trigger) {
   var close = node.querySelector(".panel__close");
   if (close) close.focus();
 
-  var r = trigger.getBoundingClientRect();
+  var r = rect || (trigger ? trigger.getBoundingClientRect() : { right: 8, top: 8 });
   var pw = node.offsetWidth, ph = node.offsetHeight;
   var left = r.right + 8;
   var top = r.top;
@@ -908,9 +1119,9 @@ function submitPanel(node, error, request, done) {
   error.clear();
   var control = node.querySelector("[data-save]");
   if (control) control.disabled = true;
-  return request().then(refresh).then(function () {
+  return request().then(refresh).then(function (result) {
     closePanel(true);
-    if (done) done();
+    if (done) done(result);
   }).catch(function (err) {
     if (control) control.disabled = false;
     error.set(err && err.message ? err.message : "Could not save the change.");
@@ -1042,6 +1253,9 @@ function tagEditor(initial, suggest) {
   return {
     node: wrap,
     tags: function () { return tags.slice(); },
+    // Re-read the suggestions, for when the Project a tag list is drawn from
+    // changes underneath it.
+    refresh: render,
     focus: function () { input.focus(); }
   };
 }
@@ -1229,6 +1443,86 @@ function openAssignmentPanel(a, trigger) {
   form.addEventListener("submit", function (e) { e.preventDefault(); save.click(); });
 
   openPanel(node, trigger);
+}
+
+// The panel a drawn range opens: the read-back of what was drawn, then the
+// choices that make it an Assignment. The dates and the 100% share are read
+// only - the range is set by drawing, never typed - and the Project is
+// required, because an Assignment cannot exist without one.
+function openNewAssignmentPanel(person, range, rect, trigger) {
+  var start = addDays(rangeStart, range.start);
+  var end = addDays(rangeStart, range.end);
+  var node = panelShell("New assignment", person.name);
+
+  var fields = el("dl", "fields");
+  fields.appendChild(field("Dates", fmtRange(start, end)));
+  var share = el("span");
+  share.textContent = "100%";
+  var hint = el("span", "soft");
+  hint.textContent = "  (the whole range)";
+  share.appendChild(hint);
+  fields.appendChild(field("Allocation", share));
+  node.appendChild(fields);
+
+  var form = el("form", "form");
+  var projectSelect = document.createElement("select");
+  projectSelect.setAttribute("aria-label", "Project");
+  var choose = document.createElement("option");
+  choose.value = "";
+  choose.textContent = "Choose a project";
+  projectSelect.appendChild(choose);
+  // Only the live projects: creating one stays a Stack action.
+  data.projects.filter(function (p) { return !p.archived; }).forEach(function (project) {
+    var option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.name;
+    projectSelect.appendChild(option);
+  });
+  form.appendChild(formRow("Project", projectSelect));
+
+  // Assignment tags are offered from the chosen Project's other Assignments,
+  // so the list follows the Project choice.
+  var tags = tagEditor([], function () {
+    return suggestAssignmentTags(data.assignments, projectSelect.value, null);
+  });
+  form.appendChild(formRow("Tags", tags.node));
+  var noteInput = input("");
+  form.appendChild(formRow("Note", noteInput));
+  node.appendChild(form);
+  var error = errorLine(node);
+
+  projectSelect.addEventListener("change", function () { tags.refresh(); });
+
+  var foot = el("div", "panel__foot");
+  foot.appendChild(button("btn-ghost", "Cancel", function () { closePanel(true); }));
+  foot.appendChild(el("span", "panel__spacer"));
+  var create = saveButton("Create", function () {
+    if (!projectSelect.value) {
+      error.set("Choose a project for this assignment.");
+      projectSelect.focus();
+      return;
+    }
+    submitPanel(node, error, function () {
+      return api("POST", "/api/assignments", {
+        projectId: projectSelect.value,
+        personId: person.id,
+        start: iso(start),
+        end: iso(end),
+        share: 100,
+        tags: tags.tags(),
+        note: noteInput.value
+      });
+    }, function (created) {
+      if (created && created.id) focusAssignment(created.id);
+    });
+  });
+  foot.appendChild(create);
+  node.appendChild(foot);
+
+  form.addEventListener("submit", function (e) { e.preventDefault(); create.click(); });
+
+  openPanel(node, trigger, rect);
+  projectSelect.focus();
 }
 
 /* --- zoom ---------------------------------------------------------------- */

@@ -586,6 +586,10 @@ h1, h2, h3, p { margin: 0; }
   outline-offset: 2px;
 }
 
+/* The Assignment being moved keeps its place but reads as lifted while its
+   ghost shows where it would land. */
+.blk.is-moving { opacity: 0.4; }
+
 /* An archived Assignment is drawn as history: muted, outlined, marked, and
    with no edges to change it until it is restored. */
 .blk.is-archived {
@@ -636,6 +640,48 @@ h1, h2, h3, p { margin: 0; }
 
 .blk.is-tight .blk__tag,
 [data-zoom="month"] .blk__tag { display: none; }
+
+/* Drag previews: the extent a Stack drop or a body move would create, and the
+   range being drawn in a row. They sit above the blocks, take no pointer, and
+   carry their own dates so the outcome is legible before the pointer is
+   released. */
+.preview,
+.range-band {
+  position: absolute;
+  left: calc(var(--i) * var(--day-w));
+  width: calc(var(--n) * var(--day-w));
+  border: 1px dashed var(--ink);
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.preview {
+  bottom: calc(var(--base) + var(--b, 0) * var(--fte-h));
+  height: calc(var(--h, 1) * var(--fte-h));
+  background: color-mix(in srgb, var(--block-ink) 26%, transparent);
+}
+
+.range-band {
+  top: var(--base);
+  bottom: var(--base);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.preview__label,
+.range-band__label {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.125rem);
+  padding: 0.0625rem 0.25rem;
+  background: var(--ink);
+  color: var(--canvas);
+  border-radius: var(--radius);
+  font-size: var(--fs-axis);
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+}
 
 /* Marker -------------------------------------------------------------------- */
 

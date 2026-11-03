@@ -49,9 +49,15 @@ no runtime dependency.
 The three zoom states (day, week, month) change only the drawn width of a day.
 
 What the screen can change: drag a Project from the Stack onto a Person's row to
-create an Assignment there; drag an Assignment's left or right edge horizontally
-to change its start or end date, snapped to whole days; drag an edge vertically
-to change its Allocation in 10% steps. Both drags show the value being set.
+create an Assignment there - a ghost block shows the extent it would create and
+the dates it would take, and the row under the pointer stays highlighted; or
+draw across a Person's empty row space to select a range, which opens a New
+assignment panel with the dates read back, a project to choose, tags and a note.
+Drag an Assignment's body to move it in time and onto another Person, keeping
+its Allocation, tags and note; drag its left or right edge horizontally to
+change its start or end date, snapped to whole days; drag an edge vertically to
+change its Allocation in 10% steps. Every drag shows the value being set, and
+the edge drags are the only way an Allocation is set - it is never typed.
 Over-allocation is allowed and drawn: the part of a block above the Person's
 Availability line is hatched in the signal colour, and the row header's
 `assigned/availability` figure turns to that colour.
