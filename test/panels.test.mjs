@@ -11,6 +11,8 @@ import {
   archivedPersonRefusal,
   archivedProjectRefusal,
   dropRefusal,
+  assignmentCount,
+  deleteConfirmation,
   SHARE_VALUES,
   clampShare,
   shareValues,
@@ -87,6 +89,33 @@ test("an archived target is refused and a live one is not", () => {
   );
   assert.equal(dropRefusal({ name: "Anna Meier" }, { name: "Atlas" }), null);
   assert.equal(dropRefusal(null, null), null);
+});
+
+test("the deletion confirmation names the number first and says it cannot be undone", () => {
+  assert.equal(
+    deleteConfirmation("project", "Borealis", 6),
+    "This deletes Borealis and the 6 assignments on it. It cannot be undone."
+  );
+  assert.equal(
+    deleteConfirmation("person", "Ben Falk", 1),
+    "This deletes Ben Falk and the 1 assignment on them. It cannot be undone."
+  );
+  assert.equal(
+    deleteConfirmation("assignment", null, 1),
+    "This deletes this assignment. It cannot be undone."
+  );
+});
+
+test("a deletion counts every assignment, archived ones included", () => {
+  const assignments = [
+    { id: "a", personId: "p1", projectId: "x", archived: false },
+    { id: "b", personId: "p1", projectId: "x", archived: true },
+    { id: "c", personId: "p2", projectId: "x", archived: false }
+  ];
+  assert.equal(assignmentCount(assignments, "personId", "p1"), 2);
+  assert.equal(assignmentCount(assignments, "personId", "p2"), 1);
+  assert.equal(assignmentCount(assignments, "personId", "absent"), 0);
+  assert.equal(assignmentCount(assignments, "projectId", "x"), 3);
 });
 
 test("the Share menu offers the ten values from 10% to 100%", () => {

@@ -91,6 +91,15 @@ lists, marked as archived, each with a Restore button. An archived Person cannot
 take a new Assignment: a drop onto one is refused with a message until the
 Person is restored.
 
+Deleting is a separate, permanent act. A Delete button sits beside Archive in
+the person panel, the project panel and the assignment popover, and beside
+Restore on an archived entry; it always opens a confirmation that names what
+will go and says it cannot be undone. Deleting a Person or a Project takes
+every Assignment that referenced it, archived ones included, and the
+confirmation names the number first. A deletion needs no prior archive and an
+archived record can be deleted too; there is no trash and no undo, so recovery
+is your own backup of `data/pact.json`.
+
 ## The API
 
 The server exposes a small JSON API over the plan:
@@ -107,6 +116,11 @@ The server exposes a small JSON API over the plan:
   referenced it stay in the file, marked `archived`, and disappear from the
   plan the interface draws; nothing is destroyed. The response is
   `{"archived": "<id>"}`.
+- `DELETE /api/people/:id/destroy`, `DELETE /api/projects/:id/destroy`,
+  `DELETE /api/assignments/:id/destroy` - delete permanently. A Person or a
+  Project takes its Assignments with it, archived ones included; an Assignment
+  removes only itself. The response is `{"deleted": "<id>", "assignments": <n>}`,
+  where `n` is the number of Assignments removed.
 
 Invalid input answers `400` with `{"error": "..."}`; an unknown record answers
 `404`.
@@ -118,7 +132,7 @@ node --test
 ```
 
 Node's built-in test runner, no dependency. The tests under `test/` cover the
-API's create, update, archive and restore paths, the atomic write (including
+API's create, update, archive, restore and delete paths, the atomic write (including
 that a failed write leaves the previous file intact), the refusal of invalid
 input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
 Availability and Allocation stepping and refusal wording. The Timeline geometry

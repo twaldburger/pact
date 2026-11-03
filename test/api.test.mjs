@@ -182,6 +182,93 @@ test("an archived assignment appears with the archive view and can be restored",
   assert.ok(store.get().assignments.some((a) => a.id === created.body.id));
 });
 
+test("destroying a person removes them and every assignment, archived ones included", async () => {
+  const { base, store } = await server();
+  const person = await api(base, "POST", "/api/people", { name: "Dana Vo", availability: 90 });
+  const one = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: person.body.id, start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+  const two = await api(base, "POST", "/api/assignments", {
+    projectId: "borealis", personId: person.body.id, start: "2026-06-01", end: "2026-06-05", share: 30
+  });
+  await api(base, "DELETE", "/api/assignments/" + two.body.id);
+
+  const destroyed = await api(base, "DELETE", "/api/people/" + person.body.id + "/destroy");
+  assert.equal(destroyed.status, 200);
+  assert.deepEqual(destroyed.body, { deleted: person.body.id, assignments: 2 });
+
+  // The plan the API returns no longer carries the Person or either Assignment,
+  // and the live and archived views agree because the records are gone.
+  const plan = (await api(base, "GET", "/api/plan?archived=1")).body;
+  assert.equal(plan.people.some((p) => p.id === person.body.id), false);
+  assert.equal(plan.assignments.some((a) => a.id === one.body.id), false);
+  assert.equal(plan.assignments.some((a) => a.id === two.body.id), false);
+  const kept = store.get();
+  assert.equal(kept.people.some((p) => p.id === person.body.id), false);
+  assert.equal(kept.assignments.some((a) => a.personId === person.body.id), false);
+});
+
+test("destroying a project removes its assignments and leaves other work alone", async () => {
+  const { base, store } = await server();
+  const project = await api(base, "POST", "/api/projects", { name: "Summit", colour: "plum" });
+  const mine = await api(base, "POST", "/api/assignments", {
+    projectId: project.body.id, personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+  const other = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+
+  const destroyed = await api(base, "DELETE", "/api/projects/" + project.body.id + "/destroy");
+  assert.equal(destroyed.status, 200);
+  assert.deepEqual(destroyed.body, { deleted: project.body.id, assignments: 1 });
+
+  const kept = store.get();
+  assert.equal(kept.projects.some((p) => p.id === project.body.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === mine.body.id), false);
+  // A different Project's Assignment is untouched, and so is its Person.
+  assert.equal(kept.assignments.some((a) => a.id === other.body.id), true);
+  assert.equal(kept.people.some((p) => p.id === "anna"), true);
+});
+
+test("destroying an assignment removes only that one", async () => {
+  const { base, store } = await server();
+  const one = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+  const two = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: "2026-05-11", end: "2026-05-15", share: 60
+  });
+
+  const destroyed = await api(base, "DELETE", "/api/assignments/" + one.body.id + "/destroy");
+  assert.equal(destroyed.status, 200);
+  assert.deepEqual(destroyed.body, { deleted: one.body.id, assignments: 1 });
+
+  const kept = store.get();
+  assert.equal(kept.assignments.some((a) => a.id === one.body.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === two.body.id), true);
+  assert.equal(kept.people.some((p) => p.id === "anna"), true);
+  assert.equal(kept.projects.some((p) => p.id === "atlas"), true);
+});
+
+test("an archived person and project can be destroyed without being restored first", async () => {
+  const { base } = await server();
+  const person = await api(base, "POST", "/api/people", { name: "Erin Sol", availability: 70 });
+  const project = await api(base, "POST", "/api/projects", { name: "Summit", colour: "plum" });
+  await api(base, "DELETE", "/api/people/" + person.body.id);
+  await api(base, "DELETE", "/api/projects/" + project.body.id);
+
+  const gonePerson = await api(base, "DELETE", "/api/people/" + person.body.id + "/destroy");
+  assert.equal(gonePerson.status, 200);
+  assert.equal(gonePerson.body.deleted, person.body.id);
+  const goneProject = await api(base, "DELETE", "/api/projects/" + project.body.id + "/destroy");
+  assert.equal(goneProject.status, 200);
+  assert.equal(goneProject.body.deleted, project.body.id);
+
+  const withArchived = (await api(base, "GET", "/api/plan?archived=1")).body;
+  assert.equal(withArchived.people.some((p) => p.id === person.body.id), false);
+  assert.equal(withArchived.projects.some((p) => p.id === project.body.id), false);
+});
+
 test("invalid input is refused with a clear error and nothing is stored", async () => {
   const { base, store } = await server();
   const before = JSON.stringify(store.get());

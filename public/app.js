@@ -15,6 +15,8 @@ import {
   withoutTag,
   archivedPersonRefusal,
   dropRefusal,
+  assignmentCount,
+  deleteConfirmation,
   clampShare,
   shareValues,
   shareFromDrag
@@ -347,12 +349,26 @@ function drawRows() {
       var badge = el("span", "rowhead__badge");
       badge.textContent = "Archived";
       wrap.appendChild(badge);
+      var actions = el("div", "rowhead__actions");
       var restore = el("button", "rowhead__restore");
       restore.type = "button";
       restore.textContent = "Restore";
       restore.setAttribute("aria-label", "Restore " + person.name);
       restore.addEventListener("click", function () { restorePerson(person); });
-      wrap.appendChild(restore);
+      actions.appendChild(restore);
+      var remove = el("button", "rowhead__delete");
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.setAttribute("aria-label", "Delete " + person.name);
+      remove.addEventListener("click", function () {
+        countAssignments("personId", person.id).then(function (count) {
+          openDeletePanel(deleteConfirmation("person", person.name, count), remove, function () {
+            destroyPerson(person.id);
+          });
+        }).catch(showError);
+      });
+      actions.appendChild(remove);
+      wrap.appendChild(actions);
     }
 
     heads.appendChild(wrap);
@@ -691,6 +707,18 @@ function drawStack() {
       restore.addEventListener("click", function () { restoreProject(project); });
       actions.appendChild(badge);
       actions.appendChild(restore);
+      var remove = el("button", "stack__delete");
+      remove.type = "button";
+      remove.textContent = "Delete";
+      remove.setAttribute("aria-label", "Delete " + project.name);
+      remove.addEventListener("click", function () {
+        countAssignments("projectId", project.id).then(function (count) {
+          openDeletePanel(deleteConfirmation("project", project.name, count), remove, function () {
+            destroyProject(project.id);
+          });
+        }).catch(showError);
+      });
+      actions.appendChild(remove);
       row.appendChild(actions);
     }
 
@@ -1130,6 +1158,21 @@ function archivePerson(id) {
   api("DELETE", "/api/people/" + encodeURIComponent(id)).then(refresh).catch(showError);
 }
 
+function destroyPerson(id) {
+  api("DELETE", "/api/people/" + encodeURIComponent(id) + "/destroy").then(refresh).catch(showError);
+}
+
+function destroyProject(id) {
+  api("DELETE", "/api/projects/" + encodeURIComponent(id) + "/destroy").then(refresh).catch(showError);
+}
+
+function destroyAssignment(id) {
+  api("DELETE", "/api/assignments/" + encodeURIComponent(id) + "/destroy").then(refresh).catch(function (err) {
+    showError(err);
+    render();
+  });
+}
+
 function restorePerson(person) {
   api("PATCH", "/api/people/" + encodeURIComponent(person.id), { archived: false }).then(refresh).catch(showError);
 }
@@ -1322,6 +1365,54 @@ function confirmArchive(node, question, reopen, onConfirm) {
   yes.focus();
 }
 
+// The confirmation every deletion goes through, in the panel the Delete was
+// pressed in. It names what will go and says it cannot be undone; Keep backs
+// out, and only the signal-coloured Delete performs the destroy.
+function confirmDelete(node, message, reopen, onConfirm) {
+  var foot = node.querySelector(".panel__foot");
+  foot.innerHTML = "";
+  // The message is a sentence or two and needs the panel's width, so the
+  // foot wraps: the words on their own line, the buttons beneath them.
+  foot.classList.add("panel__foot--confirm");
+  var ask = el("span", "panel__ask");
+  ask.textContent = message;
+  var keep = button("btn-ghost", "Keep", reopen);
+  var yes = button("btn-danger", "Delete", onConfirm);
+  foot.appendChild(ask);
+  foot.appendChild(keep);
+  foot.appendChild(yes);
+  yes.focus();
+}
+
+// A deletion confirmation for the Delete beside Restore on an archived row or
+// Stack entry, which is not itself inside a panel: the same words in their own
+// shell, anchored to the control that opened it.
+function openDeletePanel(message, trigger, onConfirm) {
+  var node = panelShell("Delete", null);
+  var ask = el("p", "panel__sub");
+  ask.textContent = message;
+  node.appendChild(ask);
+  var foot = el("div", "panel__foot");
+  foot.appendChild(button("btn-ghost", "Keep", function () { closePanel(true); }));
+  foot.appendChild(el("span", "panel__spacer"));
+  foot.appendChild(button("btn-danger", "Delete", function () {
+    closePanel(false);
+    onConfirm();
+  }));
+  node.appendChild(foot);
+  openPanel(node, trigger);
+  node.querySelector(".btn-danger").focus();
+}
+
+// A Person or a Project takes its Assignments with it, archived ones included,
+// so the number the confirmation names is read from the whole plan rather than
+// from the view the Show archived toggle leaves on screen.
+function countAssignments(field, id) {
+  return api("GET", planQuery(true)).then(function (plan) {
+    return assignmentCount(plan.assignments, field, id);
+  });
+}
+
 // A Person's Availability in whole 10% steps, with buttons and arrow keys.
 function availabilityControl(value) {
   var wrap = el("span", "avail");
@@ -1490,6 +1581,14 @@ function openPersonPanel(person, trigger) {
         function () { closePanel(false); archivePerson(person.id); });
     });
     foot.appendChild(archive);
+    var remove = button("btn-danger", "Delete person", function () {
+      countAssignments("personId", person.id).then(function (count) {
+        confirmDelete(node, deleteConfirmation("person", person.name, count),
+          function () { openPersonPanel(person, trigger); },
+          function () { closePanel(false); destroyPerson(person.id); });
+      }).catch(showError);
+    });
+    foot.appendChild(remove);
   }
   var spacer = el("span", "panel__spacer");
   foot.appendChild(spacer);
@@ -1559,6 +1658,14 @@ function openProjectPanel(project, trigger) {
         function () { closePanel(false); archiveProject(project.id); });
     });
     foot.appendChild(archive);
+    var remove = button("btn-danger", "Delete project", function () {
+      countAssignments("projectId", project.id).then(function (count) {
+        confirmDelete(node, deleteConfirmation("project", project.name, count),
+          function () { openProjectPanel(project, trigger); },
+          function () { closePanel(false); destroyProject(project.id); });
+      }).catch(showError);
+    });
+    foot.appendChild(remove);
   }
   foot.appendChild(el("span", "panel__spacer"));
   var save = saveButton(editing ? "Save" : "Add project", function () {
@@ -1618,6 +1725,13 @@ function openAssignmentPanel(a, trigger) {
     });
     restore.setAttribute("aria-label", "Restore " + a.project.name + " on " + a.person.name);
     foot.appendChild(restore);
+    var restoreRemove = button("btn-danger", "Delete", function () {
+      confirmDelete(node, deleteConfirmation("assignment"),
+        function () { openAssignmentPanel(a, trigger); },
+        function () { closePanel(false); destroyAssignment(a.id); });
+    });
+    restoreRemove.setAttribute("aria-label", "Delete " + a.project.name + " on " + a.person.name);
+    foot.appendChild(restoreRemove);
   } else {
     var archive = button("btn-danger", "Archive assignment", function () {
       confirmArchive(node, "Archive this assignment?",
@@ -1625,6 +1739,11 @@ function openAssignmentPanel(a, trigger) {
         function () { closePanel(false); archiveAssignment(a.id); });
     });
     foot.appendChild(archive);
+    foot.appendChild(button("btn-danger", "Delete assignment", function () {
+      confirmDelete(node, deleteConfirmation("assignment"),
+        function () { openAssignmentPanel(a, trigger); },
+        function () { closePanel(false); destroyAssignment(a.id); });
+    }));
   }
   foot.appendChild(el("span", "panel__spacer"));
   var save = saveButton("Save", function () {

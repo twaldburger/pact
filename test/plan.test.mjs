@@ -198,6 +198,65 @@ test("archiving a project keeps its assignments", () => {
   assert.equal(after.assignments.some((a) => a.id === assignment.id), true);
 });
 
+test("destroying a person removes the record and its assignments from memory and the file", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const person = store.createPerson({ name: "Nina Roth", availability: 100 });
+  const live = store.createAssignment({
+    projectId: "atlas", personId: person.id, start: "2026-05-04", end: "2026-05-08", share: 50
+  });
+  const archived = store.createAssignment({
+    projectId: "borealis", personId: person.id, start: "2026-06-01", end: "2026-06-05", share: 30
+  });
+  store.archiveAssignment(archived.id);
+
+  // The count names both Assignments, the archived one included.
+  assert.deepEqual(store.destroyPerson(person.id), { deleted: person.id, assignments: 2 });
+
+  const kept = store.get();
+  assert.equal(kept.people.some((p) => p.id === person.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === live.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === archived.id), false);
+
+  const filed = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(filed.people.some((p) => p.id === person.id), false);
+  assert.equal(filed.assignments.some((a) => a.personId === person.id), false);
+});
+
+test("destroying a project removes its assignments and leaves others", () => {
+  const store = createStore(tempFile());
+  const project = store.createProject({ name: "Summit", colour: "plum", notes: "" });
+  const mine = store.createAssignment({
+    projectId: project.id, personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+  const other = store.createAssignment({
+    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+
+  assert.deepEqual(store.destroyProject(project.id), { deleted: project.id, assignments: 1 });
+  const kept = store.get();
+  assert.equal(kept.projects.some((p) => p.id === project.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === mine.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === other.id), true);
+});
+
+test("destroying an assignment removes only itself", () => {
+  const store = createStore(tempFile());
+  const one = store.createAssignment({
+    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+  });
+  const two = store.createAssignment({
+    projectId: "atlas", personId: "anna", start: "2026-05-11", end: "2026-05-15", share: 60
+  });
+
+  assert.deepEqual(store.destroyAssignment(one.id), { deleted: one.id, assignments: 1 });
+  const kept = store.get();
+  assert.equal(kept.assignments.some((a) => a.id === one.id), false);
+  assert.equal(kept.assignments.some((a) => a.id === two.id), true);
+  assert.equal(kept.people.some((p) => p.id === "anna"), true);
+  assert.equal(kept.projects.some((p) => p.id === "atlas"), true);
+});
+
 test("invalid input is refused and leaves the plan unchanged", () => {
   const file = tempFile();
   const store = createStore(file);
@@ -213,6 +272,9 @@ test("invalid input is refused and leaves the plan unchanged", () => {
   assert.throws(() => store.createPerson({ name: "Typo", availability: 100, nickname: "T" }), ValidationError);
   assert.throws(() => store.updatePerson("missing", { name: "X" }), NotFoundError);
   assert.throws(() => store.archiveAssignment("missing"), NotFoundError);
+  assert.throws(() => store.destroyPerson("missing"), NotFoundError);
+  assert.throws(() => store.destroyProject("missing"), NotFoundError);
+  assert.throws(() => store.destroyAssignment("missing"), NotFoundError);
 
   assert.equal(fs.readFileSync(file, "utf8"), before);
 });
