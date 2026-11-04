@@ -539,6 +539,82 @@ h1, h2, h3, p { margin: 0; }
   border-color: var(--ink);
 }
 
+/* The plan period: two explicit dates set together, under the menu's items. */
+.options__range {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  border-top: 1px solid var(--rule);
+}
+
+.options__range-label {
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  color: var(--ink-soft);
+}
+
+.options__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.options__date {
+  appearance: none;
+  min-width: 9.5rem;
+  height: calc(var(--control-h) - 8px);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.options__date:focus-visible { border-color: var(--rule-strong); }
+
+.options__error {
+  margin: 0;
+  font-size: var(--fs-data);
+  color: var(--signal);
+}
+
+.options__apply {
+  appearance: none;
+  align-self: flex-start;
+  height: var(--control-h);
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  cursor: pointer;
+}
+
+.options__apply:hover:not(:disabled) { border-color: var(--rule-strong); }
+.options__apply:disabled { opacity: var(--op-disabled); cursor: default; }
+
+/* The Today control when the set period excludes today: still labelled and
+   still reachable, with its action withdrawn. */
+.ghost.is-disabled {
+  opacity: var(--op-disabled);
+  cursor: default;
+}
+
+.ghost.is-disabled:hover {
+  background: transparent;
+  color: var(--ink-soft);
+}
+
 /* The empty result: the grid steps aside and names the filter that emptied it. */
 .tl.is-empty {
   width: 100%;

@@ -56,13 +56,17 @@ the wordmark and range on the left, and on the right the Filter, Zoom, Row
 height and Today controls in that order, then the Options menu that holds the
 less frequent controls.
 
-The plan's date range extends itself. Every write recomputes it in the plan
-module: it holds the earliest Assignment start and the latest Assignment end
-with a clear margin, always holds today with room on both sides, and keeps
-aligned to whole months. It only ever grows, so it never slips under the
-owner's scroll position; when the start extends, the interface holds the
-visible window where it was while the axis gains days to its left. The new
-range is stored in the plan file like any other change.
+The plan's date range is an explicit period the owner sets, not one the app
+infers. The Options menu in the top bar carries the plan period control: a
+start date and an end date, each a specific `YYYY-MM-DD` day, applied together
+and stored in the plan file like any other change. The range label beside the
+wordmark reads that period back. Nothing grows or recomputes the extent on its
+own, so an Assignment dragged or created outside the period is refused with a
+message naming the allowed period, with both ends inclusive. When the period
+excludes today the Today control is disabled - it stays labelled and reachable
+but does nothing - until the period includes today again. A plan file written
+before the period was made explicit keeps its stored range and loads as it is;
+any Assignment already outside it is drawn only as far as the axis reaches.
 
 What the screen can change: drag a Project from the Stack onto a Person's row to
 create an Assignment there - a ghost block shows the extent it would create and
@@ -111,6 +115,11 @@ The server exposes a small JSON API over the plan:
 - `GET /api/plan` - the live plan, with the current date as `today`.
   `GET /api/plan?archived=1` also includes archived People and Projects, so the
   archive view can draw and restore them.
+- `PATCH /api/plan` - set the plan's period. The body is
+  `{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}`; both ends must be valid
+  dates with the start not after the end, and the response is the stored
+  `{"start": "...", "end": "..."}`. This is the one write that changes the
+  range.
 - `POST /api/people`, `POST /api/projects`, `POST /api/assignments` - create.
 - `PATCH /api/people/:id`, `PATCH /api/projects/:id`,
   `PATCH /api/assignments/:id` - update. A Person or Project patch may set
@@ -139,12 +148,13 @@ Node's built-in test runner, no dependency. The tests under `test/` cover the
 API's create, update, archive, restore and delete paths, the atomic write (including
 that a failed write leaves the previous file intact), the refusal of invalid
 input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
-Availability and Allocation stepping and refusal wording. The Timeline geometry
+Availability and Allocation stepping, the period control's validation and
+refusal wording. Setting the plan's period, and the refusal of work outside
+it, are pinned against the store and the API. The Timeline geometry
 in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
 steps - is covered without a browser, as is the block-label rule in
 `public/lib/label.mjs` - how much of a title a block has room to draw - and its
-range label. The grow-only range rule in `lib/plan.mjs` is a pure function the
-tests call directly.
+range label.
 
 ## The font
 

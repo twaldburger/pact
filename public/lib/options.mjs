@@ -11,3 +11,17 @@ export function optionsItems(showArchived) {
     { key: "archived", label: "Show archived", checked: !!showArchived }
   ];
 }
+
+/*
+ * The plan period control that sits with the menu's items: one explicit start
+ * date and one explicit end date, set together, and the read-back of what is
+ * stored. The two dates are specific days, not months or presets.
+ */
+export function rangeControl(range) {
+  return {
+    key: "range",
+    label: "Plan period",
+    start: range ? range.start : "",
+    end: range ? range.end : ""
+  };
+}

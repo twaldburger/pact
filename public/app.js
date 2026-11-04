@@ -15,6 +15,7 @@ import {
   withoutTag,
   archivedPersonRefusal,
   dropRefusal,
+  rangeSettingRefusal,
   assignmentCount,
   deleteConfirmation,
   clampShare,
@@ -24,7 +25,7 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems } from "./lib/options.mjs";
+import { optionsItems, rangeControl } from "./lib/options.mjs";
 import {
   defaultScopes,
   filterPlan,
@@ -150,7 +151,16 @@ function indexData() {
       endIdx: dayDiff(rangeStart, e),
       share: a.share
     };
-  }).filter(function (a) { return a.project && a.person; });
+  }).filter(function (a) { return a.project && a.person; })
+    // Work that falls outside the set period is not an error on load: it is
+    // drawn only as far as the axis reaches, and work wholly outside it is not
+    // drawn at all. Its real dates stay on the record.
+    .filter(function (a) { return a.startIdx <= DAYS - 1 && a.endIdx >= 0; })
+    .map(function (a) {
+      a.startIdx = clamp(a.startIdx, 0, DAYS - 1);
+      a.endIdx = clamp(a.endIdx, 0, DAYS - 1);
+      return a;
+    });
 
   // What the Filter leaves to draw. The mapped assignments keep their project
   // and person objects, so the filtered view is a subset of `assignments`
@@ -1856,10 +1866,28 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
 
 // Bring today into the middle of the day area, leaving the sticky row-header
 // column clear, and put the Marker back on today so the row headers read as of
-// now again. Both effects happen in one press; today is always inside the
-// range, so the control always has work.
+// now again. Both effects happen in one press. When the set period excludes
+// today there is nowhere honest to scroll, so the control is inert until the
+// period includes today again.
+function todayInRange() {
+  if (!data || !rangeStart || !rangeEnd) return false;
+  var today = data.today ? udate(data.today) : rangeStart;
+  return today >= rangeStart && today <= rangeEnd;
+}
+
+function updateTodayControl() {
+  var todayBtn = document.getElementById("today");
+  if (!todayBtn) return;
+  var available = todayInRange();
+  // Kept focusable and labelled; only its action is withdrawn, so a reader
+  // still reaches it and hears that it is unavailable.
+  todayBtn.setAttribute("aria-disabled", available ? "false" : "true");
+  todayBtn.classList.toggle("is-disabled", !available);
+  todayBtn.title = available ? "" : "Today is outside the plan's period";
+}
+
 function goToToday() {
-  if (!data) return;
+  if (!data || !todayInRange()) return;
   var today = data.today ? udate(data.today) : rangeStart;
   var index = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
   setMarker(index);
@@ -1942,6 +1970,7 @@ function render() {
   stackList.innerHTML = "";
   indexData();
   contextEl.textContent = rangeLabel(data.range.start, data.range.end);
+  updateTodayControl();
 
   if (filterQuery.trim() !== "" && filterIsEmpty({
     people: gridPeople,
@@ -2004,8 +2033,8 @@ function bindChrome() {
     openProjectPanel(null, e.currentTarget);
   });
   // The Today control returns the owner to now: it brings today back into the
-  // middle of the view and puts the Marker back on today. Today is always
-  // inside the range, so the control always has work.
+  // middle of the view and puts the Marker back on today. When the set period
+  // excludes today it is inert, and updateTodayControl announces that.
   var todayBtn = document.getElementById("today");
   if (todayBtn) {
     todayBtn.addEventListener("click", function () { goToToday(); });
@@ -2228,6 +2257,9 @@ var optionsEl = null;
 var optionsBtn = null;
 var optionsMenu = null;
 var optionButtons = {};
+var rangeStartInput = null;
+var rangeEndInput = null;
+var rangeError = null;
 
 // Every popover in the bar is fixed to the viewport and placed against its
 // trigger. The bar can scroll on its own when the window is narrow, so this
@@ -2291,6 +2323,93 @@ function buildOptionsMenu() {
     optionButtons[item.key] = btn;
     optionsMenu.appendChild(btn);
   });
+  optionsMenu.appendChild(buildRangeControl());
+}
+
+/* The plan period control: one explicit start date and one explicit end date,
+ * set together. The fields follow the menu's own item language, and a refused
+ * pair is named in the control rather than closing it. */
+function buildRangeControl() {
+  var item = rangeControl(null);
+  var wrap = el("div", "options__range");
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", item.label);
+  var heading = el("span", "options__range-label");
+  heading.textContent = item.label;
+  wrap.appendChild(heading);
+
+  function field(label, id) {
+    var row = el("label", "options__field");
+    row.setAttribute("for", id);
+    var span = el("span", "options__field-label");
+    span.textContent = label;
+    var input = document.createElement("input");
+    input.type = "date";
+    input.className = "options__date";
+    input.id = id;
+    input.setAttribute("placeholder", "YYYY-MM-DD");
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); applyRange(); }
+    });
+    row.appendChild(span);
+    row.appendChild(input);
+    return row;
+  }
+
+  var startRow = field("Start", "range-start");
+  var endRow = field("End", "range-end");
+  rangeStartInput = startRow.querySelector("input");
+  rangeEndInput = endRow.querySelector("input");
+  wrap.appendChild(startRow);
+  wrap.appendChild(endRow);
+
+  rangeError = el("p", "options__error");
+  rangeError.setAttribute("role", "alert");
+  rangeError.hidden = true;
+  wrap.appendChild(rangeError);
+
+  var apply = el("button", "options__apply");
+  apply.type = "button";
+  apply.textContent = "Apply";
+  apply.setAttribute("data-range-apply", "");
+  apply.addEventListener("click", applyRange);
+  wrap.appendChild(apply);
+
+  return wrap;
+}
+
+function setRangeError(message) {
+  if (!rangeError) return;
+  rangeError.textContent = message;
+  rangeError.hidden = !message;
+}
+
+function updateRangeControl() {
+  if (!rangeStartInput || !data) return;
+  var item = rangeControl(data.range);
+  rangeStartInput.value = item.start;
+  rangeEndInput.value = item.end;
+  setRangeError("");
+}
+
+function applyRange() {
+  if (!rangeStartInput) return;
+  var start = rangeStartInput.value;
+  var end = rangeEndInput.value;
+  var refusal = rangeSettingRefusal(start, end);
+  if (refusal) { setRangeError(refusal); return; }
+  var apply = optionsMenu.querySelector("[data-range-apply]");
+  if (apply) apply.disabled = true;
+  api("PATCH", "/api/plan", { start: start, end: end }).then(function () {
+    return refresh();
+  }).then(function () {
+    setRangeError("");
+    openOptions(false);
+  }).catch(function (err) {
+    setRangeError(err && err.message ? err.message : "Could not save the period.");
+  }).then(function () {
+    if (apply) apply.disabled = false;
+  });
 }
 
 // One popover at a time: opening the menu closes the filter's scope popover
@@ -2300,6 +2419,7 @@ function openOptions(open) {
     hideSuggestions();
     if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
     updateOptionsMenu();
+    updateRangeControl();
   }
   optionsMenu.hidden = !open;
   optionsBtn.setAttribute("aria-expanded", open ? "true" : "false");

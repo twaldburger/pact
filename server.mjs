@@ -143,8 +143,13 @@ export function createServer(store, options) {
     Promise.resolve()
       .then(() => {
         if (pathname === "/api/plan") {
-          if (req.method !== "GET") return sendError(res, 405, "method not allowed");
-          return sendJSON(res, 200, planForClient(store, includeArchived));
+          if (req.method === "GET") return sendJSON(res, 200, planForClient(store, includeArchived));
+          // The extent is the owner's setting; this is the one write that sets
+          // both ends together. Everything else leaves the range alone.
+          if (req.method === "PATCH") {
+            return readBody(req).then((body) => sendJSON(res, 200, store.setRange(body)));
+          }
+          return sendError(res, 405, "method not allowed");
         }
         const route = matchApi(pathname);
         if (route) return handleApi(req, res, store, route);
