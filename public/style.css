@@ -645,11 +645,102 @@ h1, h2, h3, p { margin: 0; }
   grid-template-columns: minmax(0, var(--rail-w)) minmax(0, 1fr);
   align-items: stretch;
   min-height: calc(100vh - var(--bar-h));
+  transition: grid-template-columns var(--dur) var(--ease);
+}
+
+/* Collapsed, the rail takes no width and the timeline - with its Person
+   column - takes the whole board. The Person column is a column of the
+   timeline and does not move or change width. */
+.board.is-collapsed {
+  grid-template-columns: minmax(0, 0px) minmax(0, 1fr);
+}
+
+/* The Rail toggle: the control that folds the Stack away. It reuses the
+   header's add-control language - the same square size, hairline border,
+   radius and ink-soft glyph, one quiet hover tint - and rides at the right of
+   the Stack head when open, then at the left edge at the same height when the
+   rail is gone, so it never jumps. It is a grid item in the rail's own
+   column, so it tracks the rail's real width - including when a narrow window
+   shrinks the track - rather than the rail's nominal width. */
+.rail-toggle {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--add-size);
+  height: var(--add-size);
+  margin: calc((var(--axis-h) - var(--add-size)) / 2) var(--sp-5) 0 0;
+  padding: 0;
+  border: var(--base) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+  transition: margin-right var(--dur) var(--ease),
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+/* At the left edge: the margin box sits at the track's end, and a negative
+   right margin of one control width puts the control back at the edge. */
+.board.is-collapsed .rail-toggle { margin-right: calc(-1 * var(--add-size)); }
+
+.rail-toggle:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
+}
+
+.rail-toggle__glyph {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* The count of matching Projects while collapsed. Ink emphasis, never the
+   over-allocation signal colour. */
+.rail-toggle__count {
+  position: absolute;
+  top: calc(-1 * var(--sp-2));
+  right: calc(-1 * var(--sp-2));
+  min-width: var(--sp-5);
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: var(--fs-axis);
+  font-weight: var(--fw-ui);
+  line-height: var(--sp-5);
+  text-align: center;
+}
+
+/* Collapsed, the rail's list is hidden and takes no width; the reopen control
+   is not inside it. Its height is left as it was so the board does not jump
+   vertically. */
+.board.is-collapsed .stack {
+  visibility: hidden;
+  border-right: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+/* The reopen control sits at the left edge when collapsed; make room for it
+   in the Person header so the column's title stays fully legible. Only the
+   header's label is inset - the Person rows below keep their own padding. */
+.board.is-collapsed .tl__corner {
+  padding-left: calc(var(--add-size) + var(--sp-3));
 }
 
 /* Stack rail ---------------------------------------------------------------- */
 
 .stack {
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   overflow-x: hidden;
   background: var(--panel);
@@ -812,6 +903,8 @@ h1, h2, h3, p { margin: 0; }
 /* Timeline scroller and grid ------------------------------------------------ */
 
 .scroller {
+  grid-column: 2;
+  grid-row: 1;
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;

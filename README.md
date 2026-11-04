@@ -56,6 +56,16 @@ the wordmark and range on the left, and on the right the Filter, Zoom, Row
 height and Today controls in that order, then the Options menu that holds the
 less frequent controls.
 
+The Stack rail collapses to the left from a small chevron control at the right
+of its header. Collapsed, the rail and its list are gone and the timeline, with
+its Person column, takes the whole board; the same control sits at the left
+edge at the same height to bring the rail back, and the Person column keeps its
+width. The state is a view setting for the session only, like Zoom and Row
+height, and is not written to the plan. While the rail is collapsed and the
+Filter is active, the control carries the number of Projects the filter leaves;
+the layout stays collapsed. It is a normal button, toggled by click, Enter or
+Space, with no global shortcut.
+
 The plan's date range is an explicit period the owner sets, not one the app
 infers. The Options menu in the top bar carries the plan period control: a
 start date and an end date, each a specific `YYYY-MM-DD` day, applied together
@@ -154,7 +164,10 @@ it, are pinned against the store and the API. The Timeline geometry
 in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
 steps - is covered without a browser, as is the block-label rule in
 `public/lib/label.mjs` - how much of a title a block has room to draw - and its
-range label.
+range label. The collapsible Stack's session rules in `public/lib/stack.mjs` -
+the toggle's name and announced state, the collapsed match count and the fact
+that the collapsed state is never written to the plan - are pinned the same
+way.
 
 ## The font
 
