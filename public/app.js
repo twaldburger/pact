@@ -38,6 +38,12 @@ import {
 } from "./lib/filter.mjs";
 import { blockLabel, labelText, rangeLabel } from "./lib/label.mjs";
 import {
+  STACK_COLLAPSED_DEFAULT,
+  stackToggleLabel,
+  stackToggleExpanded,
+  stackMatchCount
+} from "./lib/stack.mjs";
+import {
   DROP_DAYS,
   dayRange,
   dropRange,
@@ -59,6 +65,10 @@ var scroller = document.getElementById("scroller");
 var stackList = document.getElementById("stack-list");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
+var boardEl = document.getElementById("board");
+var stackToggle = document.getElementById("rail-toggle");
+var stackChevron = document.querySelector(".rail-toggle__path");
+var stackCount = document.getElementById("rail-toggle-count");
 
 if (!tl || !scroller) throw new Error("PACT: the timeline is missing");
 
@@ -88,6 +98,10 @@ var stepPx = 0;
 var BASE_PX = 1;
 var lastDragAt = 0;
 var showArchived = false;
+// The Stack rail's folded state: a view setting for the session only, exactly
+// like Zoom and Row height. It is never written to the plan and resets on
+// reload.
+var stackCollapsed = STACK_COLLAPSED_DEFAULT;
 // The Filter: session-only text and scope, never written to the plan. The
 // whole plan stays in `assignments` for the row-header figures; `grid*` hold
 // what the filter leaves to draw.
@@ -1942,6 +1956,48 @@ function initRowHeight() {
   applyRowHeight();
 }
 
+/* --- Stack rail collapse ------------------------------------------------- */
+
+// The Stack rail's folded state is a view setting for the session only. This
+// applies it: the board gains the collapsed track, the toggle announces the
+// action and state it now has, the chevron turns to point the way the rail
+// will move, and the match count appears only while folded and filtered. It
+// writes nothing anywhere.
+function syncStackToggle() {
+  if (!boardEl || !stackToggle) return;
+  var collapsed = stackCollapsed;
+  boardEl.classList.toggle("is-collapsed", collapsed);
+  stackToggle.setAttribute("aria-expanded", stackToggleExpanded(collapsed) ? "true" : "false");
+  stackToggle.setAttribute("aria-label", stackToggleLabel(collapsed));
+  stackToggle.setAttribute("title", stackToggleLabel(collapsed));
+  if (stackChevron) {
+    stackChevron.setAttribute("d", collapsed ? "M6 3l5 5-5 5" : "M10 3 5 8l5 5");
+  }
+  if (stackCount) {
+    var count = stackMatchCount(collapsed, filterQuery, gridProjects.length);
+    stackCount.hidden = count === null;
+    stackCount.textContent = count === null ? "" : String(count);
+  }
+}
+
+function setStackCollapsed(collapsed) {
+  stackCollapsed = collapsed === true;
+  syncStackToggle();
+  // The timeline's width changes with the rail, so the block labels have new
+  // room to measure. Nothing else on the grid moves.
+  queueBlockLabels();
+}
+
+// A real button, toggled by a click - which Enter and Space also fire - and by
+// no global shortcut.
+function initStackToggle() {
+  if (!stackToggle) return;
+  stackToggle.addEventListener("click", function () {
+    setStackCollapsed(!stackCollapsed);
+  });
+  syncStackToggle();
+}
+
 /* --- render -------------------------------------------------------------- */
 
 // The empty result: it names what was typed, says which areas were looked in,
@@ -1982,6 +2038,7 @@ function render() {
     drawStack();
     marker = null;
     scroller.scrollLeft = 0;
+    syncStackToggle();
     return;
   }
   tl.classList.remove("is-empty");
@@ -2024,6 +2081,7 @@ function render() {
 
   scroller.scrollLeft = scrollLeft;
   drawBlockLabels();
+  syncStackToggle();
 }
 
 /* --- wiring -------------------------------------------------------------- */
@@ -2457,6 +2515,7 @@ function boot() {
     var today = data.today ? udate(data.today) : rangeStart;
     markerIndex = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
     initRowHeight();
+    initStackToggle();
     render();
     initZoom();
     bindChrome();

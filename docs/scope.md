@@ -6,7 +6,7 @@ Confirmed by the owner on 2026-11-02. The first version is locked except for the
 
 - **People rows** - one row per Person, drawn a full FTE tall, in the order they were added. Each Person's Availability is drawn inside the row as a ceiling line with the unavailable band above it, so an absolute share fills exactly its own height on every row.
 - **Person** - name and availability (steps of 10%) required; any number of Person tags and an optional note. No role or skillset field: labels about a person are Person tags.
-- **Project stack** - Projects with name, colour and notes; add and edit them here.
+- **Project stack** - Projects with name, colour and notes; add and edit them here. The rail collapses to the left from a control at the right of its header; collapsed, the rail and its list are gone, the timeline and its Person column take the full width, and the same control sits at the left edge at the same height to reopen it. The collapsed state is a view setting for the session only, not written to the plan; while collapsed and filtered, the control shows the number of Projects the filter leaves and the layout stays collapsed.
 - **Drag to create** - dragging a Project from the stack onto a Person's row creates an Assignment over a date range.
 - **Horizontal drag** - dragging an Assignment's edge changes its start or end date, snapped to whole days with a readout while dragging.
 - **Vertical drag** - dragging an Assignment's edge changes its share of the Person's Availability in 10% steps, between 10% and 100%. The same share is set by the plus-and-minus stepper a Person's Availability uses, in the Assignment popover and the New assignment panel, so an Allocation is set by dragging or by stepping, never free-typed.
