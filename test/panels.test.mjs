@@ -11,6 +11,8 @@ import {
   archivedPersonRefusal,
   archivedProjectRefusal,
   dropRefusal,
+  outsideRangeRefusal,
+  rangeSettingRefusal,
   assignmentCount,
   deleteConfirmation,
   clampShare,
@@ -90,6 +92,38 @@ test("an archived target is refused and a live one is not", () => {
   );
   assert.equal(dropRefusal({ name: "Anna Meier" }, { name: "Atlas" }), null);
   assert.equal(dropRefusal(null, null), null);
+});
+
+test("work outside the plan's period is refused with the period named", () => {
+  const range = { start: "2026-09-01", end: "2027-10-31" };
+  // Both ends are inclusive, so work touching either one is inside.
+  assert.equal(outsideRangeRefusal("2026-09-01", "2026-09-30", range), null);
+  assert.equal(outsideRangeRefusal("2027-10-01", "2027-10-31", range), null);
+  assert.equal(outsideRangeRefusal("2027-01-01", "2027-01-02", range), null);
+  assert.match(
+    outsideRangeRefusal("2026-08-31", "2026-09-10", range),
+    /2026-09-01 to 2027-10-31 inclusive/
+  );
+  assert.match(
+    outsideRangeRefusal("2026-09-01", "2027-11-01", range),
+    /2026-09-01 to 2027-10-31 inclusive/
+  );
+  assert.match(
+    outsideRangeRefusal("2027-11-01", "2027-11-02", range),
+    /2026-09-01 to 2027-10-31 inclusive/
+  );
+  // With no period to test against there is nothing to refuse.
+  assert.equal(outsideRangeRefusal("2000-01-01", "2000-01-02", null), null);
+});
+
+test("the period control refuses an invalid or reversed pair", () => {
+  assert.equal(rangeSettingRefusal("2026-01-01", "2026-12-31"), null);
+  assert.equal(rangeSettingRefusal("2026-06-15", "2026-06-15"), null);
+  assert.match(rangeSettingRefusal("2026-13-01", "2026-12-31"), /valid YYYY-MM-DD/);
+  assert.match(rangeSettingRefusal("", "2026-12-31"), /valid YYYY-MM-DD/);
+  assert.match(rangeSettingRefusal("2026-02-30", "2026-03-01"), /valid YYYY-MM-DD/);
+  assert.match(rangeSettingRefusal(null, undefined), /valid YYYY-MM-DD/);
+  assert.match(rangeSettingRefusal("2026-12-31", "2026-01-01"), /must not be after/);
 });
 
 test("the deletion confirmation names the number first and says it cannot be undone", () => {

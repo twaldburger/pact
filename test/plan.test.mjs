@@ -8,8 +8,8 @@ import {
   seedPlan,
   validatePlan,
   atomicWrite,
-  growRange,
   fromISO,
+  toISO,
   todayISO,
   ValidationError,
   NotFoundError
@@ -20,81 +20,74 @@ function tempFile() {
   return path.join(dir, "pact.json");
 }
 
+// A day offset from today. The seeded period always holds today with room on
+// both sides, so a small offset stays inside it whatever the run date is.
+function day(n) {
+  const d = fromISO(todayISO());
+  d.setUTCDate(d.getUTCDate() + n);
+  return toISO(d);
+}
+
 test("the seeded plan is valid", () => {
   assert.deepEqual(validatePlan(seedPlan()), []);
 });
 
-// A range wide enough for its assignments and for today: the two months before
-// today through the next eleven months, both ends on whole months.
-const RANGE = { start: "2026-09-01", end: "2027-10-31" };
-const TODAY = "2026-11-03";
-const assignment = (start, end) => ({ start: start, end: end });
-
-function isMonthAligned(date) {
-  const d = fromISO(date);
-  const start = date.slice(8) === "01";
-  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-  return start || d.getUTCDate() === lastDay;
-}
-
-test("work inside the range leaves it alone", () => {
-  const grown = growRange(RANGE, [assignment("2026-10-01", "2027-08-31")], TODAY);
-  assert.deepEqual(grown, RANGE);
+test("a stored period is kept exactly, on load and through other writes", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const set = store.setRange({ start: "2026-01-01", end: "2026-12-31" });
+  assert.deepEqual(set, { start: "2026-01-01", end: "2026-12-31" });
+  assert.deepEqual(store.get().range, { start: "2026-01-01", end: "2026-12-31" });
+  // A reload reads the stored period unchanged, and a later write leaves it
+  // alone rather than recomputing it.
+  assert.deepEqual(createStore(file).get().range, { start: "2026-01-01", end: "2026-12-31" });
+  store.createPerson({ name: "Dana Vo", availability: 90 });
+  assert.deepEqual(store.get().range, { start: "2026-01-01", end: "2026-12-31" });
 });
 
-test("work past either end extends it, with a clear margin", () => {
-  const earlier = growRange(RANGE, [assignment("2026-05-15", "2026-06-15")], TODAY);
-  assert.equal(earlier.start, "2026-04-01");
-  assert.equal(earlier.end, RANGE.end);
+test("the period is validated when it is set and nothing is written on refusal", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = fs.readFileSync(file, "utf8");
 
-  const later = growRange(RANGE, [assignment("2027-01-01", "2027-10-15")], TODAY);
-  assert.equal(later.start, RANGE.start);
-  assert.equal(later.end, "2027-11-30");
-
-  const both = growRange(RANGE, [assignment("2024-01-01", "2029-12-31")], TODAY);
-  assert.equal(both.start, "2023-12-01");
-  assert.equal(both.end, "2030-01-31");
+  assert.throws(() => store.setRange({ start: "2026-05-01" }), /valid YYYY-MM-DD/);
+  assert.throws(() => store.setRange({ start: "2026-13-01", end: "2026-12-31" }), /valid YYYY-MM-DD/);
+  assert.throws(() => store.setRange({ start: "2026-12-31", end: "2026-05-01" }), /must not be after/);
+  assert.throws(() => store.setRange({ start: "2026-01-01", end: "2026-12-31", extra: 1 }), ValidationError);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
 });
 
-test("today near an edge extends it on both sides", () => {
-  const stored = { start: "2026-11-01", end: "2026-12-31" };
-  const grown = growRange(stored, [], "2026-11-03");
-  assert.equal(grown.start, "2026-09-01");
-  assert.equal(grown.end, "2027-10-31");
-});
+test("work outside the period is refused and left unwritten", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const range = store.get().range;
+  const beforeStart = (+range.start.slice(0, 4) - 1) + "-01-01";
+  const afterEnd = (+range.end.slice(0, 4) + 1) + "-12-31";
 
-test("both ends of the grown range land on whole months", () => {
-  const grown = growRange({ start: "2026-11-10", end: "2026-12-05" }, [assignment("2025-03-17", "2028-08-02")], TODAY);
-  assert.ok(isMonthAligned(grown.start), grown.start);
-  assert.ok(isMonthAligned(grown.end), grown.end);
-  assert.equal(grown.start.slice(8), "01");
-  assert.equal(grown.end, "2028-09-30");
-});
+  assert.throws(() => store.createAssignment({
+    projectId: "atlas", personId: "anna", start: beforeStart, end: beforeStart, share: 10
+  }), /inside the plan's period/);
 
-test("growing is idempotent and keeps a wider stored range as a floor", () => {
-  const once = growRange(RANGE, [assignment("2024-01-01", "2029-12-31")], TODAY);
-  assert.deepEqual(growRange(once, [assignment("2024-01-01", "2029-12-31")], TODAY), once);
-
-  const wide = { start: "2000-01-01", end: "2040-12-31" };
-  assert.deepEqual(growRange(wide, [assignment("2026-06-01", "2026-06-30")], TODAY), wide);
-});
-
-test("a write past the edge grows the stored range", () => {
-  const store = createStore(tempFile());
-  const before = store.get().range;
-  // A date safely before any range the seed can hold, whatever today is.
-  const longAgo = (+todayISO().slice(0, 4) - 2) + "-01-05";
-  store.createAssignment({
-    projectId: "atlas",
-    personId: "anna",
-    start: longAgo,
-    end: longAgo.slice(0, 8) + "05",
-    share: 10
+  const made = store.createAssignment({
+    projectId: "atlas", personId: "anna", start: day(0), end: day(2), share: 10
   });
-  const after = store.get().range;
-  assert.ok(after.start < before.start, after.start + " should precede " + before.start);
-  assert.ok(isMonthAligned(after.start), after.start);
-  assert.ok(isMonthAligned(after.end), after.end);
+  const afterCreate = fs.readFileSync(file, "utf8");
+  // Both a move and a resize past either edge are refused by the same rule.
+  assert.throws(() => store.updateAssignment(made.id, { start: beforeStart }), /inside the plan's period/);
+  assert.throws(() => store.updateAssignment(made.id, { end: afterEnd }), /inside the plan's period/);
+  assert.equal(fs.readFileSync(file, "utf8"), afterCreate);
+});
+
+test("a plan with work outside its period still loads", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const plan = store.get();
+  plan.assignments.push({
+    id: "old", projectId: "atlas", personId: "anna",
+    start: "2000-01-01", end: "2000-01-05", share: 10, tags: [], note: ""
+  });
+  fs.writeFileSync(file, JSON.stringify(plan, null, 2) + "\n");
+  assert.ok(createStore(file).get().assignments.some((a) => a.id === "old"));
 });
 
 test("the store seeds a missing file and reloads it", () => {
@@ -125,8 +118,8 @@ test("archiving a person keeps the record and every assignment", () => {
   const assignment = store.createAssignment({
     projectId: "atlas",
     personId: person.id,
-    start: "2026-05-04",
-    end: "2026-05-08",
+    start: day(0),
+    end: day(4),
     share: 40
   });
   assert.equal(store.get().assignments.filter((a) => a.personId === person.id).length, 1);
@@ -162,15 +155,15 @@ test("assignments can be created, updated and archived", () => {
   const created = store.createAssignment({
     projectId: "borealis",
     personId: "cara",
-    start: "2026-06-01",
-    end: "2026-06-05",
+    start: day(10),
+    end: day(14),
     share: 50
   });
   assert.equal(created.share, 50);
 
-  const moved = store.updateAssignment(created.id, { start: "2026-06-03", end: "2026-06-10", share: 80 });
-  assert.equal(moved.start, "2026-06-03");
-  assert.equal(moved.end, "2026-06-10");
+  const moved = store.updateAssignment(created.id, { start: day(12), end: day(19), share: 80 });
+  assert.equal(moved.start, day(12));
+  assert.equal(moved.end, day(19));
   assert.equal(moved.share, 80);
 
   assert.deepEqual(store.archiveAssignment(created.id), { archived: created.id });
@@ -184,8 +177,8 @@ test("archiving a project keeps its assignments", () => {
   const assignment = store.createAssignment({
     projectId: project.id,
     personId: "anna",
-    start: "2026-07-01",
-    end: "2026-07-10",
+    start: day(20),
+    end: day(29),
     share: 20
   });
   const renamed = store.updateProject(project.id, { name: "Summit Two", colour: "umber" });
@@ -203,10 +196,10 @@ test("destroying a person removes the record and its assignments from memory and
   const store = createStore(file);
   const person = store.createPerson({ name: "Nina Roth", availability: 100 });
   const live = store.createAssignment({
-    projectId: "atlas", personId: person.id, start: "2026-05-04", end: "2026-05-08", share: 50
+    projectId: "atlas", personId: person.id, start: day(0), end: day(4), share: 50
   });
   const archived = store.createAssignment({
-    projectId: "borealis", personId: person.id, start: "2026-06-01", end: "2026-06-05", share: 30
+    projectId: "borealis", personId: person.id, start: day(30), end: day(34), share: 30
   });
   store.archiveAssignment(archived.id);
 
@@ -227,10 +220,10 @@ test("destroying a project removes its assignments and leaves others", () => {
   const store = createStore(tempFile());
   const project = store.createProject({ name: "Summit", colour: "plum", notes: "" });
   const mine = store.createAssignment({
-    projectId: project.id, personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: project.id, personId: "anna", start: day(0), end: day(4), share: 40
   });
   const other = store.createAssignment({
-    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 40
   });
 
   assert.deepEqual(store.destroyProject(project.id), { deleted: project.id, assignments: 1 });
@@ -243,10 +236,10 @@ test("destroying a project removes its assignments and leaves others", () => {
 test("destroying an assignment removes only itself", () => {
   const store = createStore(tempFile());
   const one = store.createAssignment({
-    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 40
   });
   const two = store.createAssignment({
-    projectId: "atlas", personId: "anna", start: "2026-05-11", end: "2026-05-15", share: 60
+    projectId: "atlas", personId: "anna", start: day(7), end: day(11), share: 60
   });
 
   assert.deepEqual(store.destroyAssignment(one.id), { deleted: one.id, assignments: 1 });

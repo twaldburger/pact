@@ -3,8 +3,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createStore } from "../lib/plan.mjs";
+import { createStore, fromISO, toISO, todayISO } from "../lib/plan.mjs";
 import { createServer } from "../server.mjs";
+
+// A day offset from today, inside the seeded period whatever the run date is.
+function day(n) {
+  const d = fromISO(todayISO());
+  d.setUTCDate(d.getUTCDate() + n);
+  return toISO(d);
+}
 
 function startServer() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-api-"));
@@ -57,13 +64,53 @@ test("GET /api/plan returns the whole plan", async () => {
   assert.match(res.body.today, /^\d{4}-\d{2}-\d{2}$/);
 });
 
+test("the period can be read and set over the API", async () => {
+  const { base, store } = await server();
+  const set = await api(base, "PATCH", "/api/plan", { start: "2026-01-01", end: "2026-12-31" });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.body, { start: "2026-01-01", end: "2026-12-31" });
+  assert.deepEqual(store.get().range, { start: "2026-01-01", end: "2026-12-31" });
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.deepEqual(read.body.range, { start: "2026-01-01", end: "2026-12-31" });
+
+  const reversed = await api(base, "PATCH", "/api/plan", { start: "2026-12-31", end: "2026-01-01" });
+  assert.equal(reversed.status, 400);
+  assert.match(reversed.body.error, /must not be after/);
+
+  const invalid = await api(base, "PATCH", "/api/plan", { start: "nope", end: "2026-01-01" });
+  assert.equal(invalid.status, 400);
+  assert.match(invalid.body.error, /valid YYYY-MM-DD/);
+  // The refusals left the stored period as it was.
+  assert.deepEqual(store.get().range, { start: "2026-01-01", end: "2026-12-31" });
+});
+
+test("an assignment outside the set period is refused over the API", async () => {
+  const { base, store } = await server();
+  const range = store.get().range;
+  const refused = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: "2000-01-01", end: "2000-01-05", share: 40
+  });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, new RegExp(range.start + " to " + range.end + " inclusive"));
+
+  const made = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 40
+  });
+  assert.equal(made.status, 201);
+
+  const moved = await api(base, "PATCH", "/api/assignments/" + made.body.id, { start: "2000-01-01" });
+  assert.equal(moved.status, 400);
+  assert.match(moved.body.error, /inside the plan's period/);
+});
+
 test("an assignment can be created, read back, changed and archived", async () => {
   const { base, store } = await server();
   const created = await api(base, "POST", "/api/assignments", {
     projectId: "atlas",
     personId: "anna",
-    start: "2026-05-04",
-    end: "2026-05-08",
+    start: day(0),
+    end: day(4),
     share: 40,
     tags: ["React"],
     note: ""
@@ -75,13 +122,13 @@ test("an assignment can be created, read back, changed and archived", async () =
   assert.ok(plan.assignments.some((a) => a.id === created.body.id));
 
   const patched = await api(base, "PATCH", "/api/assignments/" + created.body.id, {
-    start: "2026-05-06",
-    end: "2026-05-15",
+    start: day(2),
+    end: day(11),
     share: 70
   });
   assert.equal(patched.status, 200);
   assert.equal(patched.body.share, 70);
-  assert.equal(patched.body.start, "2026-05-06");
+  assert.equal(patched.body.start, day(2));
 
   const archived = await api(base, "DELETE", "/api/assignments/" + created.body.id);
   assert.equal(archived.status, 200);
@@ -102,8 +149,8 @@ test("people and projects can be created, changed and archived without losing as
   const assignment = await api(base, "POST", "/api/assignments", {
     projectId: project.body.id,
     personId: person.body.id,
-    start: "2026-05-04",
-    end: "2026-05-08",
+    start: day(0),
+    end: day(4),
     share: 40
   });
   assert.equal(assignment.status, 201);
@@ -160,7 +207,7 @@ test("archived records appear only on request and can be restored", async () => 
 test("an archived assignment appears with the archive view and can be restored", async () => {
   const { base, store } = await server();
   const created = await api(base, "POST", "/api/assignments", {
-    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 40
   });
   assert.equal(created.status, 201);
   await api(base, "DELETE", "/api/assignments/" + created.body.id);
@@ -186,10 +233,10 @@ test("destroying a person removes them and every assignment, archived ones inclu
   const { base, store } = await server();
   const person = await api(base, "POST", "/api/people", { name: "Dana Vo", availability: 90 });
   const one = await api(base, "POST", "/api/assignments", {
-    projectId: "atlas", personId: person.body.id, start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: "atlas", personId: person.body.id, start: day(0), end: day(4), share: 40
   });
   const two = await api(base, "POST", "/api/assignments", {
-    projectId: "borealis", personId: person.body.id, start: "2026-06-01", end: "2026-06-05", share: 30
+    projectId: "borealis", personId: person.body.id, start: day(30), end: day(34), share: 30
   });
   await api(base, "DELETE", "/api/assignments/" + two.body.id);
 
@@ -212,10 +259,10 @@ test("destroying a project removes its assignments and leaves other work alone",
   const { base, store } = await server();
   const project = await api(base, "POST", "/api/projects", { name: "Summit", colour: "plum" });
   const mine = await api(base, "POST", "/api/assignments", {
-    projectId: project.body.id, personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: project.body.id, personId: "anna", start: day(0), end: day(4), share: 40
   });
   const other = await api(base, "POST", "/api/assignments", {
-    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 40
   });
 
   const destroyed = await api(base, "DELETE", "/api/projects/" + project.body.id + "/destroy");
@@ -233,10 +280,10 @@ test("destroying a project removes its assignments and leaves other work alone",
 test("destroying an assignment removes only that one", async () => {
   const { base, store } = await server();
   const one = await api(base, "POST", "/api/assignments", {
-    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 40
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 40
   });
   const two = await api(base, "POST", "/api/assignments", {
-    projectId: "atlas", personId: "anna", start: "2026-05-11", end: "2026-05-15", share: 60
+    projectId: "atlas", personId: "anna", start: day(7), end: day(11), share: 60
   });
 
   const destroyed = await api(base, "DELETE", "/api/assignments/" + one.body.id + "/destroy");

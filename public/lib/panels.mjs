@@ -129,6 +129,38 @@ export function withoutTag(tags, raw) {
   return (tags || []).filter(function (t) { return tagKey(t) !== key; });
 }
 
+/*
+ * The plan's period: the explicit start and end dates the owner sets, which
+ * are the Timeline's extent and the only dates an Assignment may fall on. Both
+ * ends are inclusive, so work touching either one is inside.
+ */
+function isISODate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(Date.UTC(+value.slice(0, 4), +value.slice(5, 7) - 1, +value.slice(8, 10)));
+  return d.toISOString().slice(0, 10) === value;
+}
+
+// The message a create or a move/resize outside the period is refused with,
+// naming the allowed period with both ends inclusive. Returns null when the
+// work fits, or when there is no period to test against.
+export function outsideRangeRefusal(startISO, endISO, range) {
+  if (!range) return null;
+  if (startISO >= range.start && endISO <= range.end) return null;
+  return "Assignments must fall inside the plan's period, " + range.start +
+    " to " + range.end + " inclusive.";
+}
+
+// The period control's own rule, applied to the two dates set together: both
+// must be real YYYY-MM-DD dates and the start must not be after the end.
+// Returns the message, or null when the pair may be stored.
+export function rangeSettingRefusal(startISO, endISO) {
+  if (!isISODate(startISO) || !isISODate(endISO)) {
+    return "The plan's period needs a start and an end, each a valid YYYY-MM-DD date.";
+  }
+  if (startISO > endISO) return "The plan's period start must not be after its end.";
+  return null;
+}
+
 export function archivedPersonRefusal(name) {
   return name + " is archived. Restore this person before adding an assignment.";
 }

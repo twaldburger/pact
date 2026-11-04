@@ -52,6 +52,11 @@ _Avoid_: backlog, pool, project list
 The horizontal axis of the plan - a date range drawn at a chosen Zoom, with one row per Person.
 _Avoid_: gantt, grid, chart, schedule
 
+**Plan period**:
+The plan's extent: an explicit start date and end date the owner sets, both inclusive, which the Timeline draws and every Assignment must fall inside.
+It is the extent itself, not a view setting, and the app never derives or grows it.
+_Avoid_: range, timeframe, window, horizon
+
 **Marker**:
 The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at.
 _Avoid_: today line, now line, cursor, playhead, reference line
