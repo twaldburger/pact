@@ -66,6 +66,18 @@ Filter is active, the control carries the number of Projects the filter leaves;
 the layout stays collapsed. It is a normal button, toggled by click, Enter or
 Space, with no global shortcut.
 
+The Stack (Projects) and the People rows can each be ordered by something other
+than the order they were added. A small control in each column's header, beside
+its title, offers that list's keys and an ascending/descending toggle. Projects
+sort by name, first assignment start, last assignment end or total assigned FTE
+days - the sum over a project's assignments of `share/100 * inclusive days` -
+and People by name, availability, load at the Marker or earliest assignment.
+The default is the order they were added, and ties break by name. Ordering is
+display order only: it is session-only like Zoom and Row height, it never
+changes the plan file, and the Filter only changes which rows are shown. A load
+order reads the Marker's date when it is applied and when the Marker is
+released, never while the Marker is dragged.
+
 The plan's date range is an explicit period the owner sets, not one the app
 infers. The Options menu in the top bar carries the plan period control: a
 start date and an end date, each a specific `YYYY-MM-DD` day, applied together

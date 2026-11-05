@@ -254,7 +254,8 @@ h1, h2, h3, p { margin: 0; }
    header, beside the title it belongs to. A square hit area with the glyph
    centred in it, lifted as a whole onto the title's cap line so the two read
    as one line of type rather than as a word and a box beside it. */
-.add {
+.add,
+.sort__btn {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -275,10 +276,85 @@ h1, h2, h3, p { margin: 0; }
   cursor: pointer;
 }
 
-.add:hover {
+.add:hover,
+.sort__btn:hover {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
   color: var(--ink);
 }
+
+/* The sort control carries the add control's square hit area and quiet ink,
+   with an up/down glyph. Its menu is the same fixed popover as the Options
+   menu: a radio tick per key and a direction toggle beneath a rule. */
+.sort__glyph {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.sort__menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 12rem;
+  padding: var(--sp-2) 0;
+  background: var(--canvas);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+}
+
+.sort__item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sort__item:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+.sort__item:disabled {
+  opacity: var(--op-disabled);
+  cursor: default;
+}
+
+.sort__item:disabled:hover { background: transparent; }
+
+.sort__tick {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-chip);
+}
+
+.sort__item[aria-checked="true"] .sort__tick {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.sort__sep {
+  margin: var(--sp-2) 0;
+  border-top: 1px solid var(--rule);
+}
+
+.sort__dir {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.sort__item--direction[aria-checked="true"] .sort__dir { color: var(--ink); }
 
 /* Filter -------------------------------------------------------------------- */
 
