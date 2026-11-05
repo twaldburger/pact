@@ -261,12 +261,16 @@ h1, h2, h3, p { margin: 0; }
 
 .rowheight__btn:disabled { opacity: var(--op-disabled); cursor: default; }
 
-/* The quiet plus that adds a Person or Project sits in that column's own
-   header, beside the title it belongs to. A square hit area with the glyph
-   centred in it, lifted as a whole onto the title's cap line so the two read
-   as one line of type rather than as a word and a box beside it. */
+/* One control language for the quiet actions that sit in a column's own
+   header, beside the title they belong to: the plus that adds a Person or
+   Project, the sort control beside it, and the rail toggle. A square --add-size
+   hit area with the glyph centred in it, no fill and no border, an ink-soft
+   glyph, one quiet --mix-hover tint on hover, and the same lift onto the
+   title's cap line so the row of them reads as one line of type rather than as
+   a word and boxes beside it. */
 .add,
-.sort__btn {
+.sort__btn,
+.rail-toggle {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -288,7 +292,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .add:hover,
-.sort__btn:hover {
+.sort__btn:hover,
+.rail-toggle:hover {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
   color: var(--ink);
 }
@@ -754,13 +759,13 @@ h1, h2, h3, p { margin: 0; }
   grid-template-columns: minmax(0, 0px) minmax(0, 1fr);
 }
 
-/* The Rail toggle: the control that folds the Stack away. It reuses the
-   header's add-control language - the same square size, hairline border,
-   radius and ink-soft glyph, one quiet hover tint - and rides at the right of
-   the Stack head when open, then at the left edge at the same height when the
-   rail is gone, so it never jumps. It is a grid item in the rail's own
-   column, so it tracks the rail's real width - including when a narrow window
-   shrinks the track - rather than the rail's nominal width. */
+/* The Rail toggle: the control that folds the Stack away. It wears the shared
+   header-control language above - the square size, no fill, no border and
+   ink-soft glyph of the plus and sort controls - and rides at the right of the
+   Stack head when open, then at the left edge at the same height when the rail
+   is gone, so it never jumps. It is a grid item in the rail's own column, so it
+   tracks the rail's real width - including when a narrow window shrinks the
+   track - rather than the rail's nominal width. */
 .rail-toggle {
   position: relative;
   grid-column: 1;
@@ -768,19 +773,11 @@ h1, h2, h3, p { margin: 0; }
   justify-self: end;
   align-self: start;
   z-index: 30;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--add-size);
-  height: var(--add-size);
-  margin: calc((var(--axis-h) - var(--add-size)) / 2) var(--sp-5) 0 0;
-  padding: 0;
-  border: var(--base) solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--canvas);
-  color: var(--ink-soft);
-  font: inherit;
-  cursor: pointer;
+  /* The header centres its controls in its content box, which the hairline at
+     its foot shortens by one --base; the toggle centres in the same box so it
+     lands on their line, not half a hairline below it. */
+  margin: calc((var(--axis-h) - var(--add-size) - var(--base)) / 2)
+    var(--sp-5) 0 0;
   transition: margin-right var(--dur) var(--ease),
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease);
@@ -789,11 +786,6 @@ h1, h2, h3, p { margin: 0; }
 /* At the left edge: the margin box sits at the track's end, and a negative
    right margin of one control width puts the control back at the edge. */
 .board.is-collapsed .rail-toggle { margin-right: calc(-1 * var(--add-size)); }
-
-.rail-toggle:hover {
-  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
-  color: var(--ink);
-}
 
 .rail-toggle__glyph {
   display: block;
