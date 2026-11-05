@@ -265,9 +265,9 @@ h1, h2, h3, p { margin: 0; }
    header, beside the title they belong to: the plus that adds a Person or
    Project, the sort control beside it, and the rail toggle. A square --add-size
    hit area with the glyph centred in it, no fill and no border, an ink-soft
-   glyph, one quiet --mix-hover tint on hover, and the same lift onto the
-   title's cap line so the row of them reads as one line of type rather than as
-   a word and boxes beside it. */
+   glyph, and one quiet --mix-hover tint on hover. The header centres them in
+   its content box, so the row reads as one line of type rather than a word with
+   boxes beside it. */
 .add,
 .sort__btn,
 .rail-toggle {
@@ -287,7 +287,6 @@ h1, h2, h3, p { margin: 0; }
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
   line-height: 1;
-  transform: translateY(var(--optical-plus));
   cursor: pointer;
 }
 
