@@ -667,8 +667,8 @@ function onMarkerUp(e) {
   draggingMarker = false;
   root.classList.remove("is-dragging");
   try { if (marker.hasPointerCapture(e.pointerId)) marker.releasePointerCapture(e.pointerId); } catch (err) { /* ignored */ }
-  // The Marker has been let go, so a load order is refreshed now - not during
-  // the drag, which would move the rows under the pointer.
+  // The Marker has been let go, so a load or free-capacity order is refreshed
+  // now - not during the drag, which would move the rows under the pointer.
   if (markerReordersPeople(MARKER_RELEASE, sortState.people && sortState.people.key)) {
     reorderPeopleRows();
   }
@@ -692,7 +692,8 @@ function setMarker(i) {
   marker.setAttribute("aria-valuenow", String(markerIndex));
   marker.setAttribute("aria-valuetext", fmtDayLong(date));
   updateFigures();
-  // A load order reads the Marker, but a drag must not recompute it: the rows
+  // A load or free-capacity order reads the Marker, but a drag must not
+  // recompute it: the rows
   // stay put under the pointer and are refreshed on release (onMarkerUp). A
   // keyboard move is not a drag, so it refreshes here.
   if (!draggingMarker &&
@@ -703,7 +704,8 @@ function setMarker(i) {
 
 // Re-sort the People rows in place for the Marker's current date, moving the
 // drawn nodes rather than rebuilding the grid, so a release does not flicker
-// or lose the page's position. Only a load order ever reaches this.
+// or lose the page's position. Only a load or free-capacity order ever reaches
+// this.
 function reorderPeopleRows() {
   if (!sortState.people) return;
   var ordered = sortPeople(gridPeople, sortState.people, data,

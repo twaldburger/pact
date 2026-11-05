@@ -28,7 +28,7 @@ export const PROJECT_SORT_KEYS = [
 
 export const PEOPLE_SORT_KEYS = [
   { key: "name", label: "Name", direction: ASCENDING },
-  { key: "availability", label: "Availability", direction: DESCENDING },
+  { key: "free", label: "Free at the Marker", direction: DESCENDING },
   { key: "load", label: "Load at the Marker", direction: DESCENDING },
   { key: "start", label: "Earliest assignment", direction: ASCENDING }
 ];
@@ -198,7 +198,12 @@ function projectValue(project, key, measures) {
 }
 
 function personValue(person, key, measures, plan, markerISO) {
-  if (key === "availability") return Number(person.availability) || 0;
+  // Free capacity: what the Person is available for minus what is already
+  // committed at the Marker's date. Both are fractions of a full week, and an
+  // over-allocated Person goes negative rather than being clamped at zero.
+  if (key === "free") {
+    return (Number(person.availability) || 0) / 100 - personLoadAt(plan, person.id, markerISO);
+  }
   if (key === "load") return personLoadAt(plan, person.id, markerISO);
   if (key === "start") {
     const m = measures[person.id];
@@ -232,8 +237,9 @@ export function sortProjects(projects, state, plan) {
 }
 
 /*
- * The People in display order. `markerISO` is the Marker's date, read only for
- * the load key. A null or unknown state means the plan's own order.
+ * The People in display order. `markerISO` is the Marker's date, read for the
+ * load and free-capacity keys. A null or unknown state means the plan's own
+ * order.
  */
 export function sortPeople(people, state, plan, markerISO) {
   const list = (people || []).slice();
@@ -262,12 +268,12 @@ export const SORT_APPLIED = "apply";
 
 /*
  * Whether a change in the Marker position should recompute the People order.
- * A load order reads the Marker, so it is recomputed when the sort is applied
- * and when the Marker is released, but never while the Marker is being
- * dragged: the rows stay where they are under the pointer. Every other key is
- * independent of the Marker and needs no recomputation at all.
+ * A load or free-capacity order reads the Marker, so it is recomputed when the
+ * sort is applied and when the Marker is released, but never while the Marker
+ * is being dragged: the rows stay where they are under the pointer. Every
+ * other key is independent of the Marker and needs no recomputation at all.
  */
 export function markerReordersPeople(phase, key) {
-  if (key !== "load") return false;
+  if (key !== "load" && key !== "free") return false;
   return phase === MARKER_RELEASE || phase === SORT_APPLIED;
 }

@@ -65,7 +65,7 @@ test("each list has its own small, labelled key set", () => {
   assert.deepEqual(sortKeys("projects").map((d) => d.key), PROJECT_SORT_KEYS.map((d) => d.key));
   assert.equal(sortKeys("people"), PEOPLE_SORT_KEYS);
   assert.deepEqual(PROJECT_SORT_KEYS.map((d) => d.key), ["name", "start", "end", "fte"]);
-  assert.deepEqual(PEOPLE_SORT_KEYS.map((d) => d.key), ["name", "availability", "load", "start"]);
+  assert.deepEqual(PEOPLE_SORT_KEYS.map((d) => d.key), ["name", "free", "load", "start"]);
   [...PROJECT_SORT_KEYS, ...PEOPLE_SORT_KEYS].forEach((def) => {
     assert.equal(typeof def.label, "string");
     assert.ok(def.label.length > 0);
@@ -86,7 +86,7 @@ test("each key carries a sensible first direction", () => {
   assert.equal(defaultDirection("projects", "start"), ASCENDING);
   assert.equal(defaultDirection("projects", "end"), DESCENDING);
   assert.equal(defaultDirection("projects", "fte"), DESCENDING);
-  assert.equal(defaultDirection("people", "availability"), DESCENDING);
+  assert.equal(defaultDirection("people", "free"), DESCENDING);
   assert.equal(defaultDirection("people", "load"), DESCENDING);
   assert.equal(defaultDirection("people", "start"), ASCENDING);
   assert.equal(defaultDirection("projects", "nope"), ASCENDING);
@@ -202,13 +202,30 @@ test("People sort by name in both directions", () => {
     ["p4", "p3", "p2", "p1"]);
 });
 
-test("People sort by availability in both directions", () => {
+test("People sort by free capacity at the Marker in both directions", () => {
   const p = plan();
-  // Anna and Cara tie at 100 and break by name.
-  assert.deepEqual(ids(sortPeople(p.people, { key: "availability", direction: DESCENDING }, p, "2026-06-15")),
-    ["p1", "p3", "p2", "p4"]);
-  assert.deepEqual(ids(sortPeople(p.people, { key: "availability", direction: ASCENDING }, p, "2026-06-15")),
-    ["p4", "p2", "p1", "p3"]);
+  // Free = availability minus load at 2026-06-15: Anna 1.00 - 0.30 = 0.70,
+  // Dan 0.50 - 0.00 = 0.50, Ben 0.80 - 0.40 = 0.40, Cara 1.00 - 0.80 = 0.20.
+  assert.deepEqual(ids(sortPeople(p.people, { key: "free", direction: DESCENDING }, p, "2026-06-15")),
+    ["p1", "p4", "p2", "p3"]);
+  assert.deepEqual(ids(sortPeople(p.people, { key: "free", direction: ASCENDING }, p, "2026-06-15")),
+    ["p3", "p2", "p4", "p1"]);
+});
+
+test("an over-allocated Person has negative free capacity and sorts last", () => {
+  const p = {
+    people: [
+      { id: "p1", name: "Anna", availability: 100 },
+      { id: "p2", name: "Ben", availability: 20 }
+    ],
+    assignments: [
+      { id: "a1", projectId: "pr1", personId: "p1", start: "2026-06-01", end: "2026-06-30", share: 30 },
+      { id: "a2", projectId: "pr1", personId: "p2", start: "2026-06-01", end: "2026-06-30", share: 80 }
+    ]
+  };
+  const ordered = sortPeople(p.people, { key: "free", direction: DESCENDING }, p, "2026-06-15");
+  // Anna 1.00 - 0.30 = 0.70; Ben 0.20 - 0.80 = -0.60, below everyone with room.
+  assert.deepEqual(ids(ordered), ["p1", "p2"]);
 });
 
 test("People sort by load at the Marker in both directions", () => {
@@ -228,12 +245,20 @@ test("People sort by earliest assignment in both directions", () => {
 });
 
 test("ties break by name, not by the input order", () => {
-  const p = plan();
-  // Availability is 100 for both Anna and Cara; reversed input still puts
-  // Anna first.
+  const p = {
+    people: [
+      { id: "p1", name: "Anna", availability: 100 },
+      { id: "p3", name: "Cara", availability: 80 }
+    ],
+    assignments: [
+      { id: "a1", projectId: "pr1", personId: "p1", start: "2026-06-01", end: "2026-06-30", share: 20 },
+      { id: "a2", projectId: "pr1", personId: "p3", start: "2026-06-01", end: "2026-06-30", share: 0 }
+    ]
+  };
+  // Free is 0.80 for both; reversed input still puts Anna first.
   const reversed = p.people.slice().reverse();
-  assert.deepEqual(ids(sortPeople(reversed, { key: "availability", direction: DESCENDING }, p, "2026-06-15")),
-    ["p1", "p3", "p2", "p4"]);
+  assert.deepEqual(ids(sortPeople(reversed, { key: "free", direction: DESCENDING }, p, "2026-06-15")),
+    ["p1", "p3"]);
 });
 
 test("the load order follows the Marker's date", () => {
@@ -260,8 +285,30 @@ test("a Marker drag does not reorder the rows; the release does", () => {
   assert.equal(markerReordersPeople(SORT_APPLIED, "load"), true);
 });
 
-test("only a load order ever reacts to the Marker", () => {
-  ["name", "availability", "start"].forEach((key) => {
+test("the free-capacity order follows the Marker's date", () => {
+  const p = plan();
+  // In June, Anna is the least loaded of the three assigned.
+  const june = sortPeople(p.people, { key: "free", direction: DESCENDING }, p, "2026-06-15");
+  assert.deepEqual(ids(june), ["p1", "p4", "p2", "p3"]);
+  // On 12 January only Anna is loaded (0.50), so Cara (1.00) and Ben (0.80)
+  // lead, then Anna and Dan tie at 0.50 and break by name.
+  const january = sortPeople(p.people, { key: "free", direction: DESCENDING }, p, "2026-01-12");
+  assert.deepEqual(ids(january), ["p3", "p2", "p1", "p4"]);
+});
+
+test("a Marker drag holds the free-capacity order; the release refreshes it", () => {
+  const p = plan();
+  const held = sortPeople(p.people, { key: "free", direction: DESCENDING }, p, "2026-06-15");
+  assert.equal(markerReordersPeople(MARKER_DRAG, "free"), false);
+  assert.deepEqual(ids(held), ["p1", "p4", "p2", "p3"]);
+  assert.equal(markerReordersPeople(MARKER_RELEASE, "free"), true);
+  const released = sortPeople(held, { key: "free", direction: DESCENDING }, p, "2026-01-12");
+  assert.deepEqual(ids(released), ["p3", "p2", "p1", "p4"]);
+  assert.equal(markerReordersPeople(SORT_APPLIED, "free"), true);
+});
+
+test("only a load or free-capacity order ever reacts to the Marker", () => {
+  ["name", "start"].forEach((key) => {
     assert.equal(markerReordersPeople(MARKER_DRAG, key), false);
     assert.equal(markerReordersPeople(MARKER_RELEASE, key), false);
     assert.equal(markerReordersPeople(SORT_APPLIED, key), false);
