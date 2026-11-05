@@ -34,6 +34,9 @@ import {
   personAssignedShare,
   scopeSummary,
   searchedAreas,
+  parseFilterTerm,
+  fieldLabel,
+  unknownFieldHint,
   SUGGESTION_LIMIT
 } from "./lib/filter.mjs";
 import { blockLabel, labelText, rangeLabel } from "./lib/label.mjs";
@@ -2000,19 +2003,33 @@ function initStackToggle() {
 
 /* --- render -------------------------------------------------------------- */
 
-// The empty result: it names what was typed, says which areas were looked in,
-// and offers a way out. The filter is still on, so the field stays as it is.
+// The empty result: it names what was typed, says what was searched and
+// offers a way out. A typed term names its field; an unrecognised prefix is
+// named back with a hint. The filter is still on, so the field stays as it is.
 function buildEmptyState() {
+  var term = parseFilterTerm(filterQuery);
   var box = el("div", "filter-empty");
   var line = el("div", "filter-empty__line");
   line.appendChild(document.createTextNode("Nothing matches "));
   var typed = el("b");
-  typed.textContent = filterQuery.trim();
-  line.appendChild(typed);
-  line.appendChild(document.createTextNode(" in " + searchedAreas(filterScopes) + "."));
-  box.appendChild(line);
   var hint = el("p", "filter-empty__hint");
-  hint.textContent = "Check the spelling, or switch off a lookup area you do not need.";
+  if (term.kind === "field") {
+    typed.textContent = term.value;
+    line.appendChild(typed);
+    line.appendChild(document.createTextNode(" in " + fieldLabel(term.fields) + "."));
+    hint.textContent = "A typed term searches only the field it names; Look in is not used.";
+  } else if (term.kind === "unknown") {
+    typed.textContent = filterQuery.trim();
+    line.appendChild(typed);
+    line.appendChild(document.createTextNode("."));
+    hint.textContent = unknownFieldHint(term.prefix);
+  } else {
+    typed.textContent = filterQuery.trim();
+    line.appendChild(typed);
+    line.appendChild(document.createTextNode(" in " + searchedAreas(filterScopes) + "."));
+    hint.textContent = "Check the spelling, or switch off a lookup area you do not need.";
+  }
+  box.appendChild(line);
   box.appendChild(hint);
   box.appendChild(button("btn-ghost", "Clear the filter", function () { clearFilter(); }));
   return box;
@@ -2147,8 +2164,16 @@ function scopeSwitches() {
 // clear affordance and each switch's announced state.
 function updateFilterChrome() {
   if (!filterEl) return;
-  filterScopeBtn.textContent = "Look in: " + scopeSummary(filterScopes);
-  filterScopeBtn.setAttribute("aria-label", "Look in - " + scopeSummary(filterScopes));
+  var term = parseFilterTerm(filterInput.value);
+  // A typed term aims at one field, so the plain-term scope is still
+  // described but visibly set aside while one is in the field.
+  var overridden = term.kind === "field" || term.kind === "unknown";
+  var summary = "Look in: " + scopeSummary(filterScopes);
+  filterScopeBtn.textContent = overridden ? summary + " (ignored)" : summary;
+  filterScopeBtn.setAttribute("aria-label", overridden
+    ? "Look in - " + scopeSummary(filterScopes) + ", ignored because a typed term names its own field"
+    : "Look in - " + scopeSummary(filterScopes));
+  filterScopeBtn.classList.toggle("is-overridden", overridden);
   filterClear.hidden = filterInput.value === "";
   scopeSwitches().forEach(function (btn) {
     var on = !!filterScopes[btn.getAttribute("data-scope")];
@@ -2204,7 +2229,7 @@ function updateSuggestions() {
     row.appendChild(n);
     // Keep the input focused so the click lands and the dropdown stays put.
     row.addEventListener("mousedown", function (e) { e.preventDefault(); });
-    row.addEventListener("click", function () { applySuggestion(item.value); });
+    row.addEventListener("click", function () { applySuggestion(item); });
     filterSuggestEl.appendChild(row);
   });
   filterSuggestEl.hidden = false;
@@ -2213,11 +2238,19 @@ function updateSuggestions() {
   highlightSuggestion();
 }
 
-function applySuggestion(value) {
-  filterInput.value = value;
-  filterQuery = value;
-  hideSuggestions();
+function applySuggestion(item) {
+  // A prefix is only a start: keep the caret in the field and offer the
+  // field's own vocabulary. A value completes the term.
+  filterInput.value = item.insert || item.value;
+  filterQuery = filterInput.value;
   updateFilterChrome();
+  if (item.kind === "prefix") {
+    render();
+    filterInput.focus();
+    updateSuggestions();
+    return;
+  }
+  hideSuggestions();
   render();
 }
 
@@ -2272,7 +2305,7 @@ function initFilter() {
       highlightSuggestion();
       e.preventDefault();
     } else if (e.key === "Enter" && suggestionIndex >= 0 && suggestionList[suggestionIndex]) {
-      applySuggestion(suggestionList[suggestionIndex].value);
+      applySuggestion(suggestionList[suggestionIndex]);
       e.preventDefault();
     } else if (e.key === "Escape") {
       if (!filterSuggestEl.hidden) hideSuggestions();

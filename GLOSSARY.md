@@ -74,5 +74,5 @@ To permanently destroy a Person, a Project or an Assignment, with no trash and n
 _Avoid_: remove, purge, destroy, hide
 
 **Filter**:
-The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring anywhere in the People, Projects and Assignments it is set to look in. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
+The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `people: tim` or `project notes: delayed`. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
 _Avoid_: search, find, search bar, query

@@ -10,7 +10,10 @@ import {
   filterIsEmpty,
   personAssignedShare,
   filterSuggestions,
-  countLabel
+  countLabel,
+  parseFilterTerm,
+  fieldLabel,
+  unknownFieldHint
 } from "../public/lib/filter.mjs";
 
 /*
@@ -207,4 +210,188 @@ test("a match count is worded for the thing it counts", () => {
   assert.equal(countLabel(4, "assignment"), "4 assignments");
   assert.equal(countLabel(1, "project"), "1 project");
   assert.equal(countLabel(3, "project"), "3 projects");
+});
+
+/* --- typed terms ---------------------------------------------------------- */
+
+test("a query with no colon is plain text", () => {
+  assert.deepEqual(parseFilterTerm("architect"), { kind: "plain", text: "architect" });
+  assert.deepEqual(parseFilterTerm("  Anna  "), { kind: "plain", text: "Anna" });
+  assert.deepEqual(parseFilterTerm(""), { kind: "plain", text: "" });
+  assert.deepEqual(parseFilterTerm("note"), { kind: "plain", text: "note" });
+});
+
+test("every canonical field and alias names the field it should search", () => {
+  const cases = {
+    "person name: x": ["person.name"],
+    "person names: x": ["person.name"],
+    "person: x": ["person.name"],
+    "people: x": ["person.name"],
+    "name: x": ["person.name", "project.name"],
+    "names: x": ["person.name", "project.name"],
+    "person tag: x": ["person.tags"],
+    "person tags: x": ["person.tags"],
+    "tag: x": ["person.tags", "assignment.tags"],
+    "tags: x": ["person.tags", "assignment.tags"],
+    "person note: x": ["person.note"],
+    "person notes: x": ["person.note"],
+    "note: x": ["person.note", "assignment.note"],
+    "notes: x": ["person.note", "assignment.note"],
+    "project name: x": ["project.name"],
+    "project names: x": ["project.name"],
+    "project: x": ["project.name"],
+    "projects: x": ["project.name"],
+    "project note: x": ["project.notes"],
+    "project notes: x": ["project.notes"],
+    "assignment tag: x": ["assignment.tags"],
+    "assignment tags: x": ["assignment.tags"],
+    "assignment note: x": ["assignment.note"],
+    "assignment notes: x": ["assignment.note"]
+  };
+  Object.keys(cases).forEach((query) => {
+    const term = parseFilterTerm(query);
+    assert.equal(term.kind, "field", query);
+    assert.deepEqual(term.fields, cases[query], query);
+    assert.equal(term.value, "x", query);
+  });
+});
+
+test("the prefix is read case-insensitively and trimmed, runs of spaces collapse", () => {
+  ["PERSON TAG:react", "  person tag:react  ", "person   tag :  react"].forEach((query) => {
+    const term = parseFilterTerm(query);
+    assert.equal(term.kind, "field", query);
+    assert.deepEqual(term.fields, ["person.tags"], query);
+    assert.equal(term.value, "react", query);
+  });
+});
+
+test("the value is everything after the colon, spaces included", () => {
+  const term = parseFilterTerm("project notes:  delayed payment  ");
+  assert.equal(term.kind, "field");
+  assert.deepEqual(term.fields, ["project.notes"]);
+  assert.equal(term.value, "delayed payment");
+});
+
+test("a colon that is not a field prefix stays plain text", () => {
+  // A digit before the colon, a punctured prefix, or nothing after it.
+  assert.equal(parseFilterTerm("3:1").kind, "plain");
+  assert.equal(parseFilterTerm("Q3: budget").kind, "plain");
+  assert.equal(parseFilterTerm("person tag:").kind, "plain");
+  assert.equal(parseFilterTerm("note:   ").kind, "plain");
+  assert.equal(parseFilterTerm("ends with:").kind, "plain");
+});
+
+test("a plausible prefix that names no field is an unknown term", () => {
+  const term = parseFilterTerm("meeting: notes");
+  assert.equal(term.kind, "unknown");
+  assert.equal(term.prefix, "meeting");
+  // It is not quietly read as plain text: it matches nothing and is named.
+  const view = filterPlan(plan(), "meeting: notes", defaultScopes());
+  assert.equal(filterIsEmpty(view), true);
+  assert.equal(unknownFieldHint(term.prefix).indexOf("meeting") !== -1, true);
+  assert.equal(unknownFieldHint("meeting").indexOf("not a field") !== -1, true);
+});
+
+test("a typed term matches only its own field, case-insensitively", () => {
+  const view = (field, value) => filterPlan(plan(), field + ": " + value, defaultScopes());
+  assert.deepEqual(ids(view("person name", "anna").people), ["anna"]);
+  assert.deepEqual(ids(view("person tag", "LEAD").people), ["anna"]);
+  assert.deepEqual(ids(view("person note", "atlas").people), ["anna"]);
+  assert.deepEqual(ids(view("project name", "BOREALIS").projects), ["borealis"]);
+  assert.deepEqual(ids(view("project notes", "phase").projects), ["react"]);
+  assert.deepEqual(ids(view("assignment tag", "design").assignments), ["a-bor-ben"]);
+  assert.deepEqual(ids(view("assignment note", "handover").assignments), ["a-bor-ben"]);
+});
+
+test("the value is a substring of the field, not a whole word", () => {
+  // "migr" sits inside cara's person note and the React assignment's note.
+  assert.deepEqual(ids(filterPlan(plan(), "person note: migr", defaultScopes()).people), ["cara"]);
+  assert.deepEqual(ids(filterPlan(plan(), "assignment note: migr", defaultScopes()).assignments), ["a-react-cara"]);
+});
+
+test("a typed term ignores the Look in scope", () => {
+  const off = scopes(false, false, false);
+  const onAssignments = scopes(false, false, true);
+  // Person tags are searched even though nothing looks there.
+  assert.deepEqual(ids(filterPlan(plan(), "person tag: react", off).people), ["anna"]);
+  assert.deepEqual(ids(filterPlan(plan(), "project name: react", off).projects), ["react"]);
+  // And a matching Project still brings its Assignments even when the scope
+  // would not have searched Projects.
+  assert.deepEqual(ids(filterPlan(plan(), "project name: react", onAssignments).assignments),
+    ["a-react-anna", "a-react-cara"]);
+});
+
+test("a typed term propagates exactly as a plain match does", () => {
+  // A matching Person brings their work, and those Assignments bring the
+  // Projects they sit on.
+  const person = filterPlan(plan(), "people: anna", defaultScopes());
+  assert.deepEqual(ids(person.people), ["anna"]);
+  assert.deepEqual(ids(person.assignments), ["a-react-anna", "a-bor-anna"]);
+  assert.deepEqual(ids(person.projects), ["react", "borealis"]);
+  // A matching Assignment brings its Person's row and its Project.
+  const assignment = filterPlan(plan(), "assignment note: handover", defaultScopes());
+  assert.deepEqual(ids(assignment.people), ["ben"]);
+  assert.deepEqual(ids(assignment.projects), ["borealis"]);
+});
+
+test("the bare aliases span the fields they promise", () => {
+  // tag: both tag kinds, note: person and assignment notes, name: both names.
+  assert.deepEqual(ids(filterPlan(plan(), "tag: react", defaultScopes()).people), ["anna", "cara"]);
+  // Anna matches by Person tag, so all of her work comes with her.
+  assert.deepEqual(ids(filterPlan(plan(), "tag: react", defaultScopes()).assignments),
+    ["a-react-anna", "a-bor-anna", "a-react-cara"]);
+  assert.deepEqual(ids(filterPlan(plan(), "name: react", defaultScopes()).projects), ["react"]);
+  // note: reads person notes and assignment notes, not a project's notes.
+  const note = filterPlan(plan(), "note: atlas", defaultScopes());
+  assert.deepEqual(ids(note.people), ["anna", "ben"]);
+  assert.deepEqual(ids(note.assignments), ["a-react-anna", "a-bor-anna", "a-bor-ben"]);
+  assert.equal(filterIsEmpty(filterPlan(plan(), "note: phase", defaultScopes())), true);
+});
+
+test("a plain query is unchanged by the typed-term rule", () => {
+  const view = filterPlan(plan(), "react", defaultScopes());
+  assert.deepEqual(ids(view.people), ["anna", "cara"]);
+  assert.deepEqual(ids(view.projects), ["react", "borealis"]);
+  assert.deepEqual(ids(view.assignments), ["a-react-anna", "a-bor-anna", "a-react-cara"]);
+  // The scope still governs a plain query.
+  const peopleOnly = filterPlan(plan(), "react", scopes(true, false, false));
+  assert.deepEqual(ids(peopleOnly.people), ["anna", "cara"]);
+  assert.deepEqual(ids(peopleOnly.projects), ["react", "borealis"]);
+});
+
+test("the empty state can name the field a typed term searched", () => {
+  assert.equal(fieldLabel(["person.tags"]), "person tags");
+  assert.equal(fieldLabel(["person.tags", "assignment.tags"]), "person tags or assignment tags");
+  assert.equal(fieldLabel(["person.name", "project.name"]), "person names or project names");
+});
+
+test("the dropdown teaches the field prefixes as a plain query is typed", () => {
+  const found = filterSuggestions(plan(), "per", defaultScopes());
+  const prefixes = found.filter((item) => item.kind === "prefix").map((item) => item.value);
+  assert.deepEqual(prefixes, ["person name:", "person tag:", "person note:"]);
+  prefixes.forEach((value) => {
+    const item = found.find((i) => i.value === value);
+    assert.equal(item.source, "Field");
+    assert.equal(item.insert, value + " ");
+    assert.equal(typeof item.matchLabel, "string");
+  });
+  // Typing a whole alias offers just that prefix.
+  assert.deepEqual(filterSuggestions(plan(), "tag", defaultScopes()).map((item) => item.value), ["tag:"]);
+});
+
+test("a typed term's dropdown offers the names and tags of its field", () => {
+  const found = filterSuggestions(plan(), "person tag: re", defaultScopes());
+  assert.equal(found.length > 0, true);
+  found.forEach((item) => {
+    assert.equal(item.source, "Person tag");
+    assert.equal(item.kind, "value");
+    assert.equal(item.insert, "person tag: " + item.value);
+  });
+  // A prefix with no value yet teaches the whole field, so choosing a value
+  // completes the term.
+  const empty = filterSuggestions(plan(), "project notes:", defaultScopes());
+  assert.equal(empty.some((item) => item.value === "phase two"), true);
+  assert.equal(empty.find((item) => item.value === "phase two").insert, "project notes: phase two");
+  // An unknown prefix offers nothing.
+  assert.equal(filterSuggestions(plan(), "meeting: notes", defaultScopes()).length, 0);
 });
