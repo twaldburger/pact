@@ -102,6 +102,33 @@ test("the store seeds a missing file and reloads it", () => {
   assert.deepEqual(createStore(file).get(), plan);
 });
 
+test("a stored legacy colour name migrates to its slot and is persisted", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const plan = store.get();
+  plan.projects[0].colour = "steel";
+  plan.projects[1].colour = "moss";
+  plan.projects[2].colour = "iris";
+  plan.projects[3].colour = "teal";
+  fs.writeFileSync(file, JSON.stringify(plan, null, 2) + "\n");
+
+  const reloaded = createStore(file).get();
+  assert.deepEqual(reloaded.projects.map((p) => p.colour), [1, 3, 9, 0]);
+  // The migrated slots are written back to the file, not left as names.
+  const filed = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(filed.projects.map((p) => p.colour), [1, 3, 9, 0]);
+});
+
+test("a new Project takes the least-used colour slot among the plan's Projects", () => {
+  const store = createStore(tempFile());
+  // The seed uses slots 1, 3, 9 and 0, so the first free slot is 2.
+  const first = store.createProject({ name: "Summit", notes: "" });
+  assert.equal(first.colour, 2);
+  // A colour named by the caller is honoured, and a legacy name migrates.
+  assert.equal(store.createProject({ name: "Vale", colour: "plum", notes: "" }).colour, 5);
+  assert.equal(store.createProject({ name: "Ridge", colour: 4, notes: "" }).colour, 4);
+});
+
 test("a corrupt file refuses to load rather than being overwritten", () => {
   const file = tempFile();
   fs.writeFileSync(file, "{ not json");
@@ -183,7 +210,7 @@ test("archiving a project keeps its assignments", () => {
   });
   const renamed = store.updateProject(project.id, { name: "Summit Two", colour: "umber" });
   assert.equal(renamed.name, "Summit Two");
-  assert.equal(renamed.colour, "umber");
+  assert.equal(renamed.colour, 7);
 
   assert.deepEqual(store.archiveProject(project.id), { archived: project.id });
   const after = store.get();

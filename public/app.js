@@ -25,7 +25,15 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, rangeControl } from "./lib/options.mjs";
+import { optionsItems, rangeControl, paletteItems } from "./lib/options.mjs";
+import {
+  PALETTES,
+  PALETTE_DEFAULT,
+  SLOT_COUNT,
+  isPalette,
+  labelInkFor,
+  leastUsedSlot
+} from "./lib/palette.mjs";
 import {
   defaultScopes,
   filterPlan,
@@ -96,7 +104,10 @@ var MONTHS = ["January", "February", "March", "April", "May", "June", "July",
 var MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
   "Sep", "Oct", "Nov", "Dec"];
 var DAY_MS = 86400000;
-var INKS = ["steel", "moss", "teal", "iris", "plum", "umber"];
+// The active Colour palette: a view setting for the session only, exactly like
+// Zoom and Row height. It is never written to the plan and opens at Paired
+// every visit. A Project's colour is a slot into whichever palette is active.
+var activePalette = PALETTE_DEFAULT;
 
 var data = null;
 var rangeStart = null;
@@ -161,6 +172,15 @@ function fmtRange(a, b) {
 }
 function clamp(n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; }
 function r4(n) { return Math.round(n * 10000) / 10000; }
+
+/* --- project colour ------------------------------------------------------ */
+
+// The hex fill for a slot in the active palette. A malformed slot falls back to
+// the palette's first fill rather than drawing nothing.
+function activeColour(slot) {
+  var palette = PALETTES[activePalette] || PALETTES[PALETTE_DEFAULT];
+  return Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT ? palette[slot] : palette[0];
+}
 
 /* --- data index ---------------------------------------------------------- */
 
@@ -462,6 +482,9 @@ function blockFor(group, s) {
     (archived ? ", archived" : "") +
     ". Enter for details.");
   b.style.setProperty("--block-ink", "var(--proj-" + a.project.colour + ")");
+  // The label ink is chosen per fill, so a pastel takes the deep ink and a dark
+  // member takes white. It is a property of the drawn fill, not of the slot.
+  b.style.setProperty("--block-label", labelInkFor(activeColour(a.project.colour)));
   set(b, s.start, s.end - s.start + 1);
   b.style.setProperty("--blk-bottom", yPx(s.offset) + "px");
   b.style.setProperty("--blk-height", (yPx(s.offset + group.h) - yPx(s.offset)) + "px");
@@ -1726,23 +1749,26 @@ function openProjectPanel(project, trigger) {
   var nameInput = input(editing ? project.name : "");
   form.appendChild(formRow("Name", nameInput));
 
-  var colour = editing ? project.colour : INKS[0];
+  var colour = editing ? project.colour : leastUsedSlot(data.projects);
   var swatches = el("span", "swatches");
-  var buttons = INKS.map(function (ink) {
+  var buttons = [];
+  for (var i = 0; i < SLOT_COUNT; i++) {
     var sw = el("button", "swatch");
     sw.type = "button";
-    sw.style.setProperty("--pick", "var(--proj-" + ink + ")");
-    sw.setAttribute("aria-label", "Colour " + ink);
-    sw.setAttribute("aria-pressed", ink === colour ? "true" : "false");
+    sw.style.setProperty("--pick", "var(--proj-" + i + ")");
+    sw.setAttribute("aria-label", "Colour " + (i + 1));
+    sw.setAttribute("aria-pressed", i === colour ? "true" : "false");
+    sw.dataset.slot = String(i);
     sw.addEventListener("click", function () {
-      colour = ink;
+      var slot = Number(this.dataset.slot);
+      colour = slot;
       buttons.forEach(function (b) {
-        b.setAttribute("aria-pressed", b === sw ? "true" : "false");
+        b.setAttribute("aria-pressed", Number(b.dataset.slot) === slot ? "true" : "false");
       });
     });
     swatches.appendChild(sw);
-    return sw;
-  });
+    buttons.push(sw);
+  }
   form.appendChild(formRow("Colour", swatches));
 
   var notes = textarea(editing ? project.notes : "");
@@ -2597,6 +2623,7 @@ var optionsEl = null;
 var optionsBtn = null;
 var optionsMenu = null;
 var optionButtons = {};
+var paletteButtons = {};
 var rangeStartInput = null;
 var rangeEndInput = null;
 var rangeError = null;
@@ -2646,6 +2673,32 @@ function updateOptionsMenu() {
   });
 }
 
+// The Colour palette is a single choice between two schemes. Both items are
+// checkable; exactly one is checked, and the tick and aria-checked state it.
+function updatePaletteMenu() {
+  paletteItems(activePalette).forEach(function (item) {
+    var btn = paletteButtons[item.key];
+    if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+  });
+}
+
+// Switching palette is a view change, not a plan change: it sets the root's
+// data-palette (which swaps the --proj-* fills) and redraws. Nothing is sent to
+// the server, so the plan file is untouched.
+function setPalette(name) {
+  if (!isPalette(name) || name === activePalette) return;
+  activePalette = name;
+  root.setAttribute("data-palette", name);
+  updatePaletteMenu();
+  render();
+}
+
+// The palette opens at Paired every visit and lives only for the session.
+function initPalette() {
+  activePalette = PALETTE_DEFAULT;
+  root.setAttribute("data-palette", activePalette);
+}
+
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
   optionsItems(false).forEach(function (item) {
@@ -2665,7 +2718,34 @@ function buildOptionsMenu() {
     optionButtons[item.key] = btn;
     optionsMenu.appendChild(btn);
   });
+  optionsMenu.appendChild(buildPaletteControl());
   optionsMenu.appendChild(buildRangeControl());
+}
+
+/* The Colour palette group: the two schemes, each a checkable item with the
+ * menu's own tick. Choosing one recolours every chip and block at once. */
+function buildPaletteControl() {
+  var wrap = el("div", "options__range");
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", "Colour palette");
+  var heading = el("span", "options__range-label");
+  heading.textContent = "Colour palette";
+  wrap.appendChild(heading);
+  paletteItems(activePalette).forEach(function (item) {
+    var btn = el("button", "options__item");
+    btn.type = "button";
+    btn.id = "palette-" + item.key;
+    btn.setAttribute("role", "menuitemradio");
+    btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+    var tick = el("span", "options__tick");
+    tick.setAttribute("aria-hidden", "true");
+    btn.appendChild(tick);
+    btn.appendChild(document.createTextNode(item.label));
+    btn.addEventListener("click", function () { setPalette(item.key); });
+    paletteButtons[item.key] = btn;
+    wrap.appendChild(btn);
+  });
+  return wrap;
 }
 
 /* The plan period control: one explicit start date and one explicit end date,
@@ -2802,6 +2882,7 @@ function boot() {
     initRowHeight();
     initStackToggle();
     initSortControls();
+    initPalette();
     render();
     initZoom();
     bindChrome();

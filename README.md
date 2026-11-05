@@ -109,7 +109,10 @@ Availability line is hatched in the signal colour, and the row header's
 
 People and Projects are edited in place. A Person carries a name, an
 Availability in steps of 10%, any number of Person tags and an optional note; a
-Project carries a name, one of the six project inks and notes. An Assignment's
+Project carries a name, a colour slot into the active ten-colour palette, and
+notes. The `Colour palette` group in the Options menu switches between the two
+ColorBrewer schemes, Paired and Set3, for the session only; label ink on a
+block is chosen per fill so it stays legible either way. An Assignment's
 popover edits its Allocation, Assignment tags and note, and offers archiving;
 its dates are set by dragging, never typed. A Person's Person tags are suggested
 from other People and an Assignment's tags from that Project's other

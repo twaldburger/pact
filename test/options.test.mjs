@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, rangeControl } from "../public/lib/options.mjs";
+import { optionsItems, rangeControl, paletteItems } from "../public/lib/options.mjs";
 
 test("the options menu holds Show archived", () => {
   const items = optionsItems(false);
@@ -24,4 +24,15 @@ test("the period control reads back the stored period", () => {
   assert.equal(item.end, "2027-10-31");
   // With no plan loaded the fields are simply empty, not undefined.
   assert.deepEqual(rangeControl(null), { key: "range", label: "Plan period", start: "", end: "" });
+});
+
+test("the Colour palette group is Paired and Set3, exactly one checked", () => {
+  const items = paletteItems("paired");
+  assert.deepEqual(items.map((item) => item.key), ["paired", "set3"]);
+  assert.deepEqual(items.map((item) => item.label), ["Paired", "Set3"]);
+  assert.deepEqual(items.map((item) => item.checked), [true, false]);
+  assert.deepEqual(paletteItems("set3").map((item) => item.checked), [false, true]);
+  // A missing or unknown palette opens at Paired rather than checking nothing.
+  assert.deepEqual(paletteItems(undefined).map((item) => item.checked), [true, false]);
+  assert.deepEqual(paletteItems("vibrant").map((item) => item.checked), [true, false]);
 });
