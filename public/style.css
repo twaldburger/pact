@@ -105,7 +105,18 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* The page scrolls on the root, so the vertical scrollbar is laid out against
+   it and takes width from every viewport-sized box. The top bar is one of
+   those: its right-aligned instruments sit at the viewport edge, so without a
+   reserved gutter they shift left by the scrollbar's width the moment the grid
+   grows past the window, and shift back when a filter shortens it. Reserving
+   the gutter keeps that width - and the bar with it - constant whether or not
+   a scrollbar is drawn. The timeline's own horizontal scrollbar adds height
+   below its rows rather than moving them, so it needs no equivalent. */
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
 
 body {
   margin: 0;
