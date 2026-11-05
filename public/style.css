@@ -1342,6 +1342,17 @@ h1, h2, h3, p { margin: 0; }
   outline-offset: 2px;
 }
 
+/* Hovering an Assignment previews that selection without drawing it: the
+   coloured fill lifts one quiet step, the same spirit as the --mix-hover tint
+   on a row header, read against a project ink instead of the paper. The
+   selected block keeps the only outline - this touches no outline at all, so
+   the selected, moving and archived treatments are left as they are. The same
+   emphasis answers :focus-visible, so the keyboard target reads too. */
+.blk:hover,
+.blk:focus-visible {
+  background: color-mix(in srgb, var(--on-project) 20%, var(--block-ink));
+}
+
 /* The Assignment being moved keeps its place but reads as lifted while its
    ghost shows where it would land. */
 .blk.is-moving { opacity: 0.4; }
@@ -1876,7 +1887,10 @@ down to the last row and no further. */
 }
 
 /* Motion - quiet reflow when the scale changes, nothing under a drag. */
-.blk,
+.blk {
+  transition: left var(--dur) var(--ease), width var(--dur) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
 .weekend,
 .ax,
 .marker {
