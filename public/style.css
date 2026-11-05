@@ -356,6 +356,18 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink);
 }
 
+/* A typed term names its own field, so the plain-term scope is set aside:
+   still readable and still openable, but visibly not what is being searched. */
+.filter__scope.is-overridden {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.filter__scope.is-overridden:hover,
+.filter__scope.is-overridden[aria-expanded="true"] {
+  color: var(--ink);
+}
+
 /* The bar can scroll on its own when the window is narrow, so a popover is
    fixed to the viewport and placed against its trigger by the script rather
    than by an absolutely-positioned ancestor: that keeps it out of the
