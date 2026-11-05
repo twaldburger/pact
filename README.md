@@ -71,12 +71,13 @@ than the order they were added. A small control in each column's header, beside
 its title, offers that list's keys and an ascending/descending toggle. Projects
 sort by name, first assignment start, last assignment end or total assigned FTE
 days - the sum over a project's assignments of `share/100 * inclusive days` -
-and People by name, availability, load at the Marker or earliest assignment.
-The default is the order they were added, and ties break by name. Ordering is
+and People by name, free capacity at the Marker, load at the Marker or
+earliest assignment. The default is the order they were added, and ties break
+by name. Ordering is
 display order only: it is session-only like Zoom and Row height, it never
 changes the plan file, and the Filter only changes which rows are shown. A load
-order reads the Marker's date when it is applied and when the Marker is
-released, never while the Marker is dragged.
+or free-capacity order reads the Marker's date when it is applied and when the
+Marker is released, never while the Marker is dragged.
 
 The plan's date range is an explicit period the owner sets, not one the app
 infers. The Options menu in the top bar carries the plan period control: a
