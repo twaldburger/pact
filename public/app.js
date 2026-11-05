@@ -58,6 +58,19 @@ import {
   rowGeometry,
   isRowHeaderTight
 } from "./lib/timeline.mjs";
+import {
+  ASCENDING,
+  DESCENDING,
+  sortKeys,
+  findSortKey,
+  selectSortKey,
+  toggleSortDirection,
+  directionLabel,
+  sortProjects,
+  sortPeople,
+  markerReordersPeople,
+  MARKER_RELEASE
+} from "./lib/sort.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -102,6 +115,10 @@ var showArchived = false;
 // like Zoom and Row height. It is never written to the plan and resets on
 // reload.
 var stackCollapsed = STACK_COLLAPSED_DEFAULT;
+// The sort: session-only, like Zoom and Row height. null is the plan's own
+// order; { key, direction } is a chosen key. The two lists sort
+// independently.
+var sortState = { projects: null, people: null };
 // The Filter: session-only text and scope, never written to the plan. The
 // whole plan stays in `assignments` for the row-header figures; `grid*` hold
 // what the filter leaves to draw.
@@ -180,8 +197,12 @@ function indexData() {
   // and person objects, so the filtered view is a subset of `assignments`
   // rather than a second mapping.
   var view = filterPlan(data, filterQuery, filterScopes);
-  gridPeople = view.people;
-  gridProjects = view.projects;
+  var markerISO = iso(addDays(rangeStart, clamp(markerIndex, 0, DAYS - 1)));
+  // Ordering is display order only: the filtered view is put in the session's
+  // sort order, never written back to the plan. With no key chosen each list
+  // keeps the plan's own order.
+  gridPeople = sortPeople(view.people, sortState.people, data, markerISO);
+  gridProjects = sortProjects(view.projects, sortState.projects, data);
   var shown = {};
   view.assignments.forEach(function (a) { shown[a.id] = true; });
   gridAssignments = assignments.filter(function (a) { return shown[a.id]; });
@@ -643,6 +664,11 @@ function onMarkerUp(e) {
   draggingMarker = false;
   root.classList.remove("is-dragging");
   try { if (marker.hasPointerCapture(e.pointerId)) marker.releasePointerCapture(e.pointerId); } catch (err) { /* ignored */ }
+  // The Marker has been let go, so a load order is refreshed now - not during
+  // the drag, which would move the rows under the pointer.
+  if (markerReordersPeople(MARKER_RELEASE, sortState.people && sortState.people.key)) {
+    reorderPeopleRows();
+  }
 }
 function onMarkerKey(e) {
   var step = 0;
@@ -663,6 +689,36 @@ function setMarker(i) {
   marker.setAttribute("aria-valuenow", String(markerIndex));
   marker.setAttribute("aria-valuetext", fmtDayLong(date));
   updateFigures();
+  // A load order reads the Marker, but a drag must not recompute it: the rows
+  // stay put under the pointer and are refreshed on release (onMarkerUp). A
+  // keyboard move is not a drag, so it refreshes here.
+  if (!draggingMarker &&
+      markerReordersPeople(MARKER_RELEASE, sortState.people && sortState.people.key)) {
+    reorderPeopleRows();
+  }
+}
+
+// Re-sort the People rows in place for the Marker's current date, moving the
+// drawn nodes rather than rebuilding the grid, so a release does not flicker
+// or lose the page's position. Only a load order ever reaches this.
+function reorderPeopleRows() {
+  if (!sortState.people) return;
+  var ordered = sortPeople(gridPeople, sortState.people, data,
+    iso(addDays(rangeStart, clamp(markerIndex, 0, DAYS - 1))));
+  var same = ordered.length === gridPeople.length &&
+    ordered.every(function (person, i) { return person.id === gridPeople[i].id; });
+  if (same) return;
+  gridPeople = ordered;
+  var heads = tl.querySelector(".tl__heads");
+  var body = tl.querySelector(".tl__body");
+  if (!heads || !body) return;
+  ordered.forEach(function (person) {
+    var head = heads.querySelector('[data-person="' + person.id + '"]');
+    var row = body.querySelector('[data-person="' + person.id + '"]');
+    if (head) heads.appendChild(head);
+    if (row) body.appendChild(row);
+  });
+  drawBlockLabels();
 }
 
 function totalAt(person, dayIdx) {
@@ -2064,6 +2120,9 @@ function render() {
     openPersonPanel(null, e.currentTarget);
   });
   corner.appendChild(addPerson);
+  // The People column's sort control sits beside its title, beside the add
+  // control, and is re-attached here because the corner is rebuilt each draw.
+  if (peopleSortButton) corner.appendChild(peopleSortButton);
 
   var rows = drawRows();
 
@@ -2239,6 +2298,7 @@ function setScope(key, on) {
 
 function openScopes(open) {
   if (open && optionsMenu && !optionsMenu.hidden) openOptions(false);
+  if (open) closeSortMenus();
   filterScopesEl.hidden = !open;
   filterScopeBtn.setAttribute("aria-expanded", open ? "true" : "false");
   if (open) {
@@ -2309,6 +2369,194 @@ function initFilter() {
   updateFilterChrome();
 }
 
+/* --- sort controls ------------------------------------------------------- */
+
+// The sort control in each column's own header: a quiet icon button in the
+// same style and hit area as the add control, opening a small menu of that
+// list's keys and an ascending/descending toggle. It is a real button with an
+// accessible name and state, and the menu is keyboard-operable. The two lists
+// sort independently and the state is session-only.
+
+var peopleSortButton = null;
+var sortControls = {};
+var SORT_LABELS = { projects: "projects", people: "people" };
+
+var SORT_ICON =
+  '<svg class="sort__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M5 12.5v-9M5 3.5 2.5 6M5 3.5 7.5 6"/>' +
+  '<path d="M11 3.5v9M11 12.5 8.5 10M11 12.5 13.5 10"/></svg>';
+
+function sortMenuItems(menu) {
+  return Array.prototype.slice.call(menu.querySelectorAll(".sort__item:not([disabled])"));
+}
+
+function closeSortMenus() {
+  Object.keys(sortControls).forEach(function (kind) {
+    var c = sortControls[kind];
+    if (!c) return;
+    c.menu.hidden = true;
+    c.button.setAttribute("aria-expanded", "false");
+  });
+}
+
+function placeSortMenu(kind) {
+  var c = sortControls[kind];
+  if (!c || c.menu.hidden) return;
+  placePopover(c.menu, c.button, "left");
+}
+
+function openSortMenu(kind, open, focusFirst) {
+  var c = sortControls[kind];
+  if (!c) return;
+  if (open) {
+    closeSortMenus();
+    if (optionsMenu && !optionsMenu.hidden) openOptions(false);
+    if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
+    updateSortControl(kind);
+  }
+  c.menu.hidden = !open;
+  c.button.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) {
+    placeSortMenu(kind);
+    if (focusFirst) {
+      var first = sortMenuItems(c.menu)[0];
+      if (first) first.focus();
+    }
+  }
+}
+
+// The menu's own state: which key is in force, and the direction toggle. The
+// trigger's accessible name carries the same thing, so the control states what
+// it is doing rather than only that it exists.
+function updateSortControl(kind) {
+  var c = sortControls[kind];
+  if (!c) return;
+  var state = sortState[kind];
+  var label = SORT_LABELS[kind];
+  var name = "Sort " + label;
+  if (state && findSortKey(kind, state.key)) {
+    name += ", by " + findSortKey(kind, state.key).label + " " +
+      directionLabel(state.direction).toLowerCase();
+  }
+  c.button.setAttribute("aria-label", name);
+  c.button.setAttribute("title", name);
+  sortKeys(kind).forEach(function (def) {
+    c.keyButtons[def.key].setAttribute("aria-checked",
+      state && state.key === def.key ? "true" : "false");
+  });
+  var descending = !!state && state.direction === DESCENDING;
+  c.dirBtn.setAttribute("aria-checked", descending ? "true" : "false");
+  c.dirBtn.disabled = !state;
+  c.dirBtn.setAttribute("aria-disabled", state ? "false" : "true");
+  c.dirLabel.textContent = directionLabel(state ? state.direction : ASCENDING);
+}
+
+function applySort(kind, state) {
+  sortState[kind] = state;
+  updateSortControl(kind);
+  closeSortMenus();
+  render();
+  var c = sortControls[kind];
+  if (c) c.button.focus();
+}
+
+function buildSortControl(kind) {
+  var label = SORT_LABELS[kind];
+  var button = el("button", "add sort__btn");
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "true");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", "Sort " + label);
+  button.setAttribute("title", "Sort " + label);
+  button.innerHTML = SORT_ICON;
+  button.addEventListener("click", function () {
+    openSortMenu(kind, sortControls[kind].menu.hidden, false);
+  });
+  button.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { openSortMenu(kind, true, true); e.preventDefault(); }
+  });
+
+  var menu = el("div", "sort__menu");
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", "Sort " + label);
+  menu.hidden = true;
+
+  var keyButtons = {};
+  sortKeys(kind).forEach(function (def) {
+    var item = el("button", "sort__item");
+    item.type = "button";
+    item.setAttribute("role", "menuitemradio");
+    item.setAttribute("aria-checked", "false");
+    var tick = el("span", "sort__tick");
+    tick.setAttribute("aria-hidden", "true");
+    item.appendChild(tick);
+    item.appendChild(document.createTextNode(def.label));
+    item.addEventListener("click", function () {
+      applySort(kind, selectSortKey(kind, sortState[kind], def.key));
+    });
+    keyButtons[def.key] = item;
+    menu.appendChild(item);
+  });
+
+  var sep = el("div", "sort__sep");
+  sep.setAttribute("role", "separator");
+  menu.appendChild(sep);
+
+  var dirBtn = el("button", "sort__item sort__item--direction");
+  dirBtn.type = "button";
+  dirBtn.setAttribute("role", "menuitemcheckbox");
+  dirBtn.setAttribute("aria-checked", "false");
+  var dirGlyph = el("span", "sort__dir");
+  dirGlyph.setAttribute("aria-hidden", "true");
+  dirGlyph.textContent = "\u2195";
+  var dirLabel = el("span", "sort__dir-label");
+  dirBtn.appendChild(dirGlyph);
+  dirBtn.appendChild(dirLabel);
+  dirBtn.addEventListener("click", function () {
+    if (!sortState[kind]) return;
+    applySort(kind, toggleSortDirection(sortState[kind]));
+  });
+  menu.appendChild(dirBtn);
+
+  // The menu is fixed to the viewport and placed against its trigger, so the
+  // Stack rail's own scroller can never clip it. It lives on the body rather
+  // than in the rebuilt corner, so a redraw does not lose it.
+  document.body.appendChild(menu);
+  sortControls[kind] = {
+    button: button, menu: menu, keyButtons: keyButtons, dirBtn: dirBtn, dirLabel: dirLabel
+  };
+
+  menu.addEventListener("keydown", function (e) {
+    var items = sortMenuItems(menu);
+    if (!items.length) return;
+    var i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { items[(i + 1) % items.length].focus(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { items[(i - 1 + items.length) % items.length].focus(); e.preventDefault(); }
+    else if (e.key === "Home") { items[0].focus(); e.preventDefault(); }
+    else if (e.key === "End") { items[items.length - 1].focus(); e.preventDefault(); }
+    else if (e.key === "Escape") { closeSortMenus(); button.focus(); e.preventDefault(); }
+  });
+
+  updateSortControl(kind);
+  return button;
+}
+
+function initSortControls() {
+  var stackHead = document.querySelector(".stack__head");
+  if (stackHead) stackHead.appendChild(buildSortControl("projects"));
+  peopleSortButton = buildSortControl("people");
+  var corner = tl.querySelector(".tl__corner");
+  if (corner) corner.appendChild(peopleSortButton);
+  document.addEventListener("pointerdown", function (e) {
+    var inside = Object.keys(sortControls).some(function (kind) {
+      var c = sortControls[kind];
+      return c && (c.menu.contains(e.target) || c.button.contains(e.target));
+    });
+    if (!inside) closeSortMenus();
+  });
+}
+
 /* --- options menu -------------------------------------------------------- */
 
 var optionsEl = null;
@@ -2329,7 +2577,8 @@ function placePopover(node, trigger, align) {
   var vh = document.documentElement.clientHeight;
   var w = node.offsetWidth;
   var h = node.offsetHeight;
-  var left = align === "center" ? r.left + r.width / 2 - w / 2 : r.right - w;
+  var left = align === "center" ? r.left + r.width / 2 - w / 2
+    : align === "left" ? r.left : r.right - w;
   left = Math.min(Math.max(8, left), Math.max(8, vw - w - 8));
   var top = r.bottom + 8;
   if (top + h > vh - 8) top = Math.max(8, r.top - h - 8);
@@ -2341,6 +2590,7 @@ function repositionPopovers() {
   if (optionsMenu && !optionsMenu.hidden) placePopover(optionsMenu, optionsBtn, "right");
   if (filterScopesEl && !filterScopesEl.hidden) placePopover(filterScopesEl, filterScopeBtn, "right");
   if (filterSuggestEl && !filterSuggestEl.hidden) placePopover(filterSuggestEl, filterInput, "center");
+  Object.keys(sortControls).forEach(function (kind) { placeSortMenu(kind); });
 }
 
 // What each item does. The list and its checks come from optionsItems; adding
@@ -2475,6 +2725,7 @@ function applyRange() {
 function openOptions(open) {
   if (open) {
     hideSuggestions();
+    closeSortMenus();
     if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
     updateOptionsMenu();
     updateRangeControl();
@@ -2516,6 +2767,7 @@ function boot() {
     markerIndex = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
     initRowHeight();
     initStackToggle();
+    initSortControls();
     render();
     initZoom();
     bindChrome();
