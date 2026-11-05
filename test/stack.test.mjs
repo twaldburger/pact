@@ -8,6 +8,8 @@ import {
   stackToggleExpanded,
   hasFilterQuery,
   stackMatchCount,
+  fteDaysFigure,
+  fteDaysLabel,
   stackViewState
 } from "../public/lib/stack.mjs";
 
@@ -69,4 +71,25 @@ test("the collapsed state is never serialized into the plan", () => {
   ["range", "people", "projects", "assignments"].forEach((key) => {
     assert.equal(Object.prototype.hasOwnProperty.call(stackViewState(true), key), false);
   });
+});
+
+test("the FTE-days figure rounds to whole days", () => {
+  assert.equal(fteDaysFigure(43), "43 d");
+  assert.equal(fteDaysFigure(42.4), "42 d");
+  assert.equal(fteDaysFigure(42.5), "43 d");
+  // A project with no assignments, and a malformed or negative measure, all
+  // read as no assigned work rather than as a broken figure.
+  assert.equal(fteDaysFigure(0), "0 d");
+  assert.equal(fteDaysFigure(0.4), "0 d");
+  [undefined, null, NaN, "nope", -3].forEach((value) => {
+    assert.equal(fteDaysFigure(value), "0 d");
+  });
+});
+
+test("the FTE-days label spells out the unit and rounds the same way", () => {
+  assert.equal(fteDaysLabel(43), "43 FTE-days");
+  assert.equal(fteDaysLabel(42.5), "43 FTE-days");
+  assert.equal(fteDaysLabel(42.4), "42 FTE-days");
+  assert.equal(fteDaysLabel(0), "0 FTE-days");
+  assert.equal(fteDaysLabel(undefined), "0 FTE-days");
 });

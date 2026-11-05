@@ -60,6 +60,26 @@ export function stackMatchCount(collapsed, query, matchingProjects) {
 }
 
 /*
+ * The Stack row's trailing figure: a Project's total assigned FTE-days from
+ * the whole plan (the measure sort.mjs computes), rounded to whole days. A
+ * missing, malformed or negative total reads as no assigned work rather than
+ * as a negative or NaN figure. The visible text is compact, the spelled-out
+ * form names the unit for the tooltip and the accessible name.
+ */
+function wholeDays(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
+export function fteDaysFigure(value) {
+  return wholeDays(value) + " d";
+}
+
+export function fteDaysLabel(value) {
+  return wholeDays(value) + " FTE-days";
+}
+
+/*
  * The session's view state, as one object beside the plan's own. It holds the
  * collapsed flag and nothing else, so toggling the Stack changes only this and
  * can never add a field to a saved plan.

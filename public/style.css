@@ -907,11 +907,15 @@ h1, h2, h3, p { margin: 0; }
   font-weight: 500;
 }
 
-.stack__note {
+/* The trailing figure: a Project's whole-plan FTE-days, right-aligned where
+   the note glyph used to sit. It stays on one line and never shrinks, so the
+   name wraps before the figure does. */
+.stack__fte {
   flex: 0 0 auto;
-  width: 0.875rem;
-  height: 0.875rem;
+  font-size: var(--fs-axis);
   color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .stack__hint {

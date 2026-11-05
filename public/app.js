@@ -44,7 +44,9 @@ import {
   STACK_COLLAPSED_DEFAULT,
   stackToggleLabel,
   stackToggleExpanded,
-  stackMatchCount
+  stackMatchCount,
+  fteDaysFigure,
+  fteDaysLabel
 } from "./lib/stack.mjs";
 import {
   DROP_DAYS,
@@ -71,6 +73,7 @@ import {
   directionLabel,
   sortProjects,
   sortPeople,
+  projectMeasures,
   markerReordersPeople,
   MARKER_RELEASE
 } from "./lib/sort.mjs";
@@ -750,14 +753,8 @@ function updateFigures() {
 
 /* --- drawing: stack rail ------------------------------------------------- */
 
-var NOTE_ICON =
-  '<svg class="stack__note" viewBox="0 0 16 16" aria-hidden="true">' +
-  '<path d="M3.5 2.5h6l3 3v8h-9z" fill="none" stroke="currentColor" ' +
-  'stroke-width="1.2" stroke-linejoin="round"/>' +
-  '<path d="M5.5 8h5M5.5 10.5h5" stroke="currentColor" stroke-width="1.2" ' +
-  'stroke-linecap="round"/></svg>';
-
 function drawStack() {
+  var measures = projectMeasures(data);
   gridProjects.forEach(function (project) {
     var row = el("li", "stack__row" + (project.archived ? " is-archived" : ""));
 
@@ -770,12 +767,14 @@ function drawStack() {
     name.textContent = project.name;
     item.appendChild(chip);
     item.appendChild(name);
-    if (project.notes) {
-      var mark = el("span", "stack__notemark");
-      mark.setAttribute("title", "Has a note");
-      mark.innerHTML = NOTE_ICON;
-      item.appendChild(mark);
-    }
+    // The figure is the Project's whole-plan FTE-days, never the filtered
+    // view: the rail describes the plan, not the current filter.
+    var fte = measures[project.id] ? measures[project.id].fteDays : 0;
+    var days = el("span", "stack__fte");
+    days.textContent = fteDaysFigure(fte);
+    days.setAttribute("title", fteDaysLabel(fte));
+    days.setAttribute("aria-label", fteDaysLabel(fte));
+    item.appendChild(days);
     item.addEventListener("click", function () {
       if (Date.now() - lastDragAt < 300) return;
       openProjectPanel(project, item);
