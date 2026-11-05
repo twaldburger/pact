@@ -25,15 +25,6 @@
   --rule-strong: #B9C4C0;
   --off: #EDF0EE;
   --signal: #9E2B25;
-  --on-project: #FFFFFF;   /* label ink over a project block */
-
-  /* Project inks - identity, all at equal weight, never red ------------------ */
-  --proj-steel: #2C6E8F;
-  --proj-moss: #3F7A55;
-  --proj-teal: #2F7C7B;
-  --proj-iris: #7A5CA8;
-  --proj-plum: #8A4C7A;
-  --proj-umber: #86622E;
 
   /* Type --------------------------------------------------------------------- */
   --font: Archivo, "Helvetica Neue", Arial, system-ui, sans-serif;
@@ -102,6 +93,22 @@
 
 [data-zoom="week"]  { --day-w: 1rem; }        /* 16px */
 [data-zoom="month"] { --day-w: 0.3125rem; --axis-h: var(--band-month-h); } /* 5px, month band only */
+
+/* Project fills - the active palette's ten colours as slots 0..9. A Project's
+   colour is a slot into whichever palette is active, so swapping data-palette
+   on the root recolours every Stack chip and Timeline block together. The
+   palettes themselves live in lib/palette.mjs; these are their renderings. */
+[data-palette="paired"] {
+  --proj-0: #a6cee3; --proj-1: #1f78b4; --proj-2: #b2df8a; --proj-3: #33a02c;
+  --proj-4: #fb9a99; --proj-5: #e31a1c; --proj-6: #fdbf6f; --proj-7: #ff7f00;
+  --proj-8: #cab2d6; --proj-9: #6a3d9a;
+}
+
+[data-palette="set3"] {
+  --proj-0: #8dd3c7; --proj-1: #ffffb3; --proj-2: #bebada; --proj-3: #fb8072;
+  --proj-4: #80b1d3; --proj-5: #fdb462; --proj-6: #b3de69; --proj-7: #fccde5;
+  --proj-8: #d9d9d9; --proj-9: #bc80bd;
+}
 
 * { box-sizing: border-box; }
 
@@ -1327,7 +1334,7 @@ h1, h2, h3, p { margin: 0; }
 .blk__edge--start { left: 0; }
 .blk__edge--end { right: 0; }
 .blk__edge:hover {
-  background: color-mix(in srgb, var(--on-project) 35%, transparent);
+  background: color-mix(in srgb, var(--block-label) 35%, transparent);
 }
 
 .blk.is-selected {
@@ -1382,7 +1389,7 @@ h1, h2, h3, p { margin: 0; }
   bottom: 0.125rem;
   font-size: var(--fs-axis);
   font-weight: 500;
-  color: var(--on-project);
+  color: var(--block-label);
   white-space: nowrap;
   pointer-events: none;
 }

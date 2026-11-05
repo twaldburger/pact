@@ -5,11 +5,31 @@
  * read exactly the same source. Sharing the app's two-zone bar, this is the
  * only place a future infrequent control has to be added.
  */
+import {
+  PALETTE_DEFAULT,
+  PALETTE_LABELS,
+  PALETTE_NAMES,
+  isPalette
+} from "./palette.mjs";
 
 export function optionsItems(showArchived) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived }
   ];
+}
+
+/*
+ * The Colour palette group: the two schemes as checkable items, exactly one of
+ * them checked. Session-only, like Zoom and Row height - the plan never learns
+ * which is active, so it takes no part in optionsItems' saved-state list.
+ */
+export function paletteItems(active) {
+  const name = isPalette(active) ? active : PALETTE_DEFAULT;
+  return PALETTE_NAMES.map((key) => ({
+    key: key,
+    label: PALETTE_LABELS[key],
+    checked: key === name
+  }));
 }
 
 /*
