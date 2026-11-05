@@ -1344,13 +1344,16 @@ h1, h2, h3, p { margin: 0; }
 
 /* Hovering an Assignment previews that selection without drawing it: the
    coloured fill lifts one quiet step, the same spirit as the --mix-hover tint
-   on a row header, read against a project ink instead of the paper. The
-   selected block keeps the only outline - this touches no outline at all, so
-   the selected, moving and archived treatments are left as they are. The same
+   on a row header, read against a project ink instead of the paper. The mix
+   uses --block-label, the ink that reads on that fill, so a dark fill lifts
+   toward white and a light fill deepens toward the deep ink; both stay
+   legible. The selected block keeps the only outline - this touches no
+   outline at all, so the selected, moving and archived treatments are left as
+   they are. The same
    emphasis answers :focus-visible, so the keyboard target reads too. */
 .blk:hover,
 .blk:focus-visible {
-  background: color-mix(in srgb, var(--on-project) 20%, var(--block-ink));
+  background: color-mix(in srgb, var(--block-label) 12%, var(--block-ink));
 }
 
 /* The Assignment being moved keeps its place but reads as lifted while its
