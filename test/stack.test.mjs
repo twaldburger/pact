@@ -29,8 +29,8 @@ test("the rail is drawn when open and gone when collapsed", () => {
 });
 
 test("the toggle names the action each state would take", () => {
-  assert.equal(stackToggleLabel(false), "Collapse the Stack");
-  assert.equal(stackToggleLabel(true), "Expand the Stack");
+  assert.equal(stackToggleLabel(false), "Collapse Projects");
+  assert.equal(stackToggleLabel(true), "Expand Projects");
 });
 
 test("the toggle's aria-expanded is true exactly while the Stack is open", () => {

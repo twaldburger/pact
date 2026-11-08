@@ -31,7 +31,7 @@ export function stackRailVisible(collapsed) {
 // The toggle's accessible name states the action the press will take, never
 // the state it is in.
 export function stackToggleLabel(collapsed) {
-  return isStackCollapsed(collapsed) ? "Expand the Stack" : "Collapse the Stack";
+  return isStackCollapsed(collapsed) ? "Expand Projects" : "Collapse Projects";
 }
 
 // aria-expanded is true exactly while the Stack is open.

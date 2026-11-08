@@ -2151,7 +2151,7 @@ function render() {
 
   var corner = el("div", "tl__corner");
   var cornerLabel = el("span", "tl__corner-label");
-  cornerLabel.textContent = "Person";
+  cornerLabel.textContent = "People";
   corner.appendChild(cornerLabel);
   // The add action sits in the column header it belongs to. Its visible label
   // is the plus, so the accessible name carries the meaning.
