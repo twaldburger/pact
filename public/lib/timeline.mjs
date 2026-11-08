@@ -35,11 +35,11 @@ export function isZoom(level) {
   return ZOOM_LEVELS.indexOf(level) !== -1;
 }
 
-// Below this the two lines of a row header cannot both fit, so the header
-// collapses to its name and figure on one line. It is measured in the
-// interface's own pixels, not the row's, so it has to be read alongside the
-// text scale: a reader at twice the root font size needs twice the row before
-// the two lines fit again.
+// Below this a row is short enough that the row header's own details tighten:
+// the load figure steps down a size, and the archived row's controls shrink to
+// fit. It is measured in the interface's own pixels, not the row's, so it has
+// to be read alongside the text scale: a reader at twice the root font size
+// needs twice the row before it reads as roomy again.
 export const ROW_HEADER_TIGHT = 48;
 
 // Snap any value to the nearest whole step and keep it inside the range, so a

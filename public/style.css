@@ -149,6 +149,9 @@ h1, h2, h3, p { margin: 0; }
 /* Topbar -------------------------------------------------------------------- */
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   gap: var(--sp-4);
@@ -765,7 +768,8 @@ h1, h2, h3, p { margin: 0; }
   display: grid;
   grid-template-columns: minmax(0, var(--rail-w)) minmax(0, 1fr);
   align-items: stretch;
-  min-height: calc(100vh - var(--bar-h));
+  height: calc(100vh - var(--bar-h));
+  overflow: hidden;
   transition: grid-template-columns var(--dur) var(--ease);
 }
 
@@ -851,6 +855,7 @@ h1, h2, h3, p { margin: 0; }
   grid-row: 1;
   min-width: 0;
   overflow-x: hidden;
+  overflow-y: auto;
   background: var(--panel);
   border-right: 1px solid var(--rule);
   padding-bottom: var(--sp-5);
@@ -1014,12 +1019,13 @@ h1, h2, h3, p { margin: 0; }
 
 /* Timeline scroller and grid ------------------------------------------------ */
 
+/* The timeline scrolls inside the board rather than the page, so the top bar
+   stays put and the axis below it can stay pinned while the rows move. */
 .scroller {
   grid-column: 2;
   grid-row: 1;
   position: relative;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
   background: var(--canvas);
 }
 
@@ -1052,13 +1058,22 @@ h1, h2, h3, p { margin: 0; }
   background: var(--off);
 }
 
+/* At month zoom a weekend is a sliver of a column, so the full-height fill is
+   more calendar noise than cue. It retreats to one hairline at the weekend's
+   left edge; day and week keep the fill. */
+[data-zoom="month"] .weekend {
+  background: transparent;
+  border-left: 1px solid var(--rule);
+}
+
 /* Axis ---------------------------------------------------------------------- */
 
 .tl__axis {
   grid-column: 2;
   grid-row: 1;
-  position: relative;
-  z-index: 0;
+  position: sticky;
+  top: 0;
+  z-index: 24;
   display: flex;
   flex-direction: column;
 }
@@ -1135,7 +1150,8 @@ h1, h2, h3, p { margin: 0; }
   grid-row: 1;
   position: sticky;
   left: 0;
-  z-index: 22;
+  top: 0;
+  z-index: 26;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -1158,9 +1174,10 @@ h1, h2, h3, p { margin: 0; }
 
 .rowhead {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--base);
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
   width: 100%;
   height: var(--row-h);
   padding: 0 var(--sp-4);
@@ -1178,50 +1195,35 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* A Person's name and a Project's name are the same role in the two columns,
-   set the same way. */
+   set the same way. The name keeps the left, truncating with an ellipsis
+   rather than pushing the figure. */
 .rowhead__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
   line-height: 1.2;
 }
 
-/* On its own line, left-aligned under the name so the two read as one column,
-   and never against a right edge. */
+/* The load figure keeps the right edge, on the name's own baseline and a
+   weight above it, so the twenty figures read as one comparable column. */
 .rowhead__fig {
+  flex: 0 0 auto;
   font-size: var(--fs-data);
-  font-weight: var(--fw-ui);
+  font-weight: var(--fw-title);
   line-height: 1.2;
   color: var(--ink-soft);
 }
 
 .rowhead__fig.is-over {
   color: var(--signal);
-  font-weight: var(--fw-title);
 }
 
-/* Below the tight threshold the two lines cannot both fit, so the header
-   becomes one line: the name, truncating with an ellipsis rather than
-   overflowing, and the figure beside it in the smaller type. */
-:root.is-tight-rows .rowhead {
-  flex-direction: row;
-  align-items: baseline;
-  justify-content: flex-start;
-  gap: var(--sp-3);
-}
-
-/* The name takes only the room it needs, so the figure stays beside it rather
-   than being pushed against the right edge of the column; it gives room up
-   when the name is long enough to need all of it. */
-:root.is-tight-rows .rowhead__name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* In a short row the figure steps down a size so the one line still breathes. */
 :root.is-tight-rows .rowhead__fig {
-  flex: 0 0 auto;
   font-size: var(--fs-axis);
 }
 
@@ -1323,7 +1325,9 @@ h1, h2, h3, p { margin: 0; }
   border: 0;
   border-radius: var(--radius);
   background: var(--block-ink);
-  overflow: hidden;
+  /* The block's own label stays inside it; the paper label above it needs to
+     escape the block's box, so this cannot clip. */
+  overflow: visible;
   text-align: left;
   cursor: pointer;
   user-select: none;
@@ -1415,6 +1419,21 @@ h1, h2, h3, p { margin: 0; }
   font-size: var(--fs-axis);
   font-weight: 500;
   color: var(--block-label);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A block too short for its own label carries the name on the paper just above
+   it, in the interface ink rather than the project fill: the fills are map
+   colours, and most fail contrast as text on paper. */
+.blk__outer {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  font-size: var(--fs-axis);
+  font-weight: var(--fw-ui);
+  line-height: 1;
+  color: var(--ink);
   white-space: nowrap;
   pointer-events: none;
 }

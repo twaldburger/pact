@@ -517,6 +517,10 @@ function blockFor(group, s) {
   tag.dataset.share = String(a.share);
   tag.textContent = labelText(a.project.name, a.share);
   b.appendChild(tag);
+  // A block too short to hold its own label carries the name on the paper just
+  // above it instead. The text and its visibility are set by drawBlockLabels,
+  // which is the only place that knows the room a block actually has.
+  b.appendChild(el("span", "blk__outer"));
   if (archived) {
     // The same marked treatment the archived lists use, so an archived
     // Assignment reads as history rather than as live work.
@@ -596,6 +600,27 @@ function readLabelMetrics(tag, block) {
   };
 }
 
+// The band one paper label needs above the block it names, in the label's own
+// pixels.
+var OUTER_LABEL_BAND = 11;
+
+// Whether the paper label a block would draw is already occupied by another
+// block in the same row. The band is the label's own footprint - a name drawn
+// above a thin block is wider than the block - so a name that would run across
+// a neighbour is skipped rather than drawn over it.
+function outerBandOccupied(r, room) {
+  var bandTop = r.top - OUTER_LABEL_BAND;
+  var bandRight = r.left + r.textWidth;
+  for (var i = 0; i < room.length; i++) {
+    var o = room[i];
+    if (o.row !== r.row) continue;
+    if (o.top >= r.top || o.top + o.boxHeight <= bandTop) continue;
+    if (o.left >= bandRight || o.left + o.boxWidth <= r.left) continue;
+    return true;
+  }
+  return false;
+}
+
 function drawBlockLabels() {
   var blocks = tl.querySelectorAll(".blk");
   if (!blocks.length) return;
@@ -608,12 +633,20 @@ function drawBlockLabels() {
   for (var i = 0; i < blocks.length; i++) {
     var tag = blocks[i].querySelector(".blk__tag");
     if (!tag) continue;
+    var title = tag.dataset.title || "";
     room.push({
       tag: tag,
-      title: tag.dataset.title || "",
+      outer: blocks[i].querySelector(".blk__outer"),
+      row: blocks[i].parentElement,
+      title: title,
       share: tag.dataset.share,
       width: blocks[i].clientWidth - 2 * metrics.inset,
-      height: blocks[i].clientHeight - metrics.bottom
+      height: blocks[i].clientHeight - metrics.bottom,
+      top: blocks[i].offsetTop,
+      left: blocks[i].offsetLeft,
+      boxWidth: blocks[i].offsetWidth,
+      boxHeight: blocks[i].offsetHeight,
+      textWidth: measure(title)
     });
   }
 
@@ -630,6 +663,14 @@ function drawBlockLabels() {
     // next pass can still measure the tag when the block grows again.
     r.tag.textContent = text || labelText(r.title, r.share);
     r.tag.style.visibility = text ? "" : "hidden";
+    // Only a block with no room of its own can name itself on the paper above.
+    if (text) {
+      r.outer.textContent = "";
+      r.outer.style.visibility = "hidden";
+      return;
+    }
+    r.outer.textContent = r.title;
+    r.outer.style.visibility = outerBandOccupied(r, room) ? "hidden" : "";
   });
 }
 

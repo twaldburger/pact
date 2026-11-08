@@ -109,7 +109,7 @@ test("the drawable height and the step are derived from the row height", () => {
   });
 });
 
-test("the row header keeps two lines until it falls below 48px", () => {
+test("a short row tightens its header below 48px", () => {
   assert.equal(ROW_HEADER_TIGHT, 48);
   assert.equal(isRowHeaderTight(32), true);
   assert.equal(isRowHeaderTight(40), true);
