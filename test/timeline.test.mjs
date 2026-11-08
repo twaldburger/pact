@@ -47,6 +47,16 @@ test("a drop at the far end still creates its five days inside the Timeline", ()
   assert.deepEqual(dropRange(97, 100, DROP_DAYS), { start: 95, end: 99 });
 });
 
+test("a copied span longer than the days remaining is pulled left to fit", () => {
+  // A paste reuses the Stack drop's rule with the copy's own length: a ten-day
+  // copy whose pointer is near the end slides left as one piece, still ten
+  // days long, rather than being silently shortened.
+  assert.deepEqual(dropRange(95, 100, 10), { start: 90, end: 99 });
+  assert.deepEqual(dropRange(99, 100, 10), { start: 90, end: 99 });
+  const range = dropRange(93, 100, 10);
+  assert.equal(range.end - range.start + 1, 10);
+});
+
 test("a moved Assignment keeps its length and stays inside the Timeline", () => {
   assert.deepEqual(moveRange(10, 14, 3, 100), { start: 13, end: 17 });
   assert.deepEqual(moveRange(10, 14, -20, 100), { start: 0, end: 4 });

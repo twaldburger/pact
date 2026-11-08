@@ -147,6 +147,18 @@ var gridPeople = [];
 var gridProjects = [];
 var gridAssignments = [];
 
+// The Session clipboard: the shape of an Assignment copied with Ctrl+C, held
+// in memory only. The system clipboard is never read or written, so copying
+// text elsewhere keeps working and the held copy dies with a page reload.
+var clipboardAssignment = null;
+// Where the pointer last was, so a keypress can act on the day and row under
+// it without a click.
+var clipboardPointer = null;
+// The tinted target and the ghost the pointer drives while the clipboard holds
+// something.
+var pastePreview = null;
+var pasteDropRow = null;
+
 /* --- dates (UTC, so day arithmetic never crosses a DST edge) ------------- */
 
 function udate(iso) {
@@ -975,6 +987,118 @@ function rowInfoAt(x, y) {
   return { el: hit.el, personId: id };
 }
 
+/* --- interaction: copy and paste an Assignment --------------------------- */
+
+// Whether the keyboard is in a text field, where the browser's own copy and
+// paste must be left alone. A button - an Assignment block or a row header -
+// is not text, so the keys still work when focus is on one.
+function isTextEditing() {
+  var node = document.activeElement;
+  if (!node) return false;
+  var tag = node.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return !!node.isContentEditable;
+}
+
+// Remember the Assignment the pointer is over: its Project, Share, tags, note
+// and its length in whole days. An archived Assignment is history and cannot
+// be copied, so it is left alone.
+function copyAssignmentAt(x, y) {
+  var node = document.elementFromPoint(x, y);
+  var block = node && node.closest ? node.closest("[data-assignment]") : null;
+  if (!block) return false;
+  var id = block.getAttribute("data-assignment");
+  var a = null;
+  assignments.forEach(function (item) { if (item.id === id) a = item; });
+  if (!a || (a.raw && a.raw.archived)) return false;
+  clipboardAssignment = {
+    projectId: a.project.id,
+    share: a.share,
+    tags: (a.raw && a.raw.tags ? a.raw.tags : []).slice(),
+    note: (a.raw && a.raw.note) || "",
+    days: a.endIdx - a.startIdx + 1
+  };
+  return true;
+}
+
+function clearPastePreview() {
+  if (pasteDropRow) { pasteDropRow.classList.remove("is-drop"); pasteDropRow = null; }
+  if (pastePreview) { pastePreview.node.remove(); pastePreview = null; }
+}
+
+// While the clipboard holds something, the row under the pointer carries the
+// drag's own is-drop tint and a ghost of the copy follows the pointer, at the
+// day the paste would land on. It stands down over an archived Person, whose
+// paste is refused.
+function updatePastePreview() {
+  if (!clipboardAssignment || !clipboardPointer) { clearPastePreview(); return; }
+  var row = rowInfoAt(clipboardPointer.x, clipboardPointer.y);
+  if (!row) { clearPastePreview(); return; }
+  if (row.el !== pasteDropRow) {
+    if (pasteDropRow) pasteDropRow.classList.remove("is-drop");
+    pasteDropRow = row.el;
+    pasteDropRow.classList.add("is-drop");
+  }
+  var project = projectById[clipboardAssignment.projectId];
+  if (!project || dropRefusal(personById[row.personId], project)) {
+    if (pastePreview) { pastePreview.node.remove(); pastePreview = null; }
+    return;
+  }
+  if (!pastePreview) pastePreview = makeExtentPreview();
+  placePreview(pastePreview, row.el,
+    dropRange(indexFromClientX(clipboardPointer.x), DAYS, clipboardAssignment.days),
+    project.colour, clipboardAssignment.share / 100, 0);
+}
+
+// A paste is an ordinary new Assignment: the same create path, carrying the
+// copied Project, Share, tags and note, starting on the pointer's day with the
+// copy's own length in the pointer's row.
+function pasteAssignment(row, dayIdx) {
+  var copy = clipboardAssignment;
+  var project = projectById[copy.projectId];
+  if (!project) return;
+  var refusal = dropRefusal(personById[row.personId], project);
+  if (refusal) {
+    showError(new Error(refusal));
+    render();
+    return;
+  }
+  var range = dropRange(dayIdx, DAYS, copy.days);
+  postAssignment({
+    projectId: copy.projectId,
+    personId: row.personId,
+    start: iso(addDays(rangeStart, range.start)),
+    end: iso(addDays(rangeStart, range.end)),
+    share: copy.share,
+    tags: copy.tags.slice(),
+    note: copy.note
+  });
+}
+
+function onClipboardPointerMove(ev) {
+  clipboardPointer = { x: ev.clientX, y: ev.clientY };
+  if (clipboardAssignment) updatePastePreview();
+}
+
+function onClipboardKey(e) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+  var key = e.key ? e.key.toLowerCase() : "";
+  if (key === "c") {
+    if (isTextEditing() || !clipboardPointer) return;
+    if (copyAssignmentAt(clipboardPointer.x, clipboardPointer.y)) {
+      e.preventDefault();
+      updatePastePreview();
+    }
+  } else if (key === "v") {
+    if (isTextEditing() || !clipboardAssignment || !clipboardPointer) return;
+    var row = rowInfoAt(clipboardPointer.x, clipboardPointer.y);
+    if (!row) return;
+    e.preventDefault();
+    clearPastePreview();
+    pasteAssignment(row, indexFromClientX(clipboardPointer.x));
+  }
+}
+
 /* --- interaction: drag an assignment's edges ----------------------------- */
 
 function beginEdgeDrag(a, edge, block, e) {
@@ -1259,22 +1383,11 @@ function refresh() {
   });
 }
 
-function createAssignment(project, personId, dayIdx) {
-  // The extent the preview drew is the extent that lands, because both come
-  // from the same rule in ./lib/timeline.mjs.
-  var range = dropRange(dayIdx, DAYS, DROP_DAYS);
-  var start = addDays(rangeStart, range.start);
-  var end = addDays(rangeStart, range.end);
+// One POST for a new Assignment - a Stack drop or a paste - then the usual
+// refresh and focus, so the two paths behave identically.
+function postAssignment(payload) {
   var created = null;
-  api("POST", "/api/assignments", {
-    projectId: project.id,
-    personId: personId,
-    start: iso(start),
-    end: iso(end),
-    share: 100,
-    tags: [],
-    note: ""
-  }).then(function (assignment) {
+  return api("POST", "/api/assignments", payload).then(function (assignment) {
     created = assignment;
     return refresh();
   }).then(function () {
@@ -1282,6 +1395,21 @@ function createAssignment(project, personId, dayIdx) {
   }).catch(function (err) {
     showError(err);
     render();
+  });
+}
+
+function createAssignment(project, personId, dayIdx) {
+  // The extent the preview drew is the extent that lands, because both come
+  // from the same rule in ./lib/timeline.mjs.
+  var range = dropRange(dayIdx, DAYS, DROP_DAYS);
+  postAssignment({
+    projectId: project.id,
+    personId: personId,
+    start: iso(addDays(rangeStart, range.start)),
+    end: iso(addDays(rangeStart, range.end)),
+    share: 100,
+    tags: [],
+    note: ""
   });
 }
 
@@ -2220,6 +2348,9 @@ function render() {
   scroller.scrollLeft = scrollLeft;
   drawBlockLabels();
   syncStackToggle();
+  // A held copy outlives the redraw, so the tint and the ghost are put back
+  // over the freshly drawn rows.
+  updatePastePreview();
 }
 
 /* --- wiring -------------------------------------------------------------- */
@@ -2241,6 +2372,11 @@ function bindChrome() {
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && panel) closePanel(true);
   });
+  // Copy and paste the Assignment under the pointer, added here beside Escape.
+  // They stand down inside text fields, so the browser's own keys are
+  // untouched there.
+  document.addEventListener("keydown", onClipboardKey);
+  window.addEventListener("pointermove", onClipboardPointerMove);
   scroller.addEventListener("scroll", function () {
     if (panel) closePanel(false);
   });
