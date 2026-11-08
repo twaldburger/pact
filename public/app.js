@@ -47,7 +47,7 @@ import {
   unknownFieldHint,
   SUGGESTION_LIMIT
 } from "./lib/filter.mjs";
-import { blockLabel, labelText, rangeLabel } from "./lib/label.mjs";
+import { blockLabel, hoverText, labelText, rangeLabel } from "./lib/label.mjs";
 import {
   STACK_COLLAPSED_DEFAULT,
   stackToggleLabel,
@@ -493,8 +493,9 @@ function blockFor(group, s) {
   b.setAttribute("data-assignment", a.id);
   // The full label on hover, whatever the grid can show: a block too narrow or
   // too short for its own label still names its Project and share under the
-  // pointer. Native chrome, so there is no tooltip to position or draw.
-  b.title = labelText(a.project.name, a.share);
+  // pointer, with the Assignment's note on a second line when it has one.
+  // Native chrome, so there is no tooltip to position or draw.
+  b.title = hoverText(a.project.name, a.share, a.raw && a.raw.note);
   b.setAttribute("aria-label", a.project.name + " on " + a.person.name + ", " +
     a.share + "% from " + fmtRange(a.start, a.end) +
     (archived ? ", archived" : "") +
