@@ -1064,6 +1064,11 @@ function pasteAssignment(row, dayIdx) {
     return;
   }
   var range = dropRange(dayIdx, DAYS, copy.days);
+  // A paste uses the copy up: with the copied Assignment gone, a later pointer
+  // move draws neither the ghost nor the row tint, and another paste needs a
+  // fresh Ctrl+C. A refusal above returns first, so the copy stays retryable.
+  clipboardAssignment = null;
+  clearPastePreview();
   postAssignment({
     projectId: copy.projectId,
     personId: row.personId,
