@@ -491,6 +491,10 @@ function blockFor(group, s) {
   b.setAttribute("role", "button");
   b.setAttribute("tabindex", "0");
   b.setAttribute("data-assignment", a.id);
+  // The full label on hover, whatever the grid can show: a block too narrow or
+  // too short for its own label still names its Project and share under the
+  // pointer. Native chrome, so there is no tooltip to position or draw.
+  b.title = labelText(a.project.name, a.share);
   b.setAttribute("aria-label", a.project.name + " on " + a.person.name + ", " +
     a.share + "% from " + fmtRange(a.start, a.end) +
     (archived ? ", archived" : "") +
@@ -685,9 +689,33 @@ function drawBlockLabels() {
       r.outer.style.visibility = "hidden";
       return;
     }
-    r.outer.textContent = r.title;
+    // The paper label carries the whole `Name · NN%` while the band above the
+    // block has room for it, and the bare name while only that has. The widths
+    // and the strings are the inside label's own, so the two agree; the cut the
+    // inside label falls back to is not offered on the paper, where a fragment
+    // would read as a different name. `minChars` at the title's own length is
+    // what turns that fallback off.
+    var full = labelText(r.title, r.share);
+    var fullWidth = measure(full);
+    r.textWidth = fullWidth;
+    var outerWidth = 0;
+    if (!outerBandOccupied(r, room)) {
+      outerWidth = fullWidth;
+    } else {
+      r.textWidth = measure(r.title);
+      if (!outerBandOccupied(r, room)) outerWidth = r.textWidth;
+    }
+    r.outer.textContent = blockLabel({
+      width: outerWidth,
+      height: OUTER_LABEL_BAND,
+      textHeight: OUTER_LABEL_BAND,
+      minChars: r.title.length,
+      title: r.title,
+      share: r.share,
+      measure: measure
+    });
     r.outer.style.visibility =
-      outerBandOccupied(r, room) || outerLabelClipped(r, gridLeft) ? "hidden" : "";
+      outerWidth && !outerLabelClipped(r, gridLeft) ? "" : "hidden";
   });
 }
 

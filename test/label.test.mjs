@@ -83,6 +83,35 @@ test("the width and the height are both needed, at any zoom", () => {
   assert.equal(blockLabel({ ...room, width: 300, height: 4 }), "");
 });
 
+// The paper label above a block is one line of the same type, and its room is
+// the band above the block rather than the block's own box. The whole label is
+// preferred, then the bare name, then nothing; the cut the inside label falls
+// back to is not offered, which is what `minChars` at the title's own length
+// turns off.
+const paper = {
+  height: 11,
+  textHeight: 11,
+  title: TITLE,
+  share: SHARE,
+  minChars: TITLE.length,
+  measure: measure
+};
+
+test("a paper label whose band fits the whole label draws the name and the share", () => {
+  assert.equal(blockLabel({ ...paper, width: widthOf(FULL.length) }), FULL);
+});
+
+test("a paper label whose band fits only the name draws the bare name", () => {
+  assert.equal(blockLabel({ ...paper, width: widthOf(FULL.length) - 1 }), TITLE);
+  assert.equal(blockLabel({ ...paper, width: widthOf(TITLE.length) }), TITLE);
+});
+
+test("a paper label whose band fits neither draws nothing, never a cut", () => {
+  assert.equal(blockLabel({ ...paper, width: widthOf(TITLE.length) - 1 }), "");
+  assert.equal(blockLabel({ ...paper, width: 0 }), "");
+  assert.ok(!blockLabel({ ...paper, width: widthOf(TITLE.length) - 1 }).includes(ELLIPSIS));
+});
+
 test("the range label names both years when they differ", () => {
   assert.equal(rangeLabel("2026-09-01", "2027-10-31"), "Sep 2026 - Oct 2027");
 });
