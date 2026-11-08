@@ -85,6 +85,7 @@ import {
   markerReordersPeople,
   MARKER_RELEASE
 } from "./lib/sort.mjs";
+import { saveStatusWord, NOT_SAVED } from "./lib/save-status.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -92,6 +93,7 @@ var scroller = document.getElementById("scroller");
 var stackList = document.getElementById("stack-list");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
+var saveStatusEl = document.getElementById("save-status");
 var boardEl = document.getElementById("board");
 var stackToggle = document.getElementById("rail-toggle");
 var stackChevron = document.querySelector(".rail-toggle__path");
@@ -1197,6 +1199,9 @@ function api(method, url, body) {
     options.headers["content-type"] = "application/json";
     options.body = JSON.stringify(body);
   }
+  // Every non-GET is a write, and the status reports the writes in flight.
+  var write = method !== "GET";
+  if (write) beginWrite();
   return fetch(url, options).catch(function () {
     throw new Error("PACT could not reach its server - is it still running?");
   }).then(function (res) {
@@ -1204,7 +1209,36 @@ function api(method, url, body) {
       if (!res.ok) throw new Error(payload && payload.error ? payload.error : "the server refused the change");
       return payload;
     });
+  }).then(function (payload) {
+    if (write) endWrite(false);
+    return payload;
+  }, function (err) {
+    if (write) endWrite(true);
+    throw err;
   });
+}
+
+var writesInFlight = 0;
+var lastWriteFailed = false;
+
+function beginWrite() {
+  writesInFlight += 1;
+  syncSaveStatus();
+}
+
+// The most recent write's fate replaces the last one's: a success clears a
+// failure, and a failure keeps Not saved on screen until a write lands.
+function endWrite(failed) {
+  writesInFlight -= 1;
+  lastWriteFailed = failed;
+  syncSaveStatus();
+}
+
+function syncSaveStatus() {
+  if (!saveStatusEl) return;
+  var word = saveStatusWord(writesInFlight, lastWriteFailed);
+  saveStatusEl.textContent = word;
+  saveStatusEl.classList.toggle("is-failed", word === NOT_SAVED);
 }
 
 function planUrl() {
@@ -2126,6 +2160,7 @@ function render() {
   stackList.innerHTML = "";
   indexData();
   contextEl.textContent = rangeLabel(data.range.start, data.range.end);
+  syncSaveStatus();
   updateTodayControl();
 
   if (filterQuery.trim() !== "" && filterIsEmpty({
