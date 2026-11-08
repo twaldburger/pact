@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   blockLabel,
+  hoverText,
   labelText,
   rangeLabel,
   ELLIPSIS,
@@ -110,6 +111,36 @@ test("a paper label whose band fits neither draws nothing, never a cut", () => {
   assert.equal(blockLabel({ ...paper, width: widthOf(TITLE.length) - 1 }), "");
   assert.equal(blockLabel({ ...paper, width: 0 }), "");
   assert.ok(!blockLabel({ ...paper, width: widthOf(TITLE.length) - 1 }).includes(ELLIPSIS));
+});
+
+// The native title on hover: the label, then the Assignment's note on a second
+// line whenever there is one. Only the hover text carries the note; the drawn
+// labels above and inside the block are untouched.
+test("a block's hover text is its label and its note on a second line", () => {
+  assert.equal(hoverText(TITLE, SHARE, "Ships with Lumen"),
+    FULL + "\nShips with Lumen");
+});
+
+test("a note is written as stored, so its own spacing survives", () => {
+  assert.equal(hoverText(TITLE, SHARE, "  Ships\nwith Lumen  "),
+    FULL + "\n  Ships\nwith Lumen  ");
+});
+
+test("a block with no note hovers as the label alone", () => {
+  assert.equal(hoverText(TITLE, SHARE, ""), FULL);
+  assert.equal(hoverText(TITLE, SHARE, undefined), FULL);
+  assert.equal(hoverText(TITLE, SHARE, null), FULL);
+});
+
+test("a whitespace-only note adds no second line", () => {
+  assert.equal(hoverText(TITLE, SHARE, "   "), FULL);
+  assert.equal(hoverText(TITLE, SHARE, "\n\t"), FULL);
+});
+
+test("the hover text does not change what the block draws", () => {
+  // The same label, whether or not a note rides beneath it on hover.
+  assert.equal(hoverText(TITLE, SHARE, "Ships with Lumen").split("\n")[0],
+    blockLabel(room));
 });
 
 test("the range label names both years when they differ", () => {

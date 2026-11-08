@@ -50,6 +50,17 @@ export function labelText(title, share) {
 }
 
 /*
+ * The block's native title: the label, and beneath it the Assignment's note
+ * when it has one. A newline is a second line in the native tooltip that
+ * renders it. The note is written as stored - the panel's own field - but a
+ * note with nothing in it, or only whitespace, adds no line at all.
+ */
+export function hoverText(title, share, note) {
+  const text = note == null ? "" : String(note);
+  return text.trim() ? labelText(title, share) + "\n" + text : labelText(title, share);
+}
+
+/*
  * What a block draws, given the room its label has and a `measure(text)` of
  * the drawn width of a string:
  *
