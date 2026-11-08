@@ -5,7 +5,7 @@ People Allocation & Capacity Tracker: a local plan of who works on what, for how
 ## Language
 
 **Person**:
-Someone whose time the plan schedules, identified by a name and carrying an Availability, any number of Person tags, and an optional note.
+Someone whose time the plan schedules, identified by a name and carrying an Availability, any number of Person tags, and an optional note. The individual; the Timeline's row-header column that holds them is headed People.
 _Avoid_: resource, user, employee, staff member
 
 **Availability**:
@@ -45,8 +45,8 @@ One Project placed on one Person for a continuous date range at an Allocation - 
 _Avoid_: booking, block, slot, shift, work
 
 **Stack**:
-The list of Projects available to drag onto the Timeline; it holds no dates of its own.
-_Avoid_: backlog, pool, project list
+The list of Projects available to drag onto the Timeline; it holds no dates of its own. The interface labels this rail Projects.
+_Avoid_: backlog, pool
 
 **Timeline**:
 The horizontal axis of the plan - a date range drawn at a chosen Zoom, with one row per Person.
