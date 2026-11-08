@@ -1174,10 +1174,9 @@ h1, h2, h3, p { margin: 0; }
 
 .rowhead {
   display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--base);
   width: 100%;
   height: var(--row-h);
   padding: 0 var(--sp-4);
@@ -1195,23 +1194,17 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* A Person's name and a Project's name are the same role in the two columns,
-   set the same way. The name keeps the left, truncating with an ellipsis
-   rather than pushing the figure. */
+   set the same way. */
 .rowhead__name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
   line-height: 1.2;
 }
 
-/* The load figure keeps the right edge, on the name's own baseline and a
-   weight above it, so the twenty figures read as one comparable column. */
+/* On its own line, left-aligned under the name so the two read as one column,
+   and never against a right edge. The heavier weight lets the twenty figures
+   read as one comparable column. */
 .rowhead__fig {
-  flex: 0 0 auto;
   font-size: var(--fs-data);
   font-weight: var(--fw-title);
   line-height: 1.2;
@@ -1222,8 +1215,29 @@ h1, h2, h3, p { margin: 0; }
   color: var(--signal);
 }
 
-/* In a short row the figure steps down a size so the one line still breathes. */
+/* Below the tight threshold the two lines cannot both fit, so the header
+   becomes one line: the name, truncating with an ellipsis rather than
+   overflowing, and the figure beside it in the smaller type. */
+:root.is-tight-rows .rowhead {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: var(--sp-3);
+}
+
+/* The name takes only the room it needs, so the figure stays beside it rather
+   than being pushed against the right edge of the column; it gives room up
+   when the name is long enough to need all of it. */
+:root.is-tight-rows .rowhead__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :root.is-tight-rows .rowhead__fig {
+  flex: 0 0 auto;
   font-size: var(--fs-axis);
 }
 
