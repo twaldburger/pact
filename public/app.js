@@ -621,11 +621,23 @@ function outerBandOccupied(r, room) {
   return false;
 }
 
+// The paper label is anchored at the block's left edge and runs right, so the
+// only edge the sticky Person column can swallow is that left one. A label
+// that would start behind the column is not drawn at all: the sliver that
+// shows is a nonsense tail of a name the reader cannot see in full. The grid's
+// visible left edge is the column's right edge while the timeline is scrolled,
+// and the grid's own edge when it is not.
+function outerLabelClipped(r, gridLeft) {
+  return r.viewportLeft < gridLeft;
+}
+
 function drawBlockLabels() {
   var blocks = tl.querySelectorAll(".blk");
   if (!blocks.length) return;
   var metrics = readLabelMetrics(blocks[0].querySelector(".blk__tag"), blocks[0]);
   var measure = labelMeasurer(metrics.font);
+  var heads = tl.querySelector(".tl__heads");
+  var gridLeft = heads ? heads.getBoundingClientRect().right : 0;
 
   // Read every block's box before writing any label, so the whole pass turns
   // on one layout rather than one per block.
@@ -644,6 +656,10 @@ function drawBlockLabels() {
       height: blocks[i].clientHeight - metrics.bottom,
       top: blocks[i].offsetTop,
       left: blocks[i].offsetLeft,
+      // The block's left edge in the viewport, the same space as the grid's
+      // own left edge below. Captured here, with the other boxes, before any
+      // label is written.
+      viewportLeft: blocks[i].getBoundingClientRect().left,
       boxWidth: blocks[i].offsetWidth,
       boxHeight: blocks[i].offsetHeight,
       textWidth: measure(title)
@@ -670,7 +686,8 @@ function drawBlockLabels() {
       return;
     }
     r.outer.textContent = r.title;
-    r.outer.style.visibility = outerBandOccupied(r, room) ? "hidden" : "";
+    r.outer.style.visibility =
+      outerBandOccupied(r, room) || outerLabelClipped(r, gridLeft) ? "hidden" : "";
   });
 }
 
@@ -2423,8 +2440,12 @@ function bindChrome() {
   // untouched there.
   document.addEventListener("keydown", onClipboardKey);
   window.addEventListener("pointermove", onClipboardPointerMove);
+  // A sideways scroll moves the grid's visible left edge, and with it which
+  // paper labels the sticky column would cover, so the labels are re-decided
+  // as the timeline scrolls.
   scroller.addEventListener("scroll", function () {
     if (panel) closePanel(false);
+    queueBlockLabels();
   });
 
   // Everything a label's room is decided from: the window, a scale change
