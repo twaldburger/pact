@@ -122,6 +122,9 @@ var assignments = [];
 var markerIndex = 0;
 var marker = null;
 var markerDate = null;
+// The sticky axis band the date chip is anchored to, so it stays in the
+// header while the rows scroll under it.
+var axisEl = null;
 // The row height and the geometry derived from it. A view setting for the
 // session only: it is never written to the plan and resets on reload.
 var rowHeight = ROW_HEIGHT_DEFAULT;
@@ -332,6 +335,10 @@ function weeks() {
 function drawAxis() {
   var axis = el("div", "tl__axis");
   axis.setAttribute("aria-hidden", "true");
+  // A press in the sticky header places the Marker at that day and lets the
+  // press carry on as a drag, the same way a press on the Marker line does.
+  axis.addEventListener("pointerdown", onAxisDown);
+  axisEl = axis;
 
   var monthBand = el("div", "axis__band axis__months");
   months().forEach(function (m) {
@@ -743,8 +750,12 @@ function drawMarker() {
   marker.setAttribute("aria-valuemax", String(DAYS - 1));
   marker.appendChild(el("span", "marker__hit"));
   marker.appendChild(el("span", "marker__grip"));
+  // The chip belongs to the sticky header, not the scrolling marker, so it
+  // stays in view; setMarker moves it to the Marker's x. It keeps the marker's
+  // own press-to-drag behaviour, which is the only handle the header shows.
   markerDate = el("span", "marker__date");
-  marker.appendChild(markerDate);
+  markerDate.addEventListener("pointerdown", onChipDown);
+  if (axisEl) axisEl.appendChild(markerDate);
 
   marker.addEventListener("pointerdown", onMarkerDown);
   marker.addEventListener("pointermove", onMarkerMove);
@@ -785,6 +796,20 @@ function onMarkerDown(e) {
   e.preventDefault();
   marker.focus();
 }
+// A press on the header band moves the Marker there, then behaves like the
+// Marker's own press so the header can be dragged across too.
+function onAxisDown(e) {
+  if (e.button !== 0 && e.pointerType === "mouse") return;
+  setMarker(indexFromClientX(e.clientX));
+  onMarkerDown(e);
+}
+// The chip is the header's own handle: it drags the Marker it names and keeps
+// the press off the band underneath, which would move the Marker to the chip's
+// centre rather than to the day it shows.
+function onChipDown(e) {
+  e.stopPropagation();
+  onMarkerDown(e);
+}
 function onMarkerMove(e) {
   if (!draggingMarker) return;
   setMarker(indexFromClientX(e.clientX));
@@ -815,6 +840,7 @@ function setMarker(i) {
   markerIndex = clamp(Math.round(i), 0, DAYS - 1);
   var date = addDays(rangeStart, markerIndex);
   marker.style.setProperty("--i", markerIndex);
+  markerDate.style.setProperty("--i", markerIndex);
   markerDate.textContent = fmtDay(date);
   marker.setAttribute("aria-valuenow", String(markerIndex));
   marker.setAttribute("aria-valuetext", fmtDayLong(date));

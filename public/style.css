@@ -1548,9 +1548,11 @@ down to the last row and no further. */
 }
 
 .marker__date {
+  /* Anchored to the sticky axis, at the Marker's x, so it rides the header
+     instead of the scrolling marker. */
   position: absolute;
   top: var(--sp-1);
-  left: var(--sp-3);
+  left: calc((var(--i) + 0.5) * var(--day-w) + var(--sp-3));
   padding: var(--base) var(--sp-2);
   background: var(--canvas);
   border: 1px solid var(--rule);
@@ -1563,7 +1565,7 @@ down to the last row and no further. */
 
 .marker:focus-visible { outline: none; }
 .marker:focus-visible .marker__grip,
-.marker:focus-visible .marker__date {
+.tl:has(.marker:focus-visible) .marker__date {
   outline: var(--sp-1) solid var(--ink);
   outline-offset: var(--sp-1);
 }

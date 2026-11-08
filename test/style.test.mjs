@@ -126,3 +126,29 @@ test("on hover every fill changes and its label ink stays legible", () => {
     );
   }
 });
+
+/* --- the Marker's date in the header ------------------------------------- */
+
+// The date chip was drawn at the top of the marker element, which is the top
+// of the scrolling content, so it scrolled out of view once the grid scrolled.
+// It is now anchored to the sticky axis at the Marker's x; these two assertions
+// pin both halves of that so neither half can drift back on its own.
+const MARKER_DATE = STYLE.match(/\.marker__date\s*\{([^}]*)\}/);
+
+test("the Marker's date is anchored to the sticky axis at the marker's x", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  assert.ok(MARKER_DATE, "the .marker__date rule is missing");
+  const left = MARKER_DATE[1].match(/left:\s*([^;]+);/);
+  assert.ok(left, "the .marker__date rule has no left");
+  assert.equal(
+    left[1].replace(/\s+/g, " ").trim(),
+    "calc((var(--i) + 0.5) * var(--day-w) + var(--sp-3))"
+  );
+  // The chip hangs off the axis, not the marker, and carries the Marker's index.
+  assert.match(APP, /axisEl\.appendChild\(markerDate\)/);
+  assert.match(APP, /markerDate\.style\.setProperty\("--i", markerIndex\)/);
+  // A press in the header places the Marker, and the chip is its own handle.
+  assert.match(APP, /axis\.addEventListener\("pointerdown", onAxisDown\)/);
+  assert.match(APP, /function onAxisDown\(e\) \{[^}]*setMarker\(indexFromClientX\(e\.clientX\)\)/);
+  assert.match(APP, /markerDate\.addEventListener\("pointerdown", onChipDown\)/);
+});
