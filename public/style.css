@@ -194,6 +194,17 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink-soft);
 }
 
+/* The fate of the last write, a quiet word beside the range. Colour is spent
+   only on failure, the same --signal the over-allocation figure uses. */
+.topbar__save {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.topbar__save.is-failed {
+  color: var(--signal);
+}
+
 /* One control language for the whole bar. The zoom segments, the row-height
    stepper and the archive toggle share a height, a border, a radius, a type
    role and a state set; only their width differs, and the archive toggle is
