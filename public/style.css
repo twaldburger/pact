@@ -74,6 +74,7 @@
   --mix-drop: 7%;         /* the row under a drag from the Stack */
   --mix-band: 8%;         /* the rubber band of a range being drawn */
   --mix-hatch: 42%;       /* the over-allocation hatch, drawn in --signal */
+  --mix-over: 5%;         /* the row header of a Person over their Availability */
   --op-disabled: 0.45;    /* a control at the end of its range */
   --op-archived: 0.6;     /* history: an archived Assignment, and its chip */
   /* A text glyph is not centred in its line box, and a "+" sits below the cap
@@ -1191,6 +1192,16 @@ h1, h2, h3, p { margin: 0; }
 
 .rowhead:hover {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+/* A Person whose total at the Marker is over their Availability carries the
+   mark on the header itself, not on any one line, so it holds whether the
+   header is one line or two and at every row height. The 2px edge is taken out
+   of the left padding so only the mark moves, never the name and figure. */
+.rowhead.is-over {
+  border-left: var(--sp-1) solid var(--signal);
+  padding-left: calc(var(--sp-4) - var(--sp-1));
+  background: color-mix(in srgb, var(--signal) var(--mix-over), transparent);
 }
 
 /* A Person's name and a Project's name are the same role in the two columns,

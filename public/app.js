@@ -865,10 +865,13 @@ function updateFigures() {
     if (!fig) return;
     var total = totalAt(person, markerIndex);
     var assigned = Math.round(total * 100);
+    var over = assigned > person.availability;
     fig.textContent = assigned + "/" + person.availability + "%";
-    fig.classList.toggle("is-over", assigned > person.availability);
+    fig.classList.toggle("is-over", over);
     var head = fig.closest(".rowhead");
     if (head) {
+      // One over-allocation decision colours the figure and marks the header.
+      head.classList.toggle("is-over", over);
       head.setAttribute("aria-label", person.name + ", " + assigned + "% of " +
         person.availability + "% at the Marker");
     }
