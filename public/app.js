@@ -17,8 +17,6 @@ import {
   archivedPersonRefusal,
   dropRefusal,
   rangeSettingRefusal,
-  assignmentCount,
-  deleteConfirmation,
   clampShare,
   SHARE_MIN,
   SHARE_MAX,
@@ -500,13 +498,7 @@ function drawRows() {
       remove.type = "button";
       remove.textContent = "Delete";
       remove.setAttribute("aria-label", "Delete " + person.name);
-      remove.addEventListener("click", function () {
-        countAssignments("personId", person.id).then(function (count) {
-          openDeletePanel(deleteConfirmation("person", person.name, count), remove, function () {
-            destroyPerson(person.id);
-          });
-        }).catch(showError);
-      });
+      remove.addEventListener("click", function () { destroyPerson(person.id); });
       actions.appendChild(remove);
       wrap.appendChild(actions);
     }
@@ -996,13 +988,7 @@ function drawStack() {
       remove.type = "button";
       remove.textContent = "Delete";
       remove.setAttribute("aria-label", "Delete " + project.name);
-      remove.addEventListener("click", function () {
-        countAssignments("projectId", project.id).then(function (count) {
-          openDeletePanel(deleteConfirmation("project", project.name, count), remove, function () {
-            destroyProject(project.id);
-          });
-        }).catch(showError);
-      });
+      remove.addEventListener("click", function () { destroyProject(project.id); });
       actions.appendChild(remove);
       row.appendChild(actions);
     }
@@ -1262,6 +1248,20 @@ function onClipboardKey(e) {
     clearPastePreview();
     pasteAssignment(row, indexFromClientX(clipboardPointer.x));
   }
+}
+
+// The Delete key deletes the Assignment under the pointer: the block is found
+// the same way a copy is, and it takes the same delete path the block's own
+// panel does. A text field keeps the key for itself, so editing is untouched,
+// and a keyboard-only path already exists through the block's panel.
+function onDeleteKey(e) {
+  if (e.key !== "Delete" || isTextEditing() || !clipboardPointer) return;
+  var node = document.elementFromPoint(clipboardPointer.x, clipboardPointer.y);
+  var block = node && node.closest ? node.closest("[data-assignment]") : null;
+  if (!block) return;
+  e.preventDefault();
+  closePanel(false);
+  destroyAssignment(block.getAttribute("data-assignment"));
 }
 
 /* --- interaction: drag an assignment's edges ----------------------------- */
@@ -1808,67 +1808,6 @@ function submitPanel(node, error, request, done) {
   });
 }
 
-function confirmArchive(node, question, reopen, onConfirm) {
-  var foot = node.querySelector(".panel__foot");
-  foot.innerHTML = "";
-  var ask = el("span", "panel__ask");
-  ask.textContent = question;
-  var keep = button("btn-ghost", "Keep", reopen);
-  var yes = button("btn-danger", "Archive", onConfirm);
-  foot.appendChild(ask);
-  foot.appendChild(keep);
-  foot.appendChild(yes);
-  yes.focus();
-}
-
-// The confirmation every deletion goes through, in the panel the Delete was
-// pressed in. It names what will go and says it cannot be undone; Keep backs
-// out, and only the signal-coloured Delete performs the destroy.
-function confirmDelete(node, message, reopen, onConfirm) {
-  var foot = node.querySelector(".panel__foot");
-  foot.innerHTML = "";
-  // The message is a sentence or two and needs the panel's width, so the
-  // foot wraps: the words on their own line, the buttons beneath them.
-  foot.classList.add("panel__foot--confirm");
-  var ask = el("span", "panel__ask");
-  ask.textContent = message;
-  var keep = button("btn-ghost", "Keep", reopen);
-  var yes = button("btn-danger", "Delete", onConfirm);
-  foot.appendChild(ask);
-  foot.appendChild(keep);
-  foot.appendChild(yes);
-  yes.focus();
-}
-
-// A deletion confirmation for the Delete beside Restore on an archived row or
-// Stack entry, which is not itself inside a panel: the same words in their own
-// shell, anchored to the control that opened it.
-function openDeletePanel(message, trigger, onConfirm) {
-  var node = panelShell("Delete", null);
-  var ask = el("p", "panel__sub");
-  ask.textContent = message;
-  node.appendChild(ask);
-  var foot = el("div", "panel__foot");
-  foot.appendChild(button("btn-ghost", "Keep", function () { closePanel(true); }));
-  foot.appendChild(el("span", "panel__spacer"));
-  foot.appendChild(button("btn-danger", "Delete", function () {
-    closePanel(false);
-    onConfirm();
-  }));
-  node.appendChild(foot);
-  openPanel(node, trigger);
-  node.querySelector(".btn-danger").focus();
-}
-
-// A Person or a Project takes its Assignments with it, archived ones included,
-// so the number the confirmation names is read from the whole plan rather than
-// from the view the Show archived toggle leaves on screen.
-function countAssignments(field, id) {
-  return api("GET", planQuery(true)).then(function (plan) {
-    return assignmentCount(plan.assignments, field, id);
-  });
-}
-
 // A whole-10% value with minus and plus buttons and the arrow keys: one control
 // serves a Person's Availability and an Assignment's Share, so the two read and
 // behave alike, down to the disabled button at either end of the range.
@@ -2073,17 +2012,13 @@ function openPersonPanel(person, trigger) {
   var foot = el("div", "panel__foot");
   if (editing && !person.archived) {
     var archive = button("btn-danger", "Archive person", function () {
-      confirmArchive(node, "Archive this person?",
-        function () { openPersonPanel(person, trigger); },
-        function () { closePanel(false); archivePerson(person.id); });
+      closePanel(false);
+      archivePerson(person.id);
     });
     foot.appendChild(archive);
     var remove = button("btn-danger", "Delete person", function () {
-      countAssignments("personId", person.id).then(function (count) {
-        confirmDelete(node, deleteConfirmation("person", person.name, count),
-          function () { openPersonPanel(person, trigger); },
-          function () { closePanel(false); destroyPerson(person.id); });
-      }).catch(showError);
+      closePanel(false);
+      destroyPerson(person.id);
     });
     foot.appendChild(remove);
   }
@@ -2154,17 +2089,13 @@ function openProjectPanel(project, trigger) {
   var foot = el("div", "panel__foot");
   if (editing && !project.archived) {
     var archive = button("btn-danger", "Archive project", function () {
-      confirmArchive(node, "Archive this project?",
-        function () { openProjectPanel(project, trigger); },
-        function () { closePanel(false); archiveProject(project.id); });
+      closePanel(false);
+      archiveProject(project.id);
     });
     foot.appendChild(archive);
     var remove = button("btn-danger", "Delete project", function () {
-      countAssignments("projectId", project.id).then(function (count) {
-        confirmDelete(node, deleteConfirmation("project", project.name, count),
-          function () { openProjectPanel(project, trigger); },
-          function () { closePanel(false); destroyProject(project.id); });
-      }).catch(showError);
+      closePanel(false);
+      destroyProject(project.id);
     });
     foot.appendChild(remove);
   }
@@ -2220,23 +2151,20 @@ function openAssignmentPanel(a, trigger) {
     restore.setAttribute("aria-label", "Restore " + a.project.name + " on " + a.person.name);
     foot.appendChild(restore);
     var restoreRemove = button("btn-danger", "Delete", function () {
-      confirmDelete(node, deleteConfirmation("assignment"),
-        function () { openAssignmentPanel(a, trigger); },
-        function () { closePanel(false); destroyAssignment(a.id); });
+      closePanel(false);
+      destroyAssignment(a.id);
     });
     restoreRemove.setAttribute("aria-label", "Delete " + a.project.name + " on " + a.person.name);
     foot.appendChild(restoreRemove);
   } else {
     var archive = button("btn-danger", "Archive assignment", function () {
-      confirmArchive(node, "Archive this assignment?",
-        function () { openAssignmentPanel(a, trigger); },
-        function () { closePanel(false); archiveAssignment(a.id); });
+      closePanel(false);
+      archiveAssignment(a.id);
     });
     foot.appendChild(archive);
     foot.appendChild(button("btn-danger", "Delete assignment", function () {
-      confirmDelete(node, deleteConfirmation("assignment"),
-        function () { openAssignmentPanel(a, trigger); },
-        function () { closePanel(false); destroyAssignment(a.id); });
+      closePanel(false);
+      destroyAssignment(a.id);
     }));
   }
   foot.appendChild(el("span", "panel__spacer"));
@@ -2602,6 +2530,8 @@ function bindChrome() {
   // They stand down inside text fields, so the browser's own keys are
   // untouched there.
   document.addEventListener("keydown", onClipboardKey);
+  // Delete removes the Assignment under the pointer, beside them.
+  document.addEventListener("keydown", onDeleteKey);
   window.addEventListener("pointermove", onClipboardPointerMove);
   // A sideways scroll moves the grid's visible left edge, and with it which
   // paper labels the sticky column would cover, so the labels are re-decided

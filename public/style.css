@@ -1950,23 +1950,6 @@ down to the last row and no further. */
   background: color-mix(in srgb, var(--signal) 8%, transparent);
 }
 
-.panel__ask {
-  margin-right: auto;
-  font-size: var(--fs-data);
-  color: var(--signal);
-}
-
-/* A deletion confirmation's words run the panel's full width, above the
-   buttons, rather than squeezing beside them. */
-.panel__foot--confirm {
-  flex-wrap: wrap;
-}
-
-.panel__foot--confirm .panel__ask {
-  flex: 1 1 100%;
-  margin-right: 0;
-}
-
 /* Toast -------------------------------------------------------------------- */
 
 .toast {
