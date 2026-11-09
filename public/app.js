@@ -10,6 +10,7 @@ import {
   clampAvailability,
   stepAvailability,
   suggestPersonTags,
+  suggestPersonLocations,
   suggestAssignmentTags,
   withTag,
   withoutTag,
@@ -1955,6 +1956,27 @@ function tagEditor(initial, suggest) {
   };
 }
 
+var suggestListSeq = 0;
+
+// A plain text input with a datalist of suggestions, for a single-valued free
+// text field. One value reads and behaves like Name, unlike the tag editor.
+function suggestedInput(value, suggest) {
+  var i = input(value);
+  var listId = "suggest-" + (++suggestListSeq);
+  i.setAttribute("list", listId);
+  var datalist = document.createElement("datalist");
+  datalist.id = listId;
+  suggest().forEach(function (text) {
+    var option = document.createElement("option");
+    option.value = text;
+    datalist.appendChild(option);
+  });
+  var wrap = el("div", "suggest");
+  wrap.appendChild(i);
+  wrap.appendChild(datalist);
+  return { node: wrap, input: i };
+}
+
 function openPersonPanel(person, trigger) {
   var editing = !!person;
   var node = panelShell(editing ? "Person" : "Add person",
@@ -1963,6 +1985,13 @@ function openPersonPanel(person, trigger) {
 
   var nameInput = input(editing ? person.name : "");
   form.appendChild(formRow("Name", nameInput));
+
+  // A Person's Location is one free-text place, suggested from the Locations
+  // already used on other People.
+  var location = suggestedInput(editing ? person.location : "", function () {
+    return suggestPersonLocations(data.people, editing ? person.id : null);
+  });
+  form.appendChild(formRow("Location", location.node));
 
   var availability = availabilityControl(editing ? person.availability : AVAILABILITY_MAX);
   form.appendChild(formRow("Availability", availability.node));
@@ -2004,6 +2033,7 @@ function openPersonPanel(person, trigger) {
     if (!name) { error.set("A person needs a name."); nameInput.focus(); return; }
     var body = {
       name: name,
+      location: location.input.value,
       availability: availability.value(),
       tags: tags.tags(),
       note: noteInput.value

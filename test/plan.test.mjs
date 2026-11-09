@@ -177,6 +177,29 @@ test("an archived person and project can be restored", () => {
   assert.equal(store.get().projects.find((p) => p.id === project.id).archived, false);
 });
 
+test("a Person's Location is optional free text", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const person = store.createPerson({ name: "Dana Vo", availability: 90, location: "Switzerland" });
+  assert.equal(person.location, "Switzerland");
+  assert.equal(store.updatePerson(person.id, { location: "Portugal" }).location, "Portugal");
+  // It survives a reload like any other field.
+  assert.equal(createStore(file).get().people.find((p) => p.id === person.id).location, "Portugal");
+  // A Person may have none, and clearing it is an ordinary edit.
+  assert.equal(store.updatePerson(person.id, { location: "" }).location, "");
+  assert.equal(createStore(file).get().people.find((p) => p.id === person.id).location, "");
+});
+
+test("a Person's Location must be a string when it is given", () => {
+  const store = createStore(tempFile());
+  assert.throws(() => store.createPerson({ name: "Dana Vo", availability: 90, location: 5 }),
+    /person\.location must be a string/);
+  const person = store.createPerson({ name: "Dana Vo", availability: 90 });
+  assert.throws(() => store.updatePerson(person.id, { location: ["Switzerland"] }),
+    /person\.location must be a string/);
+  assert.throws(() => store.createPerson({ name: "Dana Vo", availability: 90, location: 5 }), ValidationError);
+});
+
 test("assignments can be created, updated and archived", () => {
   const store = createStore(tempFile());
   const created = store.createAssignment({

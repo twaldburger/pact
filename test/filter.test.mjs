@@ -24,10 +24,10 @@ import {
 function plan() {
   return {
     people: [
-      { id: "anna", name: "Anna Meier", tags: ["React", "lead"], note: "leads Atlas" },
-      { id: "ben", name: "Ben Falk", tags: ["Design"], note: "contract through June" },
-      { id: "cara", name: "Cara Nowak", tags: [], note: "led the React migration" },
-      { id: "dora", name: "Dora Voss", tags: [], note: "" }
+      { id: "anna", name: "Anna Meier", location: "Switzerland", tags: ["React", "lead"], note: "leads Atlas" },
+      { id: "ben", name: "Ben Falk", location: "Switzerland", tags: ["Design"], note: "contract through June" },
+      { id: "cara", name: "Cara Nowak", location: "Netherlands", tags: [], note: "led the React migration" },
+      { id: "dora", name: "Dora Voss", location: "", tags: [], note: "" }
     ],
     projects: [
       { id: "react", name: "React rewrite", notes: "phase two" },
@@ -229,6 +229,10 @@ test("every canonical field and alias names the field it should search", () => {
     "people: x": ["person.name"],
     "name: x": ["person.name", "project.name"],
     "names: x": ["person.name", "project.name"],
+    "person location: x": ["person.location"],
+    "person locations: x": ["person.location"],
+    "location: x": ["person.location"],
+    "locations: x": ["person.location"],
     "person tag: x": ["person.tags"],
     "person tags: x": ["person.tags"],
     "tag: x": ["person.tags", "assignment.tags"],
@@ -290,6 +294,8 @@ test("a plausible prefix that names no field is an unknown term", () => {
   assert.equal(filterIsEmpty(view), true);
   assert.equal(unknownFieldHint(term.prefix).indexOf("meeting") !== -1, true);
   assert.equal(unknownFieldHint("meeting").indexOf("not a field") !== -1, true);
+  // The hint names a Location among the fields the Filter does know.
+  assert.equal(unknownFieldHint("meeting").indexOf("person location") !== -1, true);
 });
 
 test("a typed term matches only its own field, case-insensitively", () => {
@@ -301,6 +307,42 @@ test("a typed term matches only its own field, case-insensitively", () => {
   assert.deepEqual(ids(view("project notes", "phase").projects), ["react"]);
   assert.deepEqual(ids(view("assignment tag", "design").assignments), ["a-bor-ben"]);
   assert.deepEqual(ids(view("assignment note", "handover").assignments), ["a-bor-ben"]);
+});
+
+test("a Location is matched case-insensitively as a substring", () => {
+  // `switz` sits inside Switzerland, and the term is read case-insensitively.
+  assert.deepEqual(ids(filterPlan(plan(), "location: switz", defaultScopes()).people), ["anna", "ben"]);
+  assert.deepEqual(ids(filterPlan(plan(), "location: SWITZERLAND", defaultScopes()).people), ["anna", "ben"]);
+  assert.deepEqual(ids(filterPlan(plan(), "location: nether", defaultScopes()).people), ["cara"]);
+  assert.deepEqual(ids(filterPlan(plan(), "location: atlantis", defaultScopes()).people), []);
+});
+
+test("every Location prefix behaves the same", () => {
+  ["location", "locations", "person location", "person locations"].forEach((prefix) => {
+    assert.deepEqual(ids(filterPlan(plan(), prefix + ": switzerland", defaultScopes()).people),
+      ["anna", "ben"], prefix);
+  });
+});
+
+test("a plain query searches a Person's Location like every other field", () => {
+  const view = filterPlan(plan(), "switz", defaultScopes());
+  assert.deepEqual(ids(view.people), ["anna", "ben"]);
+  // A matching Person brings all of their work.
+  assert.deepEqual(ids(view.assignments), ["a-react-anna", "a-bor-anna", "a-bor-ben"]);
+  // The scope still governs a plain query.
+  assert.deepEqual(ids(filterPlan(plan(), "switz", scopes(false, true, true)).people), []);
+});
+
+test("the dropdown offers the plan's Locations, sourced Person location", () => {
+  const found = filterSuggestions(plan(), "switz", defaultScopes());
+  const item = found.find((i) => i.source === "Person location");
+  assert.equal(item.value, "Switzerland");
+  assert.equal(item.count, 2);
+  assert.equal(item.matchLabel, "2 people");
+  // Typing the prefix with no value yet teaches the whole vocabulary.
+  const empty = filterSuggestions(plan(), "location:", defaultScopes());
+  assert.equal(empty.some((i) => i.value === "Switzerland"), true);
+  assert.equal(empty.find((i) => i.value === "Netherlands").insert, "location: Netherlands");
 });
 
 test("the value is a substring of the field, not a whole word", () => {
@@ -361,6 +403,7 @@ test("a plain query is unchanged by the typed-term rule", () => {
 
 test("the empty state can name the field a typed term searched", () => {
   assert.equal(fieldLabel(["person.tags"]), "person tags");
+  assert.equal(fieldLabel(["person.location"]), "person locations");
   assert.equal(fieldLabel(["person.tags", "assignment.tags"]), "person tags or assignment tags");
   assert.equal(fieldLabel(["person.name", "project.name"]), "person names or project names");
 });
@@ -368,7 +411,7 @@ test("the empty state can name the field a typed term searched", () => {
 test("the dropdown teaches the field prefixes as a plain query is typed", () => {
   const found = filterSuggestions(plan(), "per", defaultScopes());
   const prefixes = found.filter((item) => item.kind === "prefix").map((item) => item.value);
-  assert.deepEqual(prefixes, ["person name:", "person tag:", "person note:"]);
+  assert.deepEqual(prefixes, ["person name:", "person location:", "person tag:", "person note:"]);
   prefixes.forEach((value) => {
     const item = found.find((i) => i.value === value);
     assert.equal(item.source, "Field");

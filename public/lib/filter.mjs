@@ -63,6 +63,7 @@ export function searchedAreas(scopes) {
  */
 export const FILTER_FIELDS = [
   "person.name",
+  "person.location",
   "person.tags",
   "person.note",
   "project.name",
@@ -74,6 +75,7 @@ export const FILTER_FIELDS = [
 // What each field is called where the interface has to name it.
 export const FIELD_LABELS = {
   "person.name": "person names",
+  "person.location": "person locations",
   "person.tags": "person tags",
   "person.note": "person notes",
   "project.name": "project names",
@@ -89,6 +91,10 @@ const PREFIX_FIELDS = {
   "person names": ["person.name"],
   "person": ["person.name"],
   "people": ["person.name"],
+  "person location": ["person.location"],
+  "person locations": ["person.location"],
+  "location": ["person.location"],
+  "locations": ["person.location"],
   "person tag": ["person.tags"],
   "person tags": ["person.tags"],
   "tag": ["person.tags", "assignment.tags"],
@@ -116,6 +122,7 @@ const PREFIX_FIELDS = {
 const TEACHING_PREFIXES = [
   { name: "person name", label: "person names", fields: ["person.name"] },
   { name: "people", label: "people by name", fields: ["person.name"] },
+  { name: "person location", label: "person locations", fields: ["person.location"] },
   { name: "person tag", label: "person tags", fields: ["person.tags"] },
   { name: "person note", label: "person notes", fields: ["person.note"] },
   { name: "project", label: "projects by name", fields: ["project.name"] },
@@ -176,8 +183,8 @@ export function parseFilterTerm(query) {
 // fields the Filter does know.
 export function unknownFieldHint(prefix) {
   return '"' + String(prefix == null ? "" : prefix) + '" is not a field the Filter knows. ' +
-    "Try person, people, person tag, person note, project, project note, " +
-    "assignment tag, assignment note, name, tag or note.";
+    "Try person, people, person tag, person note, person location, project, " +
+    "project note, assignment tag, assignment note, name, tag or note.";
 }
 
 // The whole query: a case-insensitive substring anywhere in the text. `rea`
@@ -200,6 +207,7 @@ function someTag(tags, q) {
 // apart. Every matcher takes the thing and the already-lowered value.
 const FIELD_MATCHES = {
   "person.name": function (item, q) { return won(item.name, q); },
+  "person.location": function (item, q) { return won(item.location, q); },
   "person.tags": function (item, q) { return someTag(item.tags, q); },
   "person.note": function (item, q) { return won(item.note, q); },
   "project.name": function (item, q) { return won(item.name, q); },
@@ -216,6 +224,7 @@ function termMatches(kind, item, fields, q) {
 
 function personMatches(person, q) {
   if (won(person.name, q)) return true;
+  if (won(person.location, q)) return true;
   if (someTag(person.tags, q)) return true;
   return won(person.note, q);
 }
@@ -340,6 +349,7 @@ const SOURCE_PERSON_TAG = "Person tag";
 const SOURCE_PROJECT_NOTE = "Project note";
 const SOURCE_ASSIGNMENT_NOTE = "Assignment note";
 const SOURCE_PERSON_NOTE = "Person note";
+const SOURCE_PERSON_LOCATION = "Person location";
 const SOURCE_FIELD = "Field";
 
 export function countLabel(count, unit) {
@@ -417,6 +427,13 @@ function collectField(plan, field, q, out, seen) {
     collectTags(people).forEach(function (tag) {
       addCandidate(out, seen, SOURCE_PERSON_TAG, tag, countPeopleWithTag(people, tag), "person");
     });
+  } else if (field === "person.location") {
+    people.forEach(function (person) {
+      const text = String(person.location == null ? "" : person.location).trim();
+      if (!text || !won(text, q)) return;
+      const count = people.filter(function (p) { return won(p.location, text); }).length;
+      addCandidate(out, seen, SOURCE_PERSON_LOCATION, text, count, "person");
+    });
   } else if (field === "person.note") {
     people.forEach(function (person) {
       if (!person.note || !won(person.note, q)) return;
@@ -462,6 +479,7 @@ function scopedSuggestions(plan, q, scopes) {
   }
   if (s.people) {
     collectField(plan, "person.name", q, out, seen);
+    collectField(plan, "person.location", q, out, seen);
     collectField(plan, "person.tags", q, out, seen);
     collectField(plan, "person.note", q, out, seen);
   }

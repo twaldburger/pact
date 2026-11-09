@@ -65,7 +65,7 @@ test("each list has its own small, labelled key set", () => {
   assert.deepEqual(sortKeys("projects").map((d) => d.key), PROJECT_SORT_KEYS.map((d) => d.key));
   assert.equal(sortKeys("people"), PEOPLE_SORT_KEYS);
   assert.deepEqual(PROJECT_SORT_KEYS.map((d) => d.key), ["name", "start", "end", "fte"]);
-  assert.deepEqual(PEOPLE_SORT_KEYS.map((d) => d.key), ["name", "free", "load", "start"]);
+  assert.deepEqual(PEOPLE_SORT_KEYS.map((d) => d.key), ["name", "location", "free", "load", "start"]);
   [...PROJECT_SORT_KEYS, ...PEOPLE_SORT_KEYS].forEach((def) => {
     assert.equal(typeof def.label, "string");
     assert.ok(def.label.length > 0);
@@ -79,6 +79,7 @@ test("a key is recognised only by the list that owns it", () => {
   assert.equal(isSortKey("people", "fte"), false);
   assert.equal(isSortKey("projects", "nope"), false);
   assert.equal(findSortKey("people", "start").label, "Earliest assignment");
+  assert.equal(findSortKey("people", "location").label, "Location");
 });
 
 test("each key carries a sensible first direction", () => {
@@ -86,6 +87,7 @@ test("each key carries a sensible first direction", () => {
   assert.equal(defaultDirection("projects", "start"), ASCENDING);
   assert.equal(defaultDirection("projects", "end"), DESCENDING);
   assert.equal(defaultDirection("projects", "fte"), DESCENDING);
+  assert.equal(defaultDirection("people", "location"), ASCENDING);
   assert.equal(defaultDirection("people", "free"), DESCENDING);
   assert.equal(defaultDirection("people", "load"), DESCENDING);
   assert.equal(defaultDirection("people", "start"), ASCENDING);
@@ -244,6 +246,27 @@ test("People sort by earliest assignment in both directions", () => {
     ["p3", "p2", "p1", "p4"]);
 });
 
+test("People sort by Location, grouping by place with the ones without last", () => {
+  const p = {
+    people: [
+      { id: "p1", name: "Anna", availability: 100, location: "Switzerland" },
+      { id: "p2", name: "Ben", availability: 80, location: "" },
+      { id: "p3", name: "Cara", availability: 100, location: "Netherlands" },
+      { id: "p4", name: "Dan", availability: 50, location: "Austria" },
+      { id: "p5", name: "Eve", availability: 100, location: "switzerland" },
+      { id: "p6", name: "Fay", availability: 100 }
+    ],
+    assignments: []
+  };
+  // Alphabetical by place, case-insensitively; the two Swiss People tie on the
+  // place and break by name, and a missing Location sorts last in both
+  // directions, as an empty one does.
+  assert.deepEqual(ids(sortPeople(p.people, { key: "location", direction: ASCENDING }, p, "2026-06-15")),
+    ["p4", "p3", "p1", "p5", "p2", "p6"]);
+  assert.deepEqual(ids(sortPeople(p.people, { key: "location", direction: DESCENDING }, p, "2026-06-15")),
+    ["p1", "p5", "p3", "p4", "p2", "p6"]);
+});
+
 test("ties break by name, not by the input order", () => {
   const p = {
     people: [
@@ -308,7 +331,7 @@ test("a Marker drag holds the free-capacity order; the release refreshes it", ()
 });
 
 test("only a load or free-capacity order ever reacts to the Marker", () => {
-  ["name", "start"].forEach((key) => {
+  ["name", "location", "start"].forEach((key) => {
     assert.equal(markerReordersPeople(MARKER_DRAG, key), false);
     assert.equal(markerReordersPeople(MARKER_RELEASE, key), false);
     assert.equal(markerReordersPeople(SORT_APPLIED, key), false);
