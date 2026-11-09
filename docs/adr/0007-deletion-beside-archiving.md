@@ -9,3 +9,5 @@ Deleting a Person or a Project takes its Assignments with it, archived ones incl
 This is an addition, not a reversal: ADR-0005 stands unchanged. Extending archiving to mean deletion was rejected because the two states promise different things - an archive that can be brought back, and a deletion that cannot.
 
 Amended later: the running server keeps a 100-step in-memory history, and Undo reverses a deletion for as long as it remains in that history. The confirmation therefore says that Undo can still bring it back rather than that it cannot be undone; the decision above is otherwise unchanged.
+
+Amended later again: the confirmation was removed altogether. One click archives or deletes with no dialog and nothing in its place, an Assignment can also be deleted with the Delete key while the pointer is over its block, and Undo's in-memory history is what makes a mistaken act recoverable.

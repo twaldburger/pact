@@ -170,32 +170,6 @@ export function archivedProjectRefusal(name) {
 }
 
 /*
- * How many Assignments a Person or a Project deletion would take with it,
- * counted over the whole plan so archived Assignments are included: a deletion
- * destroys those too, even while the archive toggle leaves them off screen.
- */
-export function assignmentCount(assignments, field, id) {
-  return (assignments || []).filter(function (a) { return a && a[field] === id; }).length;
-}
-
-/*
- * The words a deletion confirmation always carries: what will go, with the
- * number of Assignments named before them, and that Undo can still bring it
- * back. A deletion takes a Person's or a Project's Assignments with it, so the
- * loss is visible before it happens, and it stays recoverable for as long as
- * the running server's history holds it.
- */
-export function deleteConfirmation(kind, name, count) {
-  if (kind === "assignment") {
-    return "This deletes this assignment. Undo can still bring it back.";
-  }
-  const noun = count === 1 ? "assignment" : "assignments";
-  const on = kind === "person" ? "them" : "it";
-  return "This deletes " + name + " and the " + count + " " + noun + " on " + on +
-    ". Undo can still bring it back.";
-}
-
-/*
  * Whether a target can take new work at all: an archived Person or Project is
  * refused by name, and anything else may be dropped on. Returns the message,
  * or null when the drop is allowed.

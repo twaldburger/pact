@@ -70,7 +70,7 @@ To take a Person or a Project out of the Stack and the Timeline while keeping ev
 _Avoid_: delete, remove, hide, deactivate
 
 **Delete**:
-To permanently destroy a Person, a Project or an Assignment; deleting a Person or a Project destroys the Assignments that referenced it too, archived ones included. It is a different act from archiving, which keeps everything and can be restored, and neither is a precondition for the other. The confirmation names the number of Assignments a Person or a Project will take with it before it happens. There is no trash, but a deletion stays recoverable through Undo for as long as the running server's history holds it.
+To permanently destroy a Person, a Project or an Assignment; deleting a Person or a Project destroys the Assignments that referenced it too, archived ones included. It is a different act from archiving, which keeps everything and can be restored, and neither is a precondition for the other. An Assignment can also be deleted with the Delete key while the pointer is over its block. There is no trash, and a deletion is recoverable only through the session's Undo history, for as long as the running server holds it.
 _Avoid_: remove, purge, destroy, hide
 
 **Undo**:

@@ -127,12 +127,12 @@ Person is restored.
 
 Deleting is a separate, permanent act. A Delete button sits beside Archive in
 the person panel, the project panel and the assignment popover, and beside
-Restore on an archived entry; it always opens a confirmation that names what
-will go and says that Undo can still bring it back. Deleting a Person or a
-Project takes every Assignment that referenced it, archived ones included, and
-the confirmation names the number first. A deletion needs no prior archive and
-an archived record can be deleted too; there is no trash, and a deletion stays
-recoverable through Undo while the running server's history holds it.
+Restore on an archived entry; it acts at once, with no confirmation. Deleting a
+Person or a Project takes every Assignment that referenced it, archived ones
+included, and an Assignment can also be deleted with the Delete key while the
+pointer is over its block. A deletion needs no prior archive and an archived
+record can be deleted too; there is no trash, and a deletion is recoverable
+only through Undo while the running server's history holds it.
 
 The two controls beside the Options button step the plan back and forward one
 change at a time, each disabled at the end of its stack. The history is the

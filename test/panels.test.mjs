@@ -13,8 +13,6 @@ import {
   dropRefusal,
   outsideRangeRefusal,
   rangeSettingRefusal,
-  assignmentCount,
-  deleteConfirmation,
   clampShare,
   SHARE_MIN,
   SHARE_MAX,
@@ -124,33 +122,6 @@ test("the period control refuses an invalid or reversed pair", () => {
   assert.match(rangeSettingRefusal("2026-02-30", "2026-03-01"), /valid YYYY-MM-DD/);
   assert.match(rangeSettingRefusal(null, undefined), /valid YYYY-MM-DD/);
   assert.match(rangeSettingRefusal("2026-12-31", "2026-01-01"), /must not be after/);
-});
-
-test("the deletion confirmation names the number first and says Undo can bring it back", () => {
-  assert.equal(
-    deleteConfirmation("project", "Borealis", 6),
-    "This deletes Borealis and the 6 assignments on it. Undo can still bring it back."
-  );
-  assert.equal(
-    deleteConfirmation("person", "Ben Falk", 1),
-    "This deletes Ben Falk and the 1 assignment on them. Undo can still bring it back."
-  );
-  assert.equal(
-    deleteConfirmation("assignment", null, 1),
-    "This deletes this assignment. Undo can still bring it back."
-  );
-});
-
-test("a deletion counts every assignment, archived ones included", () => {
-  const assignments = [
-    { id: "a", personId: "p1", projectId: "x", archived: false },
-    { id: "b", personId: "p1", projectId: "x", archived: true },
-    { id: "c", personId: "p2", projectId: "x", archived: false }
-  ];
-  assert.equal(assignmentCount(assignments, "personId", "p1"), 2);
-  assert.equal(assignmentCount(assignments, "personId", "p2"), 1);
-  assert.equal(assignmentCount(assignments, "personId", "absent"), 0);
-  assert.equal(assignmentCount(assignments, "projectId", "x"), 3);
 });
 
 test("stepping a Share moves exactly ten in each direction, inside 10..100", () => {
