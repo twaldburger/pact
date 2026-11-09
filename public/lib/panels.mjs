@@ -78,10 +78,26 @@ function collectTags(items) {
   return seen;
 }
 
-function sortedTags(seen) {
+function sortedValues(seen) {
   return Array.from(seen.values()).sort(function (a, b) {
     return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0;
   });
+}
+
+// Gather the Locations in use, first spelling winning, matched
+// case-insensitively. A Location is single-valued, so unlike a tag there is
+// only ever one per Person.
+function collectLocations(items) {
+  const seen = new Map();
+  items.forEach(function (item) {
+    const location = item && item.location;
+    if (typeof location !== "string") return;
+    const text = location.trim();
+    if (!text) return;
+    const key = text.toLowerCase();
+    if (!seen.has(key)) seen.set(key, text);
+  });
+  return seen;
 }
 
 /*
@@ -94,7 +110,20 @@ export function suggestPersonTags(people, currentPersonId) {
   const own = collectTags(current ? [current] : []);
   const others = collectTags((people || []).filter(function (p) { return p.id !== currentPersonId; }));
   own.forEach(function (_, key) { others.delete(key); });
-  return sortedTags(others);
+  return sortedValues(others);
+}
+
+/*
+ * Locations are offered from the other People only, the single-valued cousin
+ * of Person tags: deduplicated case-insensitively with the first spelling
+ * winning, and alphabetical.
+ */
+export function suggestPersonLocations(people, currentPersonId) {
+  const current = (people || []).find(function (p) { return p.id === currentPersonId; });
+  const own = collectLocations(current ? [current] : []);
+  const others = collectLocations((people || []).filter(function (p) { return p.id !== currentPersonId; }));
+  own.forEach(function (_, key) { others.delete(key); });
+  return sortedValues(others);
 }
 
 /*
@@ -109,7 +138,7 @@ export function suggestAssignmentTags(assignments, projectId, currentAssignmentI
     return a.projectId === projectId && a.id !== currentAssignmentId;
   }));
   own.forEach(function (_, key) { others.delete(key); });
-  return sortedTags(others);
+  return sortedValues(others);
 }
 
 export function hasTag(tags, raw) {

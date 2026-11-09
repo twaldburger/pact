@@ -4,6 +4,7 @@ import {
   clampAvailability,
   stepAvailability,
   suggestPersonTags,
+  suggestPersonLocations,
   suggestAssignmentTags,
   hasTag,
   withTag,
@@ -46,6 +47,25 @@ test("Person tags are suggested from other People only", () => {
   assert.deepEqual(suggestPersonTags(people, "cara"), ["lead", "React"]);
   // A Person's own tags never appear, and nothing here is an Assignment tag.
   assert.equal(suggestPersonTags([{ id: "solo", tags: ["Atlas"] }], "solo").length, 0);
+});
+
+test("Locations are suggested from other People only, one per Person", () => {
+  const people = [
+    { id: "anna", location: "Switzerland" },
+    { id: "ben", location: "switzerland" },
+    { id: "cara", location: "Portugal" },
+    { id: "dora", location: "" },
+    { id: "emil" }
+  ];
+  // Each Person has one Location, and blanks and missing values offer nothing.
+  // Switzerland is already this Person's place, so it is not offered back,
+  // even where another Person spells it differently.
+  assert.deepEqual(suggestPersonLocations(people, "anna"), ["Portugal"]);
+  assert.deepEqual(suggestPersonLocations(people, "cara"), ["Switzerland"]);
+  // A Person's own Location is never offered back to them.
+  assert.deepEqual(suggestPersonLocations([{ id: "solo", location: "Switzerland" }], "solo"), []);
+  // A new Person is offered every Location in the plan.
+  assert.deepEqual(suggestPersonLocations(people, null), ["Portugal", "Switzerland"]);
 });
 
 test("Assignment tags are suggested from that Project's other Assignments only", () => {

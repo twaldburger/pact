@@ -28,6 +28,7 @@ export const PROJECT_SORT_KEYS = [
 
 export const PEOPLE_SORT_KEYS = [
   { key: "name", label: "Name", direction: ASCENDING },
+  { key: "location", label: "Location", direction: ASCENDING },
   { key: "free", label: "Free at the Marker", direction: DESCENDING },
   { key: "load", label: "Load at the Marker", direction: DESCENDING },
   { key: "start", label: "Earliest assignment", direction: ASCENDING }
@@ -205,6 +206,12 @@ function personValue(person, key, measures, plan, markerISO) {
     return (Number(person.availability) || 0) / 100 - personLoadAt(plan, person.id, markerISO);
   }
   if (key === "load") return personLoadAt(plan, person.id, markerISO);
+  // A Person with no Location has no value to group on, so it is null and
+  // sorts last in both directions, beside the other missing values.
+  if (key === "location") {
+    const text = String(person.location == null ? "" : person.location).trim();
+    return text === "" ? null : text.toLowerCase();
+  }
   if (key === "start") {
     const m = measures[person.id];
     return m ? m.earliestStart : null;

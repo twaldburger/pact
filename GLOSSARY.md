@@ -5,12 +5,16 @@ People Allocation & Capacity Tracker: a local plan of who works on what, for how
 ## Language
 
 **Person**:
-Someone whose time the plan schedules, identified by a name and carrying an Availability, any number of Person tags, and an optional note. The individual; the Timeline's row-header column that holds them is headed People.
+Someone whose time the plan schedules, identified by a name and carrying an optional Location, an Availability, any number of Person tags, and an optional note. The individual; the Timeline's row-header column that holds them is headed People.
 _Avoid_: resource, user, employee, staff member
 
 **Availability**:
 The most a Person can be scheduled for - their own 100%, expressed as a share of a full working week. Allocations are absolute, so Availability is the ceiling they are compared against rather than the scale they are measured on.
 _Avoid_: capacity, part-time factor, utilisation limit
+
+**Location**:
+The one free-text place a Person is at, for grouping and filtering people later. It is optional and single-valued: a new one can be typed, or one already in use on another Person chosen, matched case-insensitively with the first spelling winning. It is deliberately not a fixed country list, and nothing on the grid draws it.
+_Avoid_: office, site, city, country, timezone, or region
 
 **Person tag**:
 A short free-text label on a Person, for grouping and filtering people later. A new one can be typed, or one already in use on another Person chosen; people's tags and assignments' tags are separate lists.
