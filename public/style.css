@@ -1067,6 +1067,34 @@ h1, h2, h3, p { margin: 0; }
   border-left: 1px solid var(--rule);
 }
 
+/* The Grid dividers: one full-height rule down the rows at each boundary the
+   active zoom divides on. The layer is a sibling of the weekend band, drawn
+   after it and before the rows at the same stacking level, so a rule paints
+   above the shading and under the blocks; it stops at the rows, leaving the
+   axis its own separators, and draws no rule on the left edge, which the
+   row-header column already has. */
+.rules {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--i) * var(--day-w));
+  width: 1px;
+  /* The strongest rule the zoom's own axis band uses: months and weeks draw
+     --rule-strong, days --rule, so a rule meets its axis separator in the
+     same ink. */
+  background: var(--rule-strong);
+}
+
+[data-zoom="day"] .rule { background: var(--rule); }
+
 /* Axis ---------------------------------------------------------------------- */
 
 .tl__axis {
