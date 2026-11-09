@@ -180,18 +180,19 @@ export function assignmentCount(assignments, field, id) {
 
 /*
  * The words a deletion confirmation always carries: what will go, with the
- * number of Assignments named before them, and that it cannot be undone. A
- * deletion is permanent and takes a Person's or a Project's Assignments with
- * it, so the loss is visible before it happens.
+ * number of Assignments named before them, and that Undo can still bring it
+ * back. A deletion takes a Person's or a Project's Assignments with it, so the
+ * loss is visible before it happens, and it stays recoverable for as long as
+ * the running server's history holds it.
  */
 export function deleteConfirmation(kind, name, count) {
   if (kind === "assignment") {
-    return "This deletes this assignment. It cannot be undone.";
+    return "This deletes this assignment. Undo can still bring it back.";
   }
   const noun = count === 1 ? "assignment" : "assignments";
   const on = kind === "person" ? "them" : "it";
   return "This deletes " + name + " and the " + count + " " + noun + " on " + on +
-    ". It cannot be undone.";
+    ". Undo can still bring it back.";
 }
 
 /*

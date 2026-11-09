@@ -215,6 +215,7 @@ h1, h2, h3, p { margin: 0; }
    the one of them that also carries a pressed state. */
 .zoom,
 .rowheight,
+.history,
 .ghost {
   display: flex;
   align-items: stretch;
@@ -226,7 +227,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .zoom,
-.rowheight { overflow: hidden; }
+.rowheight,
+.history { overflow: hidden; }
 
 .ghost {
   appearance: none;
@@ -239,7 +241,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .zoom__btn,
-.rowheight__btn {
+.rowheight__btn,
+.history__btn {
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -258,10 +261,14 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .zoom__btn:last-child,
-.rowheight__btn:last-child { border-right: 0; }
+.rowheight__btn:last-child,
+.history__btn:last-child { border-right: 0; }
 
-/* Row height - a quiet pair beside the zoom, disabled at each end of 32..120. */
-.rowheight__btn {
+/* Row height and Undo/Redo - quiet square pairs beside the zoom, each disabled
+   at the end of its range: 32..120 for the row height, an empty stack for the
+   history. */
+.rowheight__btn,
+.history__btn {
   min-width: var(--control-h);
   padding: 0;
 }
@@ -270,6 +277,7 @@ h1, h2, h3, p { margin: 0; }
    that is already pressed keeps the ink fill instead. */
 .zoom__btn:hover:not([aria-pressed="true"]),
 .rowheight__btn:hover:not(:disabled),
+.history__btn:hover:not(:disabled),
 .ghost:hover:not([aria-pressed="true"]) {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
   color: var(--ink);
@@ -281,7 +289,8 @@ h1, h2, h3, p { margin: 0; }
   color: var(--canvas);
 }
 
-.rowheight__btn:disabled { opacity: var(--op-disabled); cursor: default; }
+.rowheight__btn:disabled,
+.history__btn:disabled { opacity: var(--op-disabled); cursor: default; }
 
 /* One control language for the quiet actions that sit in a column's own
    header, beside the title they belong to: the plus that adds a Person or
@@ -592,6 +601,14 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* Options ------------------------------------------------------------------- */
+
+/* Undo and Redo: the bar's control language as a square pair beside the row
+   height, each stepping the plan's history one action at a time. */
+.history__glyph {
+  display: block;
+  width: 0.875rem;
+  height: 0.875rem;
+}
 
 /* The infrequent controls, at the far right of the bar behind one symbol. The
    button keeps the bar's control language; the menu is built like the filter's

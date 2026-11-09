@@ -70,8 +70,12 @@ To take a Person or a Project out of the Stack and the Timeline while keeping ev
 _Avoid_: delete, remove, hide, deactivate
 
 **Delete**:
-To permanently destroy a Person, a Project or an Assignment, with no trash and no undo; deleting a Person or a Project destroys the Assignments that referenced it too, archived ones included. It is a different act from archiving, which keeps everything and can be restored, and neither is a precondition for the other. The confirmation names the number of Assignments a Person or a Project will take with it before it happens.
+To permanently destroy a Person, a Project or an Assignment; deleting a Person or a Project destroys the Assignments that referenced it too, archived ones included. It is a different act from archiving, which keeps everything and can be restored, and neither is a precondition for the other. The confirmation names the number of Assignments a Person or a Project will take with it before it happens. There is no trash, but a deletion stays recoverable through Undo for as long as the running server's history holds it.
 _Avoid_: remove, purge, destroy, hide
+
+**Undo**:
+To step the plan back one change at a time, and Redo to step forward again, from two controls in the top bar. Every change is one step - a move, a reassign or a resize, a panel save, a create, an archive, a delete, a restore or a Plan period change - because each is one write, and a delete it reverses brings the record and its Assignments back. Its history is the last 100 changes, held in the running server's memory: it survives a page reload and is lost when the server restarts. Nothing about it is written to disk.
+_Avoid_: revert, roll back, history, snapshot
 
 **Filter**:
 The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `people: tim` or `project notes: delayed`. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.

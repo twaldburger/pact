@@ -126,18 +126,18 @@ test("the period control refuses an invalid or reversed pair", () => {
   assert.match(rangeSettingRefusal("2026-12-31", "2026-01-01"), /must not be after/);
 });
 
-test("the deletion confirmation names the number first and says it cannot be undone", () => {
+test("the deletion confirmation names the number first and says Undo can bring it back", () => {
   assert.equal(
     deleteConfirmation("project", "Borealis", 6),
-    "This deletes Borealis and the 6 assignments on it. It cannot be undone."
+    "This deletes Borealis and the 6 assignments on it. Undo can still bring it back."
   );
   assert.equal(
     deleteConfirmation("person", "Ben Falk", 1),
-    "This deletes Ben Falk and the 1 assignment on them. It cannot be undone."
+    "This deletes Ben Falk and the 1 assignment on them. Undo can still bring it back."
   );
   assert.equal(
     deleteConfirmation("assignment", null, 1),
-    "This deletes this assignment. It cannot be undone."
+    "This deletes this assignment. Undo can still bring it back."
   );
 });
 

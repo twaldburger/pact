@@ -7,3 +7,5 @@ Archiving stays what ADR-0005 made it: a removal that keeps every Assignment and
 Deleting a Person or a Project takes its Assignments with it, archived ones included, and the confirmation names the number first - "This deletes Borealis and the 6 assignments on it." - so the loss is visible before it happens. Deleting an Assignment deletes only that one. Delete sits beside Archive in the person panel, the project panel and the assignment popover, in the signal colour the interface reserves for destructive and failure states, always behind a confirmation that says plainly that it cannot be undone.
 
 This is an addition, not a reversal: ADR-0005 stands unchanged. Extending archiving to mean deletion was rejected because the two states promise different things - an archive that can be brought back, and a deletion that cannot.
+
+Amended later: the running server keeps a 100-step in-memory history, and Undo reverses a deletion for as long as it remains in that history. The confirmation therefore says that Undo can still bring it back rather than that it cannot be undone; the decision above is otherwise unchanged.

@@ -339,3 +339,184 @@ test("a store write that fails keeps memory and file consistent", () => {
   assert.deepEqual(store.get(), before);
   assert.equal(fs.readFileSync(file, "utf8"), JSON.stringify(before, null, 2) + "\n");
 });
+
+/* --- history -------------------------------------------------------------- */
+
+test("a change is one undo step, and undo restores the plan", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  assert.equal(store.canUndo(), false);
+  assert.equal(store.canRedo(), false);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+
+  const before = store.get();
+  const person = store.createPerson({ name: "Dana Vo", availability: 90 });
+  const afterCreate = store.get();
+  assert.equal(store.canUndo(), true);
+  assert.equal(store.canRedo(), false);
+  assert.deepEqual(store.historyDepth(), { undo: 1, redo: 0 });
+
+  store.undo();
+  assert.deepEqual(store.get(), before);
+  assert.equal(store.get().people.some((p) => p.id === person.id), false);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 1 });
+  assert.equal(store.canUndo(), false);
+  assert.equal(store.canRedo(), true);
+  // The file on disk matches the restored plan, not the one that was undone.
+  assert.equal(fs.readFileSync(file, "utf8"), JSON.stringify(before, null, 2) + "\n");
+
+  store.redo();
+  assert.deepEqual(store.get(), afterCreate);
+  assert.deepEqual(store.historyDepth(), { undo: 1, redo: 0 });
+  assert.equal(fs.readFileSync(file, "utf8"), JSON.stringify(afterCreate, null, 2) + "\n");
+});
+
+test("every kind of change costs exactly one undo step", () => {
+  const store = createStore(tempFile());
+  const person = store.createPerson({ name: "Dana Vo", availability: 90 });
+  const project = store.createProject({ name: "Summit", notes: "" });
+  const assignment = store.createAssignment({
+    projectId: project.id, personId: person.id, start: day(0), end: day(4), share: 40
+  });
+  // A create, a panel save, a drag (move, reassign or resize), an archive, a
+  // restore, a delete and a Plan period change: each is one write, so one step.
+  const actions = [
+    ["a move", () => store.updateAssignment(assignment.id, { start: day(2), end: day(6) })],
+    ["a resize", () => store.updateAssignment(assignment.id, { end: day(9) })],
+    ["a reassign", () => store.updateAssignment(assignment.id, { share: 70 })],
+    ["a panel save", () => store.updatePerson(person.id, { availability: 60 })],
+    ["an archive", () => store.archiveAssignment(assignment.id)],
+    ["a restore", () => store.updateAssignment(assignment.id, { archived: false })],
+    ["a delete", () => store.destroyAssignment(assignment.id)],
+    ["a period change", () => store.setRange({ start: store.get().range.start, end: day(30) })]
+  ];
+  let expected = 3;
+  for (const [what, action] of actions) {
+    const before = store.historyDepth().undo;
+    action();
+    expected += 1;
+    assert.equal(store.historyDepth().undo, before + 1, what + " should cost one step");
+  }
+  assert.equal(store.historyDepth().undo, expected);
+});
+
+test("undo brings back a deleted Person and every Assignment", () => {
+  const store = createStore(tempFile());
+  const person = store.createPerson({ name: "Nina Roth", availability: 100 });
+  const live = store.createAssignment({
+    projectId: "atlas", personId: person.id, start: day(0), end: day(4), share: 50
+  });
+  const archived = store.createAssignment({
+    projectId: "borealis", personId: person.id, start: day(30), end: day(34), share: 30
+  });
+  store.archiveAssignment(archived.id);
+
+  const beforeDelete = store.get();
+  assert.deepEqual(store.destroyPerson(person.id), { deleted: person.id, assignments: 2 });
+  assert.equal(store.get().people.some((p) => p.id === person.id), false);
+
+  store.undo();
+  const restored = store.get();
+  assert.deepEqual(restored, beforeDelete);
+  assert.equal(restored.people.some((p) => p.id === person.id), true);
+  assert.equal(restored.assignments.some((a) => a.id === live.id), true);
+  assert.equal(restored.assignments.some((a) => a.id === archived.id), true);
+});
+
+test("a new change after an undo clears the redo stack", () => {
+  const store = createStore(tempFile());
+  store.createPerson({ name: "Dana Vo", availability: 90 });
+  store.undo();
+  assert.equal(store.canRedo(), true);
+
+  store.createProject({ name: "Summit", notes: "" });
+  assert.equal(store.canRedo(), false);
+  assert.deepEqual(store.historyDepth(), { undo: 1, redo: 0 });
+  assert.throws(() => store.redo(), /nothing to redo/);
+});
+
+test("the 101st change drops the oldest step", () => {
+  const store = createStore(tempFile());
+  for (let i = 0; i < 101; i += 1) {
+    store.createPerson({ name: "Person " + i, availability: 100 });
+  }
+  // 101 changes leave the 100 most recent snapshots, so the seed has fallen off
+  // the bottom of the stack.
+  assert.equal(store.historyDepth().undo, 100);
+  for (let i = 0; i < 100; i += 1) store.undo();
+  assert.equal(store.canUndo(), false);
+  // The oldest reachable plan is the one after the first change: Person 0 is
+  // still there, the change that added Person 1 has fallen off.
+  const at = store.get();
+  assert.equal(at.people.some((p) => p.name === "Person 0"), true);
+  assert.equal(at.people.some((p) => p.name === "Person 1"), false);
+  assert.throws(() => store.undo(), /nothing to undo/);
+});
+
+test("a refused write records no history step", () => {
+  const store = createStore(tempFile());
+  assert.throws(() => store.createPerson({ name: "", availability: 100 }), ValidationError);
+  assert.throws(() => store.updatePerson("missing", { name: "X" }), NotFoundError);
+  assert.throws(() => store.setRange({ start: "2026-12-31", end: "2026-01-01" }), ValidationError);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+  assert.equal(store.canUndo(), false);
+});
+
+test("a failed write records no history step", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-history-fail-"));
+  const file = path.join(dir, "plan.json");
+  const store = createStore(file);
+  const before = store.get();
+  fs.chmodSync(dir, 0o555);
+  try {
+    assert.throws(() => store.createPerson({ name: "Lucky", availability: 100 }));
+  } finally {
+    fs.chmodSync(dir, 0o755);
+  }
+  assert.deepEqual(store.get(), before);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+  assert.equal(fs.readFileSync(file, "utf8"), JSON.stringify(before, null, 2) + "\n");
+});
+
+test("undo and redo refuse at the ends of the history", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = fs.readFileSync(file, "utf8");
+  assert.throws(() => store.undo(), /nothing to undo/);
+  assert.throws(() => store.redo(), /nothing to redo/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+});
+
+test("a failed undo leaves the file, the plan and the history unchanged", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-undo-fail-"));
+  const file = path.join(dir, "plan.json");
+  const store = createStore(file);
+  store.createPerson({ name: "Dana Vo", availability: 90 });
+  const before = store.get();
+  const depth = store.historyDepth();
+
+  fs.chmodSync(dir, 0o555);
+  try {
+    assert.throws(() => store.undo());
+  } finally {
+    fs.chmodSync(dir, 0o755);
+  }
+  assert.deepEqual(store.get(), before);
+  assert.deepEqual(store.historyDepth(), depth);
+  assert.equal(fs.readFileSync(file, "utf8"), JSON.stringify(before, null, 2) + "\n");
+});
+
+test("the history lives in memory: a fresh store on the same file starts empty", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  store.createPerson({ name: "Dana Vo", availability: 90 });
+  assert.equal(store.canUndo(), true);
+
+  // A second store over the same file is a restart: the change is on disk, but
+  // the history that could step back over it is gone.
+  const fresh = createStore(file);
+  assert.equal(fresh.canUndo(), false);
+  assert.equal(fresh.canRedo(), false);
+  assert.equal(fresh.get().people.some((p) => p.name === "Dana Vo"), true);
+});
