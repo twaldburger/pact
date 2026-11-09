@@ -1154,16 +1154,35 @@ h1, h2, h3, p { margin: 0; }
 
 .ax {
   flex: 0 0 auto;
+  position: relative;
   width: calc(var(--n) * var(--day-w));
   display: flex;
   align-items: center;
   white-space: nowrap;
 }
 
+/* The separator that closes a cell is drawn on the cell's right edge, the
+   boundary its own day-grid arithmetic puts it on: the same B the blocks and
+   the weekend band are positioned at. A border sits inside the border box and
+   would land one pixel left of B, so the ink hangs off the edge instead; the
+   transparent border below keeps the content box - and every label's place -
+   exactly where it was. */
+.ax::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -1px;
+  width: 1px;
+  background: var(--rule-strong);
+}
+
+[data-zoom="day"] .ax::after { background: var(--rule); }
+
 /* The month name sticks just right of the row-header column, so the unit you
    are looking at stays named while time scrolls. */
 .ax-month {
-  border-right: 1px solid var(--rule-strong);
+  border-right: 1px solid transparent;
 }
 
 .ax-month__label {
@@ -1177,14 +1196,14 @@ h1, h2, h3, p { margin: 0; }
 
 .ax-day {
   justify-content: center;
-  border-right: 1px solid var(--rule);
+  border-right: 1px solid transparent;
   font-size: var(--fs-axis);
   color: var(--ink-soft);
 }
 
 .ax-week {
   padding-left: var(--sp-3);
-  border-right: 1px solid var(--rule-strong);
+  border-right: 1px solid transparent;
   font-size: var(--fs-axis);
   color: var(--ink-soft);
 }
