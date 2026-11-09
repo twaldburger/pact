@@ -1,11 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, rangeControl, paletteItems } from "../public/lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, paletteItems } from "../public/lib/options.mjs";
+import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
-test("the options menu holds Show archived", () => {
-  const items = optionsItems(false);
-  assert.deepEqual(items.map((item) => item.key), ["archived"]);
-  assert.equal(items[0].label, "Show archived");
+test("the options menu holds Show archived, Highlight weekends and Grid dividers", () => {
+  const items = optionsItems(false, true, false);
+  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "dividers"]);
+  assert.deepEqual(items.map((item) => item.label), [
+    "Show archived",
+    "Highlight weekends",
+    "Grid dividers"
+  ]);
 });
 
 test("Show archived is checked exactly while archived things are shown", () => {
@@ -14,6 +19,54 @@ test("Show archived is checked exactly while archived things are shown", () => {
   // The check is boolean, whatever truthy value the toggle hands it.
   assert.equal(optionsItems(1)[0].checked, true);
   assert.equal(optionsItems(undefined)[0].checked, false);
+});
+
+test("a fresh session opens with weekends highlighted and dividers off", () => {
+  // The session's own defaults, handed to the menu as app.js hands them: the
+  // weekend band is on, the dividers are off.
+  const items = optionsItems(false, true, false);
+  assert.equal(items[1].checked, true);
+  assert.equal(items[2].checked, false);
+});
+
+test("Highlight weekends is checked exactly while the band is drawn", () => {
+  const weekends = (on) => optionsItems(false, on, false)[1].checked;
+  assert.equal(weekends(true), true);
+  assert.equal(weekends(false), false);
+  assert.equal(weekends(1), true);
+  assert.equal(weekends(undefined), false);
+});
+
+test("Grid dividers is checked exactly while the rules are drawn", () => {
+  const dividers = (on) => optionsItems(false, false, on)[2].checked;
+  assert.equal(dividers(true), true);
+  assert.equal(dividers(false), false);
+  assert.equal(dividers(1), true);
+  assert.equal(dividers(undefined), false);
+});
+
+test("the three items are independent of one another", () => {
+  const items = optionsItems(true, false, true);
+  assert.deepEqual(items.map((item) => item.checked), [true, false, true]);
+  const all = optionsItems(true, true, true);
+  assert.deepEqual(all.map((item) => item.checked), [true, true, true]);
+});
+
+test("the grid divider follows the zoom, falling back to the coarsest", () => {
+  assert.equal(dividerUnit("day"), "day");
+  assert.equal(dividerUnit("week"), "week");
+  assert.equal(dividerUnit("month"), "month");
+  // An unknown zoom draws the quietest grid, the default's granularity.
+  ["year", "Month", "", undefined, null].forEach((zoom) => {
+    assert.equal(dividerUnit(zoom), "month");
+  });
+  assert.equal(dividerUnit(undefined), ZOOM_DEFAULT);
+});
+
+test("every zoom has a divider unit", () => {
+  ZOOM_LEVELS.forEach((level) => {
+    assert.ok(["day", "week", "month"].includes(dividerUnit(level)));
+  });
 });
 
 test("the period control reads back the stored period", () => {

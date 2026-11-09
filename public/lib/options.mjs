@@ -12,10 +12,24 @@ import {
   isPalette
 } from "./palette.mjs";
 
-export function optionsItems(showArchived) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers) {
   return [
-    { key: "archived", label: "Show archived", checked: !!showArchived }
+    { key: "archived", label: "Show archived", checked: !!showArchived },
+    { key: "weekends", label: "Highlight weekends", checked: !!highlightWeekends },
+    { key: "dividers", label: "Grid dividers", checked: !!gridDividers }
   ];
+}
+
+/*
+ * The granularity of the Grid dividers: the finest time unit the active zoom
+ * can show, as a name the drawing side turns into cells. It is one toggle, so
+ * this is the whole rule. An unknown zoom falls back to the coarsest - month -
+ * so a stray value draws the quietest grid rather than the busiest.
+ */
+export function dividerUnit(zoom) {
+  if (zoom === "day") return "day";
+  if (zoom === "week") return "week";
+  return "month";
 }
 
 /*

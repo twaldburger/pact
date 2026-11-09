@@ -25,7 +25,7 @@ import {
   shareFromDrag
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, rangeControl, paletteItems } from "./lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, paletteItems } from "./lib/options.mjs";
 import {
   PALETTES,
   PALETTE_DEFAULT,
@@ -135,6 +135,12 @@ var stepPx = 0;
 var BASE_PX = 1;
 var lastDragAt = 0;
 var showArchived = false;
+// The two grid-display choices: the weekend band and the full-height dividers.
+// Session-only, like Zoom and Row height - never sent to the server and never
+// written to the plan. Weekends start on and dividers off, so a fresh session
+// draws the grid exactly as it always has.
+var highlightWeekends = true;
+var gridDividers = false;
 // The Stack rail's folded state: a view setting for the session only, exactly
 // like Zoom and Row height. It is never written to the plan and resets on
 // reload.
@@ -330,6 +336,41 @@ function weeks() {
     i += span;
   }
   return cells;
+}
+
+// The boundaries the Grid dividers are drawn on: the same cells the axis
+// divides on at the active zoom. A rule sits at the right edge of each cell -
+// the day-grid position of the axis separator that closes it - so the set of
+// rules is exactly the set of axis separators at that zoom, and the leftmost
+// edge, already the row-header column's own border, is drawn once.
+function dividerCells() {
+  var unit = dividerUnit(root.getAttribute("data-zoom"));
+  if (unit === "week") return weeks();
+  if (unit === "month") return months();
+  var days = [];
+  for (var i = 0; i < DAYS; i++) days.push({ i: i, n: 1 });
+  return days;
+}
+
+// The dividers overlay for the active zoom: one 1px rule at each boundary the
+// axis divides on. It is built fresh for every draw and for every zoom change.
+function buildRules() {
+  var rules = el("div", "rules");
+  dividerCells().forEach(function (c) {
+    rules.appendChild(set(el("span", "rule"), c.i + c.n, 1));
+  });
+  return rules;
+}
+
+// A zoom change redraws the calendar's scale, not the rows, so the dividers
+// are rebuilt in place: waiting for the next draw would leave last zoom's
+// boundaries drawn down the rows.
+function updateDividerRules() {
+  var existing = tl.querySelector(".rules");
+  if (existing) existing.remove();
+  if (!gridDividers) return;
+  var body = tl.querySelector(".tl__body");
+  if (body) tl.insertBefore(buildRules(), body);
 }
 
 /* --- drawing: axis ------------------------------------------------------- */
@@ -2306,6 +2347,7 @@ function initZoom() {
     var sRect = scroller.getBoundingClientRect();
     var before = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
     root.setAttribute("data-zoom", zoom);
+    updateDividerRules();
     buttons.forEach(function (b) {
       b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
     });
@@ -2449,10 +2491,15 @@ function render() {
   tl.classList.remove("is-empty");
   tl.style.setProperty("--days", DAYS);
 
-  var overlay = el("div", "weekends");
-  weekends().forEach(function (w) {
-    overlay.appendChild(set(el("span", "weekend"), w.i, w.n));
-  });
+  var overlay = null;
+  if (highlightWeekends) {
+    overlay = el("div", "weekends");
+    weekends().forEach(function (w) {
+      overlay.appendChild(set(el("span", "weekend"), w.i, w.n));
+    });
+  }
+
+  var rules = gridDividers ? buildRules() : null;
 
   var corner = el("div", "tl__corner");
   var cornerLabel = el("span", "tl__corner-label");
@@ -2475,7 +2522,10 @@ function render() {
 
   var rows = drawRows();
 
-  tl.appendChild(overlay);
+  if (overlay) tl.appendChild(overlay);
+  // After the weekend band and before the rows, at the same stacking level:
+  // that is what puts a rule above the shading and behind the blocks.
+  if (rules) tl.appendChild(rules);
   tl.appendChild(corner);
   tl.appendChild(drawAxis());
   tl.appendChild(rows.heads);
@@ -2978,7 +3028,9 @@ function repositionPopovers() {
 // What each item does. The list and its checks come from optionsItems; adding
 // a future infrequent control is one entry there and one handler here.
 var OPTION_ACTIONS = {
-  archived: function () { setShowArchived(!showArchived); }
+  archived: function () { setShowArchived(!showArchived); },
+  weekends: function () { setHighlightWeekends(!highlightWeekends); },
+  dividers: function () { setGridDividers(!gridDividers); }
 };
 
 function setShowArchived(on) {
@@ -2987,8 +3039,23 @@ function setShowArchived(on) {
   refresh().catch(showError);
 }
 
+// Turning the weekend band or the dividers on or off is a view change, not a
+// plan change: it updates the menu and redraws. Nothing is sent to the server,
+// so the plan file is untouched and the choice is gone at the next reload.
+function setHighlightWeekends(on) {
+  highlightWeekends = on;
+  updateOptionsMenu();
+  render();
+}
+
+function setGridDividers(on) {
+  gridDividers = on;
+  updateOptionsMenu();
+  render();
+}
+
 function updateOptionsMenu() {
-  optionsItems(showArchived).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -3022,7 +3089,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  optionsItems(false).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers).forEach(function (item) {
     var btn = el("button", "options__item");
     btn.type = "button";
     btn.id = "option-" + item.key;
