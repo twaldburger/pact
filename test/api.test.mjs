@@ -366,3 +366,69 @@ test("an unknown API path is a 404 and a wrong method is a 405", async () => {
   assert.equal((await api(base, "GET", "/api/nope")).status, 404);
   assert.equal((await api(base, "GET", "/api/people")).status, 405);
 });
+
+/* --- history -------------------------------------------------------------- */
+
+test("POST /api/undo and POST /api/redo step the plan's history", async () => {
+  const { base, store } = await server();
+  const before = store.get();
+
+  // A fresh server has nothing to step back over.
+  const emptyUndo = await api(base, "POST", "/api/undo");
+  assert.equal(emptyUndo.status, 400);
+  assert.match(emptyUndo.body.error, /nothing to undo/);
+
+  const created = await api(base, "POST", "/api/people", { name: "Dana Vo", availability: 90 });
+  assert.equal(created.status, 201);
+  let plan = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(plan.canUndo, true);
+  assert.equal(plan.canRedo, false);
+
+  const undone = await api(base, "POST", "/api/undo");
+  assert.equal(undone.status, 200);
+  assert.deepEqual(undone.body, { undone: true });
+  plan = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(plan.people.some((p) => p.id === created.body.id), false);
+  assert.equal(plan.canUndo, false);
+  assert.equal(plan.canRedo, true);
+  // The restored plan is what the store holds and what the file holds.
+  assert.deepEqual(store.get(), before);
+
+  const redone = await api(base, "POST", "/api/redo");
+  assert.equal(redone.status, 200);
+  assert.deepEqual(redone.body, { redone: true });
+  plan = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(plan.people.some((p) => p.id === created.body.id), true);
+  assert.equal(plan.canUndo, true);
+  assert.equal(plan.canRedo, false);
+
+  const emptyRedo = await api(base, "POST", "/api/redo");
+  assert.equal(emptyRedo.status, 400);
+  assert.match(emptyRedo.body.error, /nothing to redo/);
+});
+
+test("undo over the API brings back a deleted Person and their Assignments", async () => {
+  const { base } = await server();
+  const person = await api(base, "POST", "/api/people", { name: "Nina Roth", availability: 100 });
+  const assignment = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: person.body.id, start: day(0), end: day(4), share: 50
+  });
+  assert.equal(assignment.status, 201);
+
+  const destroyed = await api(base, "DELETE", "/api/people/" + person.body.id + "/destroy");
+  assert.equal(destroyed.status, 200);
+  let plan = (await api(base, "GET", "/api/plan?archived=1")).body;
+  assert.equal(plan.people.some((p) => p.id === person.body.id), false);
+  assert.equal(plan.assignments.some((a) => a.id === assignment.body.id), false);
+
+  assert.equal((await api(base, "POST", "/api/undo")).status, 200);
+  plan = (await api(base, "GET", "/api/plan")).body;
+  assert.equal(plan.people.some((p) => p.id === person.body.id), true);
+  assert.equal(plan.assignments.some((a) => a.id === assignment.body.id), true);
+});
+
+test("the history routes answer only POST", async () => {
+  const { base } = await server();
+  assert.equal((await api(base, "GET", "/api/undo")).status, 405);
+  assert.equal((await api(base, "GET", "/api/redo")).status, 405);
+});

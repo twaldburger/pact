@@ -128,11 +128,17 @@ Person is restored.
 Deleting is a separate, permanent act. A Delete button sits beside Archive in
 the person panel, the project panel and the assignment popover, and beside
 Restore on an archived entry; it always opens a confirmation that names what
-will go and says it cannot be undone. Deleting a Person or a Project takes
-every Assignment that referenced it, archived ones included, and the
-confirmation names the number first. A deletion needs no prior archive and an
-archived record can be deleted too; there is no trash and no undo, so recovery
-is your own backup of `data/pact.json`.
+will go and says that Undo can still bring it back. Deleting a Person or a
+Project takes every Assignment that referenced it, archived ones included, and
+the confirmation names the number first. A deletion needs no prior archive and
+an archived record can be deleted too; there is no trash, and a deletion stays
+recoverable through Undo while the running server's history holds it.
+
+The two controls beside the Options button step the plan back and forward one
+change at a time, each disabled at the end of its stack. The history is the
+last 100 changes, held in the running server's memory: it survives a page
+reload and is lost when the server restarts, and nothing about it is written
+to disk.
 
 ## The API
 
@@ -160,6 +166,9 @@ The server exposes a small JSON API over the plan:
   Project takes its Assignments with it, archived ones included; an Assignment
   removes only itself. The response is `{"deleted": "<id>", "assignments": <n>}`,
   where `n` is the number of Assignments removed.
+- `POST /api/undo`, `POST /api/redo` - step one change back or forward through
+  the running server's in-memory history, and answer `{"undone": true}` or
+  `{"redone": true}`. An empty stack answers `400`.
 
 Invalid input answers `400` with `{"error": "..."}`; an unknown record answers
 `404`.

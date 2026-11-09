@@ -94,6 +94,8 @@ var stackList = document.getElementById("stack-list");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
 var saveStatusEl = document.getElementById("save-status");
+var undoBtn = document.getElementById("undo-btn");
+var redoBtn = document.getElementById("redo-btn");
 var boardEl = document.getElementById("board");
 var stackToggle = document.getElementById("rail-toggle");
 var stackChevron = document.querySelector(".rail-toggle__path");
@@ -1486,6 +1488,14 @@ function syncSaveStatus() {
   saveStatusEl.classList.toggle("is-failed", word === NOT_SAVED);
 }
 
+// The two history controls mirror what the server says is available: an empty
+// stack greys its button out, exactly as the row-height stepper does at its
+// ends. A page reload keeps the history, because the server keeps running.
+function syncHistoryControls() {
+  if (undoBtn) undoBtn.disabled = !(data && data.canUndo);
+  if (redoBtn) redoBtn.disabled = !(data && data.canRedo);
+}
+
 function planUrl() {
   return planQuery(showArchived);
 }
@@ -1581,6 +1591,16 @@ function restoreProject(project) {
 
 function restoreAssignment(id) {
   api("PATCH", "/api/assignments/" + encodeURIComponent(id), { archived: false }).then(refresh).catch(showError);
+}
+
+// One step through the server's in-memory history. The server writes the
+// restored plan and the screen refreshes from it, as it does after any change.
+function undoPlan() {
+  api("POST", "/api/undo").then(refresh).catch(showError);
+}
+
+function redoPlan() {
+  api("POST", "/api/redo").then(refresh).catch(showError);
 }
 
 function focusAssignment(id) {
@@ -2410,6 +2430,7 @@ function render() {
   indexData();
   contextEl.textContent = rangeLabel(data.range.start, data.range.end);
   syncSaveStatus();
+  syncHistoryControls();
   updateTodayControl();
 
   if (filterQuery.trim() !== "" && filterIsEmpty({
@@ -2487,6 +2508,10 @@ function bindChrome() {
   if (todayBtn) {
     todayBtn.addEventListener("click", function () { goToToday(); });
   }
+  // Undo and Redo step the server's history. Buttons only: no keyboard
+  // shortcut is bound for either.
+  if (undoBtn) undoBtn.addEventListener("click", undoPlan);
+  if (redoBtn) redoBtn.addEventListener("click", redoPlan);
   panelLayer.addEventListener("pointerdown", function (e) {
     if (e.target === panelLayer) closePanel(true);
   });

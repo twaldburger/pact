@@ -62,7 +62,11 @@ function planForClient(store, includeArchived) {
     range: plan.range,
     people: visible.people,
     projects: visible.projects,
-    assignments: visible.assignments
+    assignments: visible.assignments,
+    // Whether the running server's in-memory history can step either way, so
+    // the two top-bar controls can state their own availability.
+    canUndo: store.canUndo(),
+    canRedo: store.canRedo()
   };
 }
 
@@ -150,6 +154,18 @@ export function createServer(store, options) {
             return readBody(req).then((body) => sendJSON(res, 200, store.setRange(body)));
           }
           return sendError(res, 405, "method not allowed");
+        }
+        // One step through the in-memory history. The client refreshes from
+        // the plan as it does after any other change, so the reply is only an
+        // acknowledgement.
+        if (pathname === "/api/undo" || pathname === "/api/redo") {
+          if (req.method !== "POST") return sendError(res, 405, "method not allowed");
+          if (pathname === "/api/undo") {
+            store.undo();
+            return sendJSON(res, 200, { undone: true });
+          }
+          store.redo();
+          return sendJSON(res, 200, { redone: true });
         }
         const route = matchApi(pathname);
         if (route) return handleApi(req, res, store, route);
