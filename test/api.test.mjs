@@ -85,6 +85,41 @@ test("the period can be read and set over the API", async () => {
   assert.deepEqual(store.get().range, { start: "2026-01-01", end: "2026-12-31" });
 });
 
+test("the step can be read and set over the same plan route", async () => {
+  const { base, store } = await server();
+  // An absent step reads as the default 10 on the plan the client loads.
+  const fresh = await api(base, "GET", "/api/plan");
+  assert.equal(fresh.body.step, 10);
+
+  const set = await api(base, "PATCH", "/api/plan", { step: 5 });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.body, { step: 5 });
+  assert.equal(store.get().step, 5);
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.equal(read.body.step, 5);
+
+  const high = await api(base, "PATCH", "/api/plan", { step: 101 });
+  assert.equal(high.status, 400);
+  assert.match(high.body.error, /whole number from 1 to 100/);
+  const fractional = await api(base, "PATCH", "/api/plan", { step: 2.5 });
+  assert.equal(fractional.status, 400);
+  // A refusal left the stored step as it was.
+  assert.equal(store.get().step, 5);
+});
+
+test("the server accepts an off-step whole value over the API", async () => {
+  const { base } = await server();
+  const created = await api(base, "POST", "/api/assignments", {
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 35
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.share, 35);
+  const person = await api(base, "POST", "/api/people", { name: "Dana Vo", availability: 55 });
+  assert.equal(person.status, 201);
+  assert.equal(person.body.availability, 55);
+});
+
 test("an assignment outside the set period is refused over the API", async () => {
   const { base, store } = await server();
   const range = store.get().range;
@@ -321,10 +356,10 @@ test("invalid input is refused with a clear error and nothing is stored", async 
   const before = JSON.stringify(store.get());
 
   const badShare = await api(base, "POST", "/api/assignments", {
-    projectId: "atlas", personId: "anna", start: "2026-05-04", end: "2026-05-08", share: 35
+    projectId: "atlas", personId: "anna", start: day(0), end: day(4), share: 0
   });
   assert.equal(badShare.status, 400);
-  assert.match(badShare.body.error, /steps of 10/);
+  assert.match(badShare.body.error, /whole number from 1 to 100/);
 
   const badPerson = await api(base, "POST", "/api/assignments", {
     projectId: "atlas", personId: "ghost", start: "2026-05-04", end: "2026-05-08", share: 40

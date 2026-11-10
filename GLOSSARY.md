@@ -37,7 +37,7 @@ A full working week of one Person; Availability and Capacity are spoken of in it
 _Avoid_: full-time equivalent, heads
 
 **Allocation**:
-The share of a full working week that one Assignment takes, set in steps of 10%. It is absolute: 60% is 0.6 FTE whether the Person is 100% or 80% available, which is what makes FTE-days add up across People and Projects.
+The share of a full working week that one Assignment takes, set in the plan's Step. It is absolute: 60% is 0.6 FTE whether the Person is 100% or 80% available, which is what makes FTE-days add up across People and Projects.
 _Avoid_: booking, commitment, effort, load, relative share
 
 **Over-allocation**:
@@ -65,6 +65,10 @@ The plan's extent: an explicit start date and end date the owner sets, both incl
 It is the extent itself, not a view setting, and the app never derives or grows it.
 _Avoid_: range, timeframe, window, horizon
 
+**Step**:
+The plan's granularity for Availability and Allocation: one whole number of per cent from 1 to 100, stored in the plan beside its period and defaulting to 10 when absent. One step is also the floor, and the ceiling stays 100, so a 10% step floors at 10% and a 1% step at 1%. The interface snaps its steppers, panels and vertical drag by it; the server never enforces it, so changing the step leaves every stored value exactly as it was.
+_Avoid_: increments, resolution, granularity
+
 **Marker**:
 The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at.
 _Avoid_: today line, now line, cursor, playhead, reference line
@@ -82,7 +86,7 @@ To permanently destroy a Person, a Project or an Assignment; deleting a Person o
 _Avoid_: remove, purge, destroy, hide
 
 **Undo**:
-To step the plan back one change at a time, and Redo to step forward again, from two controls in the top bar. Every change is one step - a move, a reassign or a resize, a panel save, a create, an archive, a delete, a restore or a Plan period change - because each is one write, and a delete it reverses brings the record and its Assignments back. Its history is the last 100 changes, held in the running server's memory: it survives a page reload and is lost when the server restarts. Nothing about it is written to disk.
+To step the plan back one change at a time, and Redo to step forward again, from two controls in the top bar. Every change is one step - a move, a reassign or a resize, a panel save, a create, an archive, a delete, a restore, a Plan period change or a Step change - because each is one write, and a delete it reverses brings the record and its Assignments back. Its history is the last 100 changes, held in the running server's memory: it survives a page reload and is lost when the server restarts. Nothing about it is written to disk.
 _Avoid_: revert, roll back, history, snapshot
 
 **Filter**:

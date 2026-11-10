@@ -706,7 +706,8 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink-soft);
 }
 
-.options__date {
+.options__date,
+.options__number {
   appearance: none;
   min-width: 9.5rem;
   height: calc(var(--control-h) - 8px);
@@ -719,7 +720,8 @@ h1, h2, h3, p { margin: 0; }
   font-size: var(--fs-data);
 }
 
-.options__date:focus-visible { border-color: var(--rule-strong); }
+.options__date:focus-visible,
+.options__number:focus-visible { border-color: var(--rule-strong); }
 
 .options__error {
   margin: 0;

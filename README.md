@@ -91,6 +91,16 @@ but does nothing - until the period includes today again. A plan file written
 before the period was made explicit keeps its stored range and loads as it is;
 any Assignment already outside it is drawn only as far as the axis reaches.
 
+Beside the period control, the Options menu carries the percentage step: one
+whole-number field from 1 to 100 and its own Apply, so a half-typed value never
+re-steps the plan. The step is plan data, stored beside the period and
+defaulting to 10 when absent, and that one value governs both a Person's
+Availability and an Assignment's Allocation - the steppers, the panels and the
+vertical drag all move by it, and the floor is one step, so a 10% step floors
+at 10% exactly as before. The server never enforces the step: it accepts any
+whole number from 1 to 100, so changing the step leaves every stored value
+exactly as it was, never re-snapped or rewritten.
+
 What the screen can change: drag a Project from the Stack onto a Person's row to
 create an Assignment there - a ghost block shows the extent it would create and
 the dates it would take, and the row under the pointer stays highlighted; or
@@ -99,7 +109,7 @@ assignment panel with the dates read back, a project to choose, tags and a note.
 Drag an Assignment's body to move it in time and onto another Person, keeping
 its Allocation, tags and note; drag its left or right edge horizontally to
 change its start or end date, snapped to whole days; drag an edge vertically to
-change its Allocation in 10% steps. Every drag shows the value being set; the
+change its Allocation in the plan's step. Every drag shows the value being set; the
 same Allocation is set by the plus-and-minus stepper a Person's Availability
 uses, in the Assignment popover and the New assignment panel, so it is set by
 dragging or by stepping, never free-typed.
@@ -108,9 +118,9 @@ Availability line is hatched in the signal colour, and the row header's
 `assigned/availability` figure turns to that colour.
 
 People and Projects are edited in place. A Person carries a name, an
-Availability in steps of 10%, any number of Person tags and an optional note; a
-Project carries a name, a colour slot into the active ten-colour palette, any
-number of Project tags, and notes. The `Colour palette` group in the Options menu switches between the two
+Availability stepped by the plan's percentage step, any number of Person tags
+and an optional note; a Project carries a name, a colour slot into the active
+ten-colour palette, any number of Project tags, and notes. The `Colour palette` group in the Options menu switches between the two
 ColorBrewer schemes, Paired and Set3, for the session only; label ink on a
 block is chosen per fill so it stays legible either way. An Assignment's
 popover edits its Allocation, Assignment tags and note, and offers archiving;
@@ -148,11 +158,13 @@ The server exposes a small JSON API over the plan:
 - `GET /api/plan` - the live plan, with the current date as `today`.
   `GET /api/plan?archived=1` also includes archived People and Projects, so the
   archive view can draw and restore them.
-- `PATCH /api/plan` - set the plan's period. The body is
-  `{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}`; both ends must be valid
-  dates with the start not after the end, and the response is the stored
-  `{"start": "...", "end": "..."}`. This is the one write that changes the
-  range.
+- `PATCH /api/plan` - set the plan's period or its percentage step. For the
+  period the body is `{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}`; both ends
+  must be valid dates with the start not after the end, and the response is the
+  stored `{"start": "...", "end": "..."}`. This is the one write that changes
+  the range. For the step the body is `{"step": 5}`, a whole number from 1 to
+  100; the response is the stored `{"step": 5}`. The two are set separately,
+  and the step never rewrites a stored Availability or Share.
 - `POST /api/people`, `POST /api/projects`, `POST /api/assignments` - create.
 - `PATCH /api/people/:id`, `PATCH /api/projects/:id`,
   `PATCH /api/assignments/:id` - update. A Person or Project patch may set
@@ -184,9 +196,10 @@ Node's built-in test runner, no dependency. The tests under `test/` cover the
 API's create, update, archive, restore and delete paths, the atomic write (including
 that a failed write leaves the previous file intact), the refusal of invalid
 input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
-Availability and Allocation stepping, the period control's validation and
-refusal wording. Setting the plan's period, and the refusal of work outside
-it, are pinned against the store and the API. The Timeline geometry
+Availability and Allocation stepping by the plan's percentage step, the period
+and step controls' validation and refusal wording. Setting the plan's period
+and step, the whole 1..100 acceptance of Availability and Share, and the
+refusal of work outside the period, are pinned against the store and the API. The Timeline geometry
 in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
 steps - is covered without a browser, as is the block-label rule in
 `public/lib/label.mjs` - how much of a title a block has room to draw - and its
