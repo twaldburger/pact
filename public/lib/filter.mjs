@@ -369,12 +369,24 @@ const SOURCE_ASSIGNMENT_NOTE = "Assignment note";
 const SOURCE_PERSON_NOTE = "Person note";
 const SOURCE_PERSON_LOCATION = "Person location";
 const SOURCE_FIELD = "Field";
+// The first row's source: the broad search itself, named. It is not a field, so
+// it gets its own name rather than one of the vocabulary sources above.
+const SOURCE_EVERYWHERE = "Search everywhere";
 
 export function countLabel(count, unit) {
   const n = Number(count) || 0;
   if (unit === "person") return n + (n === 1 ? " person" : " people");
   if (unit === "project") return n + (n === 1 ? " project" : " projects");
+  if (unit === "match") return n + (n === 1 ? " match" : " matches");
   return n + (n === 1 ? " assignment" : " assignments");
+}
+
+// The number of things a filtered view leaves, across all three kinds. The
+// broad search's row counts in this one number because selecting it leaves the
+// whole view, so its count must name everything the view would draw.
+export function viewResultCount(view) {
+  const v = view || {};
+  return ((v.people) || []).length + ((v.projects) || []).length + ((v.assignments) || []).length;
 }
 
 // Distinct values of one tag vocabulary, first spelling winning, matched
@@ -543,6 +555,31 @@ function withTeachingPrefixes(out, q) {
     });
   });
   return teaching.concat(out);
+}
+
+/*
+ * The dropdown's first row for an untyped query: the broad search itself,
+ * named "Search everywhere", carrying the term and counted in matches. It
+ * inserts the term unchanged, so picking it leaves the broad search in place.
+ * There is no such row for a typed or empty term, and none when the broad
+ * search leaves nothing, because there is no broad result to name. The count
+ * is read from the very query the row runs - the plain term under the current
+ * scope - so it cannot promise a result the row does not draw.
+ */
+export function searchEverywhereSuggestion(plan, query, scopes) {
+  const term = parseFilterTerm(query);
+  if (term.kind !== "plain" || term.text === "") return null;
+  const count = viewResultCount(filterPlan(plan, term.text, scopes || defaultScopes()));
+  if (count === 0) return null;
+  return {
+    kind: "everywhere",
+    source: SOURCE_EVERYWHERE,
+    value: term.text,
+    count: count,
+    unit: "match",
+    matchLabel: countLabel(count, "match"),
+    insert: term.text
+  };
 }
 
 /*

@@ -187,3 +187,27 @@ test("the axis separator ink lands on the Grid divider's boundary", () => {
   // -right - width is zero.
   assert.equal(-Number(right[1]) - Number(width[1]), 0);
 });
+
+/* --- the Filter control's fixed footprint -------------------------------- */
+
+// The Look in button's summary text changes length with the scope, so its
+// width is one constant and its text ellipsises rather than resizing the
+// control. The whole rule is read from the stylesheet so the assertion tracks
+// the real declaration.
+const SCOPE = STYLE.match(/\.filter__scope\s*\{([^}]*)\}/);
+
+test("the Look in button reserves one width and ellipsises a long summary", () => {
+  assert.ok(SCOPE, "the .filter__scope rule is missing");
+  const width = SCOPE[1].match(/width:\s*([^;]+);/);
+  assert.ok(width, "the .filter__scope rule has no width");
+  assert.equal(width[1].trim(), "var(--scope-w)");
+  // A fixed width only holds if the button cannot grow or shrink as a flex
+  // item, and ellipsis only reaches text that overflows a block container.
+  assert.match(SCOPE[1], /flex:\s*0 0 auto/);
+  assert.match(SCOPE[1], /display:\s*block/);
+  assert.match(SCOPE[1], /overflow:\s*hidden/);
+  assert.match(SCOPE[1], /text-overflow:\s*ellipsis/);
+  assert.match(SCOPE[1], /white-space:\s*nowrap/);
+  // The width is a token, so the scope selection has no way to change it.
+  assert.match(STYLE, /--scope-w:\s*[^;]+;/);
+});

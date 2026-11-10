@@ -54,6 +54,10 @@
   --band-month-h: 1.75rem;
   --band-day-h: 1.5rem;
   --control-h: 1.75rem;   /* one height for every control in the top bar */
+  /* The Look in button's fixed width. Its summary text changes length with the
+     scope, so the button reserves one width and ellipsises anything longer,
+     and the Filter control's position and size never move. */
+  --scope-w: 8rem;
   --add-size: 1.5rem;     /* the square hit area of a header's add control */
   --radius: 0.1875rem;
   --radius-chip: 0.125rem;
@@ -457,8 +461,12 @@ h1, h2, h3, p { margin: 0; }
 
 .filter__scope {
   appearance: none;
-  display: inline-flex;
-  align-items: center;
+  /* A fixed width so the scope selection can never move or resize the control:
+     the summary stays inside and is ellipsised when it does not fit. A block
+     container is what lets text-overflow reach the summary text. */
+  display: block;
+  flex: 0 0 auto;
+  width: var(--scope-w);
   height: 100%;
   padding: 0 var(--sp-3);
   border: 0;
@@ -468,6 +476,12 @@ h1, h2, h3, p { margin: 0; }
   font: inherit;
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
+  /* The height is the control's content box; centring the one line on it keeps
+     the summary where the flex centring used to put it. */
+  line-height: calc(var(--control-h) - 2 * var(--base));
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
 }

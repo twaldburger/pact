@@ -10,6 +10,8 @@ import {
   filterIsEmpty,
   personAssignedShare,
   filterSuggestions,
+  searchEverywhereSuggestion,
+  viewResultCount,
   countLabel,
   parseFilterTerm,
   fieldLabel,
@@ -194,6 +196,47 @@ test("suggestions name their source and how much they would match", () => {
   assert.equal(projectNote.matchLabel, "1 project");
 });
 
+test("the dropdown leads with Search everywhere for an untyped query", () => {
+  const row = searchEverywhereSuggestion(plan(), "react", defaultScopes());
+  assert.equal(row.kind, "everywhere");
+  assert.equal(row.source, "Search everywhere");
+  assert.equal(row.value, "react");
+  assert.equal(row.unit, "match");
+  assert.equal(row.matchLabel, "7 matches");
+  // Its number is what the broad search returns: every Person, Project and
+  // Assignment the view leaves, so a broad result's row cannot undercount it.
+  const view = filterPlan(plan(), "react", defaultScopes());
+  assert.equal(row.count, viewResultCount(view));
+  assert.equal(row.count, view.people.length + view.projects.length + view.assignments.length);
+  // It inserts the term unchanged, so picking it leaves the broad search.
+  assert.equal(row.insert, "react");
+  assert.deepEqual(filterPlan(plan(), row.insert, defaultScopes()), view);
+});
+
+test("the Search everywhere count follows the scope and the term's own result", () => {
+  const row = searchEverywhereSuggestion(plan(), "react", scopes(false, false, true));
+  const view = filterPlan(plan(), "react", scopes(false, false, true));
+  assert.equal(row.count, viewResultCount(view));
+  assert.equal(row.count, 5);
+  // Only Assignments are looked in, so only the two React assignments match.
+  assert.equal(view.assignments.length, 2);
+  // One match is worded for the thing that matched.
+  assert.equal(searchEverywhereSuggestion(plan(), "handover", defaultScopes()).matchLabel, "3 matches");
+});
+
+const EVERYWHERE_NONE = [
+  ["a typed term", "person tag: react", defaultScopes()],
+  ["an empty term", "", defaultScopes()],
+  ["a term that matches nothing", "zzz", defaultScopes()],
+  ["a scope with nothing to look in", "react", scopes(false, false, false)]
+];
+
+EVERYWHERE_NONE.forEach(([what, query, s]) => {
+  test("there is no Search everywhere row for " + what, () => {
+    assert.equal(searchEverywhereSuggestion(plan(), query, s), null);
+  });
+});
+
 test("prefix matches come first, then the bigger match, then the name", () => {
   const found = filterSuggestions(plan(), "re", defaultScopes());
   const order = found.map((item) => item.source + ":" + item.value);
@@ -298,6 +341,8 @@ test("a match count is worded for the thing it counts", () => {
   assert.equal(countLabel(4, "assignment"), "4 assignments");
   assert.equal(countLabel(1, "project"), "1 project");
   assert.equal(countLabel(3, "project"), "3 projects");
+  assert.equal(countLabel(1, "match"), "1 match");
+  assert.equal(countLabel(7, "match"), "7 matches");
 });
 
 /* --- typed terms ---------------------------------------------------------- */
