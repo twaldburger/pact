@@ -7,54 +7,77 @@
  * `node --test` load exactly the same source.
  */
 
-export const AVAILABILITY_MIN = 10;
-export const AVAILABILITY_MAX = 100;
-export const AVAILABILITY_STEP = 10;
+/*
+ * The plan's step: the granularity Availability and Allocation are stepped in,
+ * one whole number of per cent from 1 to 100. The same value is the floor, so
+ * a 10% step floors at 10% - exactly what the interface did before the step
+ * became a setting - a 5% step at 5%, a 1% step at 1%. The ceiling stays 100.
+ * An absent or malformed value means 10, so every existing plan loads and
+ * behaves as it always did.
+ */
+export const DEFAULT_STEP = 10;
+export const STEP_MIN = 1;
+export const STEP_MAX = 100;
 
-// Snap any value to the nearest whole step and keep it inside the range, so a
-// panel can never offer an Availability the server would refuse.
-export function clampAvailability(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return AVAILABILITY_MIN;
-  const snapped = Math.round(n / AVAILABILITY_STEP) * AVAILABILITY_STEP;
-  return Math.min(AVAILABILITY_MAX, Math.max(AVAILABILITY_MIN, snapped));
+export function normalizeStep(value) {
+  return Number.isInteger(value) && value >= STEP_MIN && value <= STEP_MAX ? value : DEFAULT_STEP;
 }
 
-export function stepAvailability(value, delta) {
+// The step control's own rule. Returns the message, or null when the value may
+// be stored.
+export function stepSettingRefusal(value) {
+  if (!Number.isInteger(value) || value < STEP_MIN || value > STEP_MAX) {
+    return "The percentage step must be a whole number from 1 to 100.";
+  }
+  return null;
+}
+
+// Snap any value to the nearest whole step and keep it inside one step and
+// 100, so a panel can never offer a value the server would refuse.
+function snapToStep(value, step, fallback) {
+  const s = normalizeStep(step);
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback === undefined ? s : fallback;
+  const snapped = Math.round(n / s) * s;
+  return Math.min(STEP_MAX, Math.max(s, snapped));
+}
+
+export function clampAvailability(value, step) {
+  const s = normalizeStep(step);
+  return snapToStep(value, s, s);
+}
+
+export function stepAvailability(value, delta, step) {
+  const s = normalizeStep(step);
   const direction = delta < 0 ? -1 : 1;
-  return clampAvailability(clampAvailability(value) + direction * AVAILABILITY_STEP);
+  return clampAvailability(clampAvailability(value, s) + direction * s, s);
 }
 
 /*
- * An Assignment's Allocation, in the same whole 10% steps as Availability. It
- * is set by the same plus-and-minus stepper a Person's Availability uses, or by
- * dragging an edge; a typed value only ever arrives from a drag's pixel
- * arithmetic, and is rounded to the closest step here so the two can never
- * store a different number.
+ * An Assignment's Allocation, in the same step as Availability. It is set by
+ * the same plus-and-minus stepper a Person's Availability uses, or by dragging
+ * an edge; a typed value only ever arrives from a drag's pixel arithmetic, and
+ * is rounded to the closest step here so the two can never store a different
+ * number.
  */
-export const SHARE_MIN = 10;
-export const SHARE_MAX = 100;
-export const SHARE_STEP = 10;
-
-export function clampShare(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return SHARE_MAX;
-  const snapped = Math.round(n / SHARE_STEP) * SHARE_STEP;
-  return Math.min(SHARE_MAX, Math.max(SHARE_MIN, snapped));
+export function clampShare(value, step) {
+  return snapToStep(value, step, STEP_MAX);
 }
 
 // One step of the Share stepper, clamped at both ends. A step and the drag that
 // reaches the same value both pass through clampShare, so the number they store
 // is the same.
-export function stepShare(value, delta) {
+export function stepShare(value, delta, step) {
+  const s = normalizeStep(step);
   const direction = delta < 0 ? -1 : 1;
-  return clampShare(clampShare(value) + direction * SHARE_STEP);
+  return clampShare(clampShare(value, s) + direction * s, s);
 }
 
-// Where a vertical edge drag of `steps` 10% steps from `value` settles.
-export function shareFromDrag(value, steps) {
+// Where a vertical edge drag of `steps` plan steps from `value` settles.
+export function shareFromDrag(value, steps, step) {
+  const s = normalizeStep(step);
   const count = Number.isFinite(steps) ? Math.round(steps) : 0;
-  return clampShare(clampShare(value) + count * SHARE_STEP);
+  return clampShare(clampShare(value, s) + count * s, s);
 }
 
 function tagKey(tag) {

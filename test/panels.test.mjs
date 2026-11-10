@@ -14,23 +14,63 @@ import {
   dropRefusal,
   outsideRangeRefusal,
   rangeSettingRefusal,
+  DEFAULT_STEP,
+  STEP_MIN,
+  STEP_MAX,
+  normalizeStep,
+  stepSettingRefusal,
   clampShare,
-  SHARE_MIN,
-  SHARE_MAX,
   stepShare,
   shareFromDrag
 } from "../public/lib/panels.mjs";
 
-test("stepping Availability stays inside 10..100 in whole steps", () => {
-  assert.equal(stepAvailability(80, 1), 90);
-  assert.equal(stepAvailability(80, -1), 70);
-  assert.equal(stepAvailability(100, 1), 100);
-  assert.equal(stepAvailability(10, -1), 10);
-  // Any stray value is snapped to the nearest step before it moves.
+test("an absent step defaults to 10 and only 1..100 is a step", () => {
+  assert.equal(DEFAULT_STEP, 10);
+  assert.equal(STEP_MIN, 1);
+  assert.equal(STEP_MAX, 100);
+  assert.equal(normalizeStep(undefined), 10);
+  assert.equal(normalizeStep(null), 10);
+  assert.equal(normalizeStep(0), 10);
+  assert.equal(normalizeStep(101), 10);
+  assert.equal(normalizeStep(5.5), 10);
+  assert.equal(normalizeStep("5"), 10);
+  assert.equal(normalizeStep(1), 1);
+  assert.equal(normalizeStep(5), 5);
+  assert.equal(normalizeStep(100), 100);
+  assert.equal(stepSettingRefusal(5), null);
+  assert.equal(stepSettingRefusal(1), null);
+  assert.equal(stepSettingRefusal(100), null);
+  assert.match(stepSettingRefusal(0), /whole number from 1 to 100/);
+  assert.match(stepSettingRefusal(101), /whole number from 1 to 100/);
+  assert.match(stepSettingRefusal(5.5), /whole number from 1 to 100/);
+  assert.match(stepSettingRefusal(undefined), /whole number from 1 to 100/);
+});
+
+test("stepping Availability stays inside one step..100 in the plan's step", () => {
+  // The default 10 is exactly today's behaviour.
+  assert.equal(stepAvailability(80, 1, 10), 90);
+  assert.equal(stepAvailability(80, -1, 10), 70);
+  assert.equal(stepAvailability(100, 1, 10), 100);
+  assert.equal(stepAvailability(10, -1, 10), 10);
+  // A step of 5 moves in fives and floors at 5.
+  assert.equal(stepAvailability(80, 1, 5), 85);
+  assert.equal(stepAvailability(80, -1, 5), 75);
+  assert.equal(stepAvailability(100, 1, 5), 100);
+  assert.equal(stepAvailability(5, -1, 5), 5);
+  assert.equal(clampAvailability(52, 5), 50);
+  assert.equal(clampAvailability(53, 5), 55);
+  assert.equal(clampAvailability(1, 5), 5);
+  // A step of 1 reaches every whole percent and floors at 1.
+  assert.equal(stepAvailability(50, 1, 1), 51);
+  assert.equal(clampAvailability(1, 1), 1);
+  assert.equal(clampAvailability(0, 1), 1);
+  assert.equal(clampAvailability(99.4, 1), 99);
+  // The ceiling stays 100 whatever the step, and an absent step reads as 10.
+  assert.equal(clampAvailability(1000, 7), 100);
   assert.equal(clampAvailability(55), 60);
   assert.equal(clampAvailability(0), 10);
-  assert.equal(clampAvailability(1000), 100);
   assert.equal(clampAvailability(undefined), 10);
+  assert.equal(stepAvailability(80, 1), 90);
 });
 
 test("Person tags are suggested from other People only", () => {
@@ -144,31 +184,38 @@ test("the period control refuses an invalid or reversed pair", () => {
   assert.match(rangeSettingRefusal("2026-12-31", "2026-01-01"), /must not be after/);
 });
 
-test("stepping a Share moves exactly ten in each direction, inside 10..100", () => {
-  assert.equal(stepShare(50, 1), 60);
-  assert.equal(stepShare(50, -1), 40);
-  assert.equal(stepShare(100, 1), 100);
-  assert.equal(stepShare(10, -1), 10);
-  assert.equal(SHARE_MIN, 10);
-  assert.equal(SHARE_MAX, 100);
+test("stepping a Share moves by the plan's step, inside one step..100", () => {
+  assert.equal(stepShare(50, 1, 10), 60);
+  assert.equal(stepShare(50, -1, 10), 40);
+  assert.equal(stepShare(100, 1, 10), 100);
+  assert.equal(stepShare(10, -1, 10), 10);
+  // A step of 5 moves in fives and floors at 5; a step of 1 floors at 1.
+  assert.equal(stepShare(50, 1, 5), 55);
+  assert.equal(stepShare(5, -1, 5), 5);
+  assert.equal(stepShare(50, 1, 1), 51);
+  assert.equal(stepShare(1, -1, 1), 1);
 });
 
 test("a stepped Share stores the same number a drag would", () => {
   // A drag from 40% three steps up settles on 70%; stepping up stores 70%.
-  assert.equal(shareFromDrag(40, 3), 70);
-  assert.equal(clampShare(70), 70);
+  assert.equal(shareFromDrag(40, 3, 10), 70);
+  assert.equal(clampShare(70, 10), 70);
+  // At a step of 5 a drag of two steps settles on 50% and the floor is 5%.
+  assert.equal(shareFromDrag(40, 2, 5), 50);
+  assert.equal(shareFromDrag(5, -3, 5), 5);
   // Every reachable value is already a whole step, so a step and a drag onto
   // it pass through clampShare and cannot drift apart.
-  for (let value = SHARE_MIN; value <= SHARE_MAX; value += 10) {
-    assert.equal(clampShare(value), value);
-    assert.equal(shareFromDrag(value, 0), value);
+  for (let value = 10; value <= 100; value += 10) {
+    assert.equal(clampShare(value, 10), value);
+    assert.equal(shareFromDrag(value, 0, 10), value);
   }
   // A stray value snaps to the closest step, and the range is clamped.
-  assert.equal(clampShare(37), 40);
-  assert.equal(clampShare(34), 30);
-  assert.equal(clampShare(0), 10);
-  assert.equal(clampShare(1000), 100);
+  assert.equal(clampShare(37, 10), 40);
+  assert.equal(clampShare(34, 10), 30);
+  assert.equal(clampShare(0, 10), 10);
+  assert.equal(clampShare(1000, 10), 100);
+  assert.equal(clampShare(0, 1), 1);
   // A drag that would run past either end stops at it, like the stepper does.
-  assert.equal(shareFromDrag(90, 5), 100);
-  assert.equal(shareFromDrag(20, -5), 10);
+  assert.equal(shareFromDrag(90, 5, 10), 100);
+  assert.equal(shareFromDrag(20, -5, 10), 10);
 });

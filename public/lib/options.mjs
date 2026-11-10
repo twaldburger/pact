@@ -11,6 +11,7 @@ import {
   PALETTE_NAMES,
   isPalette
 } from "./palette.mjs";
+import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 
 export function optionsItems(showArchived, highlightWeekends, gridDividers) {
   return [
@@ -57,5 +58,22 @@ export function rangeControl(range) {
     label: "Plan period",
     start: range ? range.start : "",
     end: range ? range.end : ""
+  };
+}
+
+/*
+ * The percentage step control, beside the period control: one whole number
+ * from 1 to 100, applied on its own so a half-typed value never re-steps the
+ * plan. It reads back the plan's current step, and an absent one reads as the
+ * default of 10.
+ */
+export function stepControl(step) {
+  return {
+    key: "step",
+    label: "Percentage step",
+    value: normalizeStep(step),
+    min: STEP_MIN,
+    max: STEP_MAX,
+    defaultValue: DEFAULT_STEP
   };
 }

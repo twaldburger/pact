@@ -5,8 +5,8 @@
  * The panel rules that are not about the DOM live in ./lib/panels.mjs, so
  * `node --test` can pin them. */
 import {
-  AVAILABILITY_MIN,
-  AVAILABILITY_MAX,
+  DEFAULT_STEP,
+  STEP_MAX,
   clampAvailability,
   stepAvailability,
   suggestPersonTags,
@@ -18,13 +18,13 @@ import {
   dropRefusal,
   rangeSettingRefusal,
   clampShare,
-  SHARE_MIN,
-  SHARE_MAX,
   stepShare,
-  shareFromDrag
+  shareFromDrag,
+  normalizeStep,
+  stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, dividerUnit, rangeControl, paletteItems } from "./lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems } from "./lib/options.mjs";
 import {
   PALETTES,
   PALETTE_DEFAULT,
@@ -111,6 +111,10 @@ var DAY_MS = 86400000;
 // Zoom and Row height. It is never written to the plan and opens at Paired
 // every visit. A Project's colour is a slot into whichever palette is active.
 var activePalette = PALETTE_DEFAULT;
+// The plan's percentage step for the session, resolved from the loaded plan:
+// the stored value, or the default of 10 when the plan carries none. The
+// steppers, the panels and the vertical drag all move by it.
+var planStep = DEFAULT_STEP;
 
 var data = null;
 var rangeStart = null;
@@ -209,6 +213,7 @@ function activeColour(slot) {
 /* --- data index ---------------------------------------------------------- */
 
 function indexData() {
+  planStep = normalizeStep(data.step);
   rangeStart = udate(data.range.start);
   rangeEnd = udate(data.range.end);
   DAYS = dayDiff(rangeStart, rangeEnd) + 1;
@@ -1293,8 +1298,10 @@ function beginEdgeDrag(a, edge, block, e) {
       set(block, curStart, curEnd - curStart + 1);
       readout.textContent = fmtRange(addDays(rangeStart, curStart), addDays(rangeStart, curEnd));
     } else {
-      var steps = Math.round(-dy / stepPx);
-      curShare = shareFromDrag(origShare, steps);
+      // stepPx is the pixel height of a 10% step, so one plan step is that
+      // much times step/10; a step of 10 reproduces the original arithmetic.
+      var steps = Math.round(-dy / (stepPx * planStep / 10));
+      curShare = shareFromDrag(origShare, steps, planStep);
       var offset = Number(block.dataset.offset) || 0;
       block.style.setProperty("--blk-height",
         (yPx(offset + curShare / 100) - yPx(offset)) + "px");
@@ -1856,28 +1863,29 @@ function stepperControl(opts) {
   return { node: wrap, value: function () { return current; } };
 }
 
-// A Person's Availability in whole 10% steps.
+// A Person's Availability, stepped by the plan's own step. The floor is one
+// step, so a 10% step floors at 10% exactly as before.
 function availabilityControl(value) {
   return stepperControl({
     value: value,
-    label: "Availability, in steps of 10 per cent",
-    min: AVAILABILITY_MIN,
-    max: AVAILABILITY_MAX,
-    clamp: clampAvailability,
-    step: stepAvailability
+    label: "Availability, in steps of " + planStep + " per cent",
+    min: planStep,
+    max: STEP_MAX,
+    clamp: function (v) { return clampAvailability(v, planStep); },
+    step: function (v, delta) { return stepAvailability(v, delta, planStep); }
   });
 }
 
-// An Assignment's Share, in the same whole 10% steps as Availability and set by
-// the same control, so stepping and an edge drag can never disagree.
+// An Assignment's Share, in the same step as Availability and set by the same
+// control, so stepping and an edge drag can never disagree.
 function shareControl(value) {
   return stepperControl({
     value: value,
-    label: "Allocation, in steps of 10 per cent",
-    min: SHARE_MIN,
-    max: SHARE_MAX,
-    clamp: clampShare,
-    step: stepShare
+    label: "Allocation, in steps of " + planStep + " per cent",
+    min: planStep,
+    max: STEP_MAX,
+    clamp: function (v) { return clampShare(v, planStep); },
+    step: function (v, delta) { return stepShare(v, delta, planStep); }
   });
 }
 
@@ -1980,7 +1988,7 @@ function suggestedInput(value, suggest) {
 function openPersonPanel(person, trigger) {
   var editing = !!person;
   var node = panelShell(editing ? "Person" : "Add person",
-    editing ? null : "Availability is set in steps of 10%.");
+    editing ? null : "Availability is set in steps of " + planStep + "%.");
   var form = el("form", "form");
 
   var nameInput = input(editing ? person.name : "");
@@ -1993,7 +2001,7 @@ function openPersonPanel(person, trigger) {
   });
   form.appendChild(formRow("Location", location.node));
 
-  var availability = availabilityControl(editing ? person.availability : AVAILABILITY_MAX);
+  var availability = availabilityControl(editing ? person.availability : STEP_MAX);
   form.appendChild(formRow("Availability", availability.node));
 
   // Person tags are offered from other People; Assignment tags are a separate
@@ -2958,6 +2966,8 @@ var paletteButtons = {};
 var rangeStartInput = null;
 var rangeEndInput = null;
 var rangeError = null;
+var stepInput = null;
+var stepError = null;
 
 // Every popover in the bar is fixed to the viewport and placed against its
 // trigger. The bar can scroll on its own when the window is narrow, so this
@@ -3068,6 +3078,7 @@ function buildOptionsMenu() {
   });
   optionsMenu.appendChild(buildPaletteControl());
   optionsMenu.appendChild(buildRangeControl());
+  optionsMenu.appendChild(buildStepControl());
 }
 
 /* The Colour palette group: the two schemes, each a checkable item with the
@@ -3182,6 +3193,85 @@ function applyRange() {
   });
 }
 
+/* The percentage step control, beside the period control: one whole-number
+ * field from 1 to 100 and its own Apply, so a half-typed value never re-steps
+ * the plan. Applying it updates the steppers, the panels and the drag, because
+ * every one of them reads the plan's step. */
+function buildStepControl() {
+  var item = stepControl(null);
+  var wrap = el("div", "options__range");
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", item.label);
+  var heading = el("span", "options__range-label");
+  heading.textContent = item.label;
+  wrap.appendChild(heading);
+
+  var row = el("label", "options__field");
+  row.setAttribute("for", "step-input");
+  var span = el("span", "options__field-label");
+  span.textContent = "Step";
+  var input = document.createElement("input");
+  input.type = "number";
+  input.className = "options__number";
+  input.id = "step-input";
+  input.min = String(item.min);
+  input.max = String(item.max);
+  input.step = "1";
+  input.setAttribute("aria-label", "Percentage step, from 1 to 100");
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); applyStep(); }
+  });
+  row.appendChild(span);
+  row.appendChild(input);
+  stepInput = input;
+  wrap.appendChild(row);
+
+  stepError = el("p", "options__error");
+  stepError.setAttribute("role", "alert");
+  stepError.hidden = true;
+  wrap.appendChild(stepError);
+
+  var apply = el("button", "options__apply");
+  apply.type = "button";
+  apply.textContent = "Apply";
+  apply.setAttribute("data-step-apply", "");
+  apply.addEventListener("click", applyStep);
+  wrap.appendChild(apply);
+
+  return wrap;
+}
+
+function setStepError(message) {
+  if (!stepError) return;
+  stepError.textContent = message;
+  stepError.hidden = !message;
+}
+
+function updateStepControl() {
+  if (!stepInput || !data) return;
+  stepInput.value = String(stepControl(data.step).value);
+  setStepError("");
+}
+
+function applyStep() {
+  if (!stepInput) return;
+  var value = Number(stepInput.value);
+  var refusal = stepSettingRefusal(value);
+  if (refusal) { setStepError(refusal); return; }
+  var apply = optionsMenu.querySelector("[data-step-apply]");
+  if (apply) apply.disabled = true;
+  api("PATCH", "/api/plan", { step: value }).then(function () {
+    return refresh();
+  }).then(function () {
+    setStepError("");
+    openOptions(false);
+  }).catch(function (err) {
+    setStepError(err && err.message ? err.message : "Could not save the step.");
+  }).then(function () {
+    if (apply) apply.disabled = false;
+  });
+}
+
 // One popover at a time: opening the menu closes the filter's scope popover
 // (and the suggestions), and opening the scope popover closes the menu.
 function openOptions(open) {
@@ -3191,6 +3281,7 @@ function openOptions(open) {
     if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
     updateOptionsMenu();
     updateRangeControl();
+    updateStepControl();
   }
   optionsMenu.hidden = !open;
   optionsBtn.setAttribute("aria-expanded", open ? "true" : "false");

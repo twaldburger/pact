@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, dividerUnit, rangeControl, paletteItems } from "../public/lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
 test("the options menu holds Show archived, Highlight weekends and Grid dividers", () => {
@@ -77,6 +77,21 @@ test("the period control reads back the stored period", () => {
   assert.equal(item.end, "2027-10-31");
   // With no plan loaded the fields are simply empty, not undefined.
   assert.deepEqual(rangeControl(null), { key: "range", label: "Plan period", start: "", end: "" });
+});
+
+test("the step control reads back the plan's step and defaults to 10", () => {
+  assert.deepEqual(stepControl(5), {
+    key: "step", label: "Percentage step", value: 5, min: 1, max: 100, defaultValue: 10
+  });
+  assert.equal(stepControl(100).value, 100);
+  assert.equal(stepControl(1).value, 1);
+  // An absent or malformed step reads as the default of 10, never as a value
+  // that would re-step the plan by something the store would refuse.
+  assert.equal(stepControl(undefined).value, 10);
+  assert.equal(stepControl(null).value, 10);
+  assert.equal(stepControl(0).value, 10);
+  assert.equal(stepControl(101).value, 10);
+  assert.equal(stepControl(2.5).value, 10);
 });
 
 test("the Colour palette group is Paired and Set3, exactly one checked", () => {

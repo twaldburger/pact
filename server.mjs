@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createStore, todayISO, ValidationError, NotFoundError } from "./lib/plan.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
+import { normalizeStep } from "./public/lib/panels.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +61,8 @@ function planForClient(store, includeArchived) {
   return {
     today: todayISO(),
     range: plan.range,
+    // The step is the interface's rule; an absent one reads as the default 10.
+    step: normalizeStep(plan.step),
     people: visible.people,
     projects: visible.projects,
     assignments: visible.assignments,
@@ -148,10 +151,15 @@ export function createServer(store, options) {
       .then(() => {
         if (pathname === "/api/plan") {
           if (req.method === "GET") return sendJSON(res, 200, planForClient(store, includeArchived));
-          // The extent is the owner's setting; this is the one write that sets
-          // both ends together. Everything else leaves the range alone.
+          // The plan's settings: the period, set with both ends together, and
+          // the percentage step. Each is its own write and its own body.
           if (req.method === "PATCH") {
-            return readBody(req).then((body) => sendJSON(res, 200, store.setRange(body)));
+            return readBody(req).then((body) => {
+              if (body && Object.prototype.hasOwnProperty.call(body, "step")) {
+                return sendJSON(res, 200, store.setStep(body));
+              }
+              return sendJSON(res, 200, store.setRange(body));
+            });
           }
           return sendError(res, 405, "method not allowed");
         }

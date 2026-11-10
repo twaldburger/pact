@@ -57,6 +57,53 @@ test("the period is validated when it is set and nothing is written on refusal",
   assert.equal(fs.readFileSync(file, "utf8"), before);
 });
 
+test("the server accepts any whole percent, on or off the plan's step", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  // The step is the interface's rule, not the server's: a value the previous
+  // step-by-10 code refused is now stored, so changing the step never
+  // invalidates what a plan already holds.
+  const person = store.createPerson({ name: "Dana Vo", availability: 55 });
+  assert.equal(person.availability, 55);
+  const assignment = store.createAssignment({
+    projectId: "atlas", personId: person.id, start: day(0), end: day(4), share: 35
+  });
+  assert.equal(assignment.share, 35);
+  // Both ends of the range are whole percents and are accepted.
+  assert.equal(store.updatePerson(person.id, { availability: 1 }).availability, 1);
+  assert.equal(store.updateAssignment(assignment.id, { share: 100 }).share, 100);
+});
+
+test("the step is stored beside the period, and absent it reads as 10", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  // The seed leaves the step out, so an existing-style plan carries none.
+  assert.equal(store.get().step, undefined);
+  assert.deepEqual(store.setStep({ step: 5 }), { step: 5 });
+  assert.equal(store.get().step, 5);
+  // It survives a reload, and changing it rewrites no stored Availability or
+  // Share: a value off the new step is left exactly as it was.
+  const person = store.createPerson({ name: "Dana Vo", availability: 55 });
+  const reloaded = createStore(file);
+  assert.equal(reloaded.get().step, 5);
+  assert.equal(store.setStep({ step: 1 }).step, 1);
+  assert.equal(store.get().people.find((p) => p.id === person.id).availability, 55);
+  assert.equal(createStore(file).get().step, 1);
+});
+
+test("the step is validated when it is set and nothing is written on refusal", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = fs.readFileSync(file, "utf8");
+
+  assert.throws(() => store.setStep({ step: 0 }), /whole number from 1 to 100/);
+  assert.throws(() => store.setStep({ step: 101 }), /whole number from 1 to 100/);
+  assert.throws(() => store.setStep({ step: 5.5 }), /whole number from 1 to 100/);
+  assert.throws(() => store.setStep({ step: "5" }), /whole number from 1 to 100/);
+  assert.throws(() => store.setStep({ step: 5, extra: 1 }), ValidationError);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});
+
 test("work outside the period is refused and left unwritten", () => {
   const file = tempFile();
   const store = createStore(file);
@@ -306,11 +353,12 @@ test("invalid input is refused and leaves the plan unchanged", () => {
   const before = fs.readFileSync(file, "utf8");
 
   assert.throws(() => store.createPerson({ name: "Zero", availability: 0 }), ValidationError);
-  assert.throws(() => store.createPerson({ name: "Odd", availability: 55 }), ValidationError);
+  assert.throws(() => store.createPerson({ name: "Over", availability: 101 }), ValidationError);
+  assert.throws(() => store.createPerson({ name: "Fractional", availability: 55.5 }), ValidationError);
   assert.throws(() => store.createPerson({ name: "", availability: 100 }), ValidationError);
   assert.throws(() => store.createAssignment({ projectId: "nope", personId: "anna", start: "2026-01-01", end: "2026-01-02", share: 10 }), ValidationError);
   assert.throws(() => store.createAssignment({ projectId: "atlas", personId: "anna", start: "2026-01-02", end: "2026-01-01", share: 10 }), ValidationError);
-  assert.throws(() => store.createAssignment({ projectId: "atlas", personId: "anna", start: "2026-01-01", end: "2026-01-02", share: 35 }), ValidationError);
+  assert.throws(() => store.createAssignment({ projectId: "atlas", personId: "anna", start: "2026-01-01", end: "2026-01-02", share: 0 }), ValidationError);
   assert.throws(() => store.createAssignment({ projectId: "atlas", personId: "anna", start: "2026-13-01", end: "2026-01-02", share: 30 }), ValidationError);
   assert.throws(() => store.createPerson({ name: "Typo", availability: 100, nickname: "T" }), ValidationError);
   assert.throws(() => store.updatePerson("missing", { name: "X" }), NotFoundError);
