@@ -4,10 +4,9 @@
  * no imports, so the browser (public/app.js) and `node --test` load exactly
  * the same source.
  *
- * Ordering is display order only. It is session-only, like Zoom and Row
- * height: the state is held in memory, is never sent to the server, and never
- * reaches the plan file. With no key chosen the caller's own order is returned
- * untouched, and ties always break by name.
+ * Ordering is display order only. It is a view setting stored in the config,
+ * like Zoom and Row height; it never reaches the plan file. With no key chosen
+ * the caller's own order is returned untouched, and ties always break by name.
  */
 
 export const ASCENDING = "asc";

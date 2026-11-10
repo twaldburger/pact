@@ -71,9 +71,13 @@ The app writes only this file, and refuses a write when the file changed underne
 _Avoid_: database, data store, document, save, dataset
 
 **Config**:
-The app's own settings file, `data/config.json`, kept beside the plan and gitignored like the rest of `data/`. It holds the active plan file's path - one active plan, never a list of recent ones - and may hold other settings later.
+The app's own settings file, `data/config.json`, kept beside the plan and gitignored like the rest of `data/`. It holds the active plan file's path - one active plan, never a list of recent ones - and the [View settings](#view-setting).
 Its absence means the default; if it exists but cannot be read, the default is used and the app says so rather than failing silently.
 _Avoid_: preferences, settings, options, registry
+
+**View setting**:
+One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom, the Row height, the weekend band and the Grid dividers, the Minimap, the Colour palette, whether the Stack is collapsed, and the two sort orders. The Filter and the Marker are deliberately not view settings - one is a query, the other a cursor into the timeline - so neither persists. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker alone. A malformed stored value falls back to that setting's default on its own.
+_Avoid_: preference, option, display state
 
 **Step**:
 The plan's granularity for Availability and Allocation: one whole number of per cent from 1 to 100, stored in the plan beside its period and defaulting to 10 when absent. One step is also the floor, and the ceiling stays 100, so a 10% step floors at 10% and a 1% step at 1%. The interface snaps its steppers, panels and vertical drag by it; the server never enforces it, so changing the step leaves every stored value exactly as it was.
