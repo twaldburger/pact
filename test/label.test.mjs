@@ -143,6 +143,58 @@ test("the hover text does not change what the block draws", () => {
     blockLabel(room));
 });
 
+// The word-boundary cut: a title of more than one word prefers the longest
+// whole-word prefix that fits, and only cuts inside a word when no boundary
+// does. The cut drops the whitespace the ellipsis replaces, so `Meridian
+// Design...` has no space before the dots.
+const LONG = "Meridian Design System"; // 22 chars
+const longRoom = { ...room, title: LONG };
+
+test("a long two-word name cuts at the word boundary, beside the ellipsis", () => {
+  // Room for "Meridian Design…" (16 chars) but not the whole title (22).
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(17) }), "Meridian Design" + ELLIPSIS);
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(16) }), "Meridian Design" + ELLIPSIS);
+  // The space the ellipsis replaces is dropped, not left before the dots.
+  assert.ok(!blockLabel({ ...longRoom, width: widthOf(16) }).includes(" " + ELLIPSIS));
+});
+
+test("a narrower block drops to the next word boundary before cutting a word", () => {
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(15) }), "Meridian" + ELLIPSIS);
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(9) }), "Meridian" + ELLIPSIS);
+});
+
+test("a single unbreakable word falls back to the character-level cut", () => {
+  // "Meridian" has no internal boundary; "Meridian…" is 9 chars and does not fit.
+  assert.equal(blockLabel({ ...room, title: "Meridian", width: widthOf(7) }), "Meridi" + ELLIPSIS);
+  assert.equal(blockLabel({ ...room, title: "Meridian", width: widthOf(6) }), "Merid" + ELLIPSIS);
+});
+
+test("the character-level cut is the fallback when not even the first word fits", () => {
+  // Too narrow for "Meridian…" (9), so the longest fitting fragment is used.
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(8) }), "Meridia" + ELLIPSIS);
+});
+
+test("the three-character floor holds for a word-boundary title too", () => {
+  // "Mer…" is the shortest cut there is, at four measured characters.
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(4) }), "Mer" + ELLIPSIS);
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(3) }), "");
+});
+
+test("the whole label and the bare name still win over any word-boundary cut", () => {
+  const full = labelText(LONG, SHARE); // 29 chars
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(full.length) }), full);
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(LONG.length) }), LONG);
+  assert.equal(blockLabel({ ...longRoom, width: widthOf(LONG.length + 1) }), LONG);
+});
+
+test("a paper label still never cuts a multi-word name", () => {
+  // `minChars` at the title's own length turns every cut off, word boundary
+  // included, so the paper reads the whole name or nothing.
+  const paperLong = { ...paper, title: LONG, minChars: LONG.length };
+  assert.equal(blockLabel({ ...paperLong, width: widthOf(LONG.length - 1) }), "");
+  assert.ok(!blockLabel({ ...paperLong, width: widthOf(LONG.length - 1) }).includes(ELLIPSIS));
+});
+
 test("the range label names both years when they differ", () => {
   assert.equal(rangeLabel("2026-09-01", "2027-10-31"), "Sep 2026 - Oct 2027");
 });

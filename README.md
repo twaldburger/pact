@@ -3,7 +3,8 @@
 People Allocation & Capacity Tracker: a local plan of who works on what, for how
 long, and how much of their time it takes. One row is one Person, and the height
 of a block is how much of that person a Project takes. See [GLOSSARY.md](GLOSSARY.md)
-and `docs/` for the domain model, scope and decisions.
+and `docs/` for the domain model, scope, decisions and the
+[text-overflow standard](docs/overflow.md).
 
 ## Running it
 
