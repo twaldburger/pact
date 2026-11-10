@@ -366,6 +366,25 @@ function weeks() {
   return cells;
 }
 
+// The Sprint zoom's cells: one per derived sprint in day-grid positions, plus
+// a blank filler for the days before the cadence's start, which carry no
+// sprint. The axis band and the Grid dividers both read this, so a rule is
+// always drawn on the same edges as the sprint band it sits under.
+function sprintCells() {
+  var cells = [];
+  if (!sprintList.length) return cells;
+  var first = sprintList[0];
+  if (first.startIndex > 0) {
+    cells.push({ i: 0, n: Math.min(first.startIndex, DAYS), blank: true });
+  }
+  sprintList.forEach(function (sp) {
+    var i = clamp(sp.startIndex, 0, DAYS - 1);
+    var last = clamp(sp.endIndex, 0, DAYS - 1);
+    cells.push({ i: i, n: Math.max(1, last - i + 1), name: sp.name });
+  });
+  return cells;
+}
+
 // The boundaries the Grid dividers are drawn on: the same cells the axis
 // divides on at the active zoom. A rule sits at the right edge of each cell -
 // the day-grid position of the axis separator that closes it - so the set of
@@ -373,6 +392,7 @@ function weeks() {
 // edge, already the row-header column's own border, is drawn once.
 function dividerCells() {
   var unit = dividerUnit(root.getAttribute("data-zoom"));
+  if (unit === "sprint") return sprintCells();
   if (unit === "week") return weeks();
   if (unit === "month") return months();
   var days = [];
@@ -443,21 +463,15 @@ function drawAxis() {
   // nothing is derived backwards. The band is drawn with the others and the
   // zoom's own CSS shows exactly one secondary band.
   var sprintBand = el("div", "axis__band axis__sprints");
-  if (sprintList.length) {
-    var firstSprint = sprintList[0];
-    if (firstSprint.startIndex > 0) {
-      sprintBand.appendChild(set(el("div", "ax ax-sprint ax-sprint--blank"), 0, firstSprint.startIndex));
-    }
-    sprintList.forEach(function (sp) {
-      var i = clamp(sp.startIndex, 0, DAYS - 1);
-      var last = clamp(sp.endIndex, 0, DAYS - 1);
-      var cell = el("div", "ax ax-sprint");
+  sprintCells().forEach(function (c) {
+    var cell = el("div", c.blank ? "ax ax-sprint ax-sprint--blank" : "ax ax-sprint");
+    if (!c.blank) {
       var label = el("span", "ax-sprint__label");
-      label.textContent = sp.name;
+      label.textContent = c.name;
       cell.appendChild(label);
-      sprintBand.appendChild(set(cell, i, Math.max(1, last - i + 1)));
-    });
-  }
+    }
+    sprintBand.appendChild(set(cell, c.i, c.n));
+  });
 
   axis.appendChild(monthBand);
   axis.appendChild(dayBand);

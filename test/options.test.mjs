@@ -55,8 +55,7 @@ test("the three items are independent of one another", () => {
 test("the grid divider follows the zoom, falling back to the coarsest", () => {
   assert.equal(dividerUnit("day"), "day");
   assert.equal(dividerUnit("week"), "week");
-  // Sprint shares Week's density, so its dividers are the same week cells.
-  assert.equal(dividerUnit("sprint"), "week");
+  assert.equal(dividerUnit("sprint"), "sprint");
   assert.equal(dividerUnit("month"), "month");
   // An unknown zoom draws the quietest grid, the default's granularity.
   ["year", "Month", "", undefined, null].forEach((zoom) => {
@@ -67,7 +66,7 @@ test("the grid divider follows the zoom, falling back to the coarsest", () => {
 
 test("every zoom has a divider unit", () => {
   ZOOM_LEVELS.forEach((level) => {
-    assert.ok(["day", "week", "month"].includes(dividerUnit(level)));
+    assert.ok(["day", "week", "sprint", "month"].includes(dividerUnit(level)));
   });
 });
 
