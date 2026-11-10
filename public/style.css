@@ -1161,12 +1161,14 @@ h1, h2, h3, p { margin: 0; }
   white-space: nowrap;
 }
 
-/* The separator that closes a cell is drawn on the cell's right edge, the
-   boundary its own day-grid arithmetic puts it on: the same B the blocks and
-   the weekend band are positioned at. A border sits inside the border box and
-   would land one pixel left of B, so the ink hangs off the edge instead; the
-   transparent border below keeps the content box - and every label's place -
-   exactly where it was. */
+/* The separator that closes a cell is drawn on the cell's right edge, the true
+   day boundary B = (i + n) * day-w that the blocks, the weekend band and the
+   Grid dividers all sit on. An absolutely positioned box is laid against the
+   cell's padding edge, so a right border - opaque or transparent - would pull
+   the containing block one pixel left of B and land the ink on B - 1. The cells
+   carry no right border for that reason, which also leaves the content box at
+   the cell's full width so a centred day number keeps the cell's true centre;
+   the ink then hangs one pixel past the padding edge onto B. */
 .ax::after {
   content: "";
   position: absolute;
@@ -1181,10 +1183,6 @@ h1, h2, h3, p { margin: 0; }
 
 /* The month name sticks just right of the row-header column, so the unit you
    are looking at stays named while time scrolls. */
-.ax-month {
-  border-right: 1px solid transparent;
-}
-
 .ax-month__label {
   position: sticky;
   left: calc(var(--head-w) + var(--sp-3));
@@ -1196,14 +1194,12 @@ h1, h2, h3, p { margin: 0; }
 
 .ax-day {
   justify-content: center;
-  border-right: 1px solid transparent;
   font-size: var(--fs-axis);
   color: var(--ink-soft);
 }
 
 .ax-week {
   padding-left: var(--sp-3);
-  border-right: 1px solid transparent;
   font-size: var(--fs-axis);
   color: var(--ink-soft);
 }
