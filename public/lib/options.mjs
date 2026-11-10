@@ -13,11 +13,12 @@ import {
 } from "./palette.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 
-export function optionsItems(showArchived, highlightWeekends, gridDividers) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
     { key: "weekends", label: "Highlight weekends", checked: !!highlightWeekends },
-    { key: "dividers", label: "Grid dividers", checked: !!gridDividers }
+    { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
+    { key: "minimap", label: "Minimap", checked: !!minimap }
   ];
 }
 

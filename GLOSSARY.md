@@ -73,6 +73,10 @@ _Avoid_: increments, resolution, granularity
 The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at.
 _Avoid_: today line, now line, cursor, playhead, reference line
 
+**Minimap**:
+An overview strip of the Timeline, off by default and turned on under the Options glyph, fixed at the board's bottom-right. Its height is how much of the shown rows' available capacity is used on each day rather than an absolute assigned share, and a day past full is over-allocation, drawn at the top of that scale in the signal colour. It follows the Filter and Show archived as the grid does and shows an empty map when the Filter leaves nothing, and it highlights the stretch of the period the grid currently shows, which can be dragged - or the strip clicked - to scroll the Timeline. It is session-only, exactly like Zoom and Row height, and is independent of the collapsible Stack.
+_Avoid_: overview, thumbnail, mini-chart, density chart
+
 **Zoom**:
 The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - and Sprint shares Week's density while its secondary band names the sprint chain instead of days or weeks.
 _Avoid_: granularity, resolution, scale

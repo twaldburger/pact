@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
-test("the options menu holds Show archived, Highlight weekends and Grid dividers", () => {
+test("the options menu holds Show archived, Highlight weekends, Grid dividers and Minimap", () => {
   const items = optionsItems(false, true, false);
-  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "dividers"]);
+  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "dividers", "minimap"]);
   assert.deepEqual(items.map((item) => item.label), [
     "Show archived",
     "Highlight weekends",
-    "Grid dividers"
+    "Grid dividers",
+    "Minimap"
   ]);
 });
 
@@ -21,12 +22,21 @@ test("Show archived is checked exactly while archived things are shown", () => {
   assert.equal(optionsItems(undefined)[0].checked, false);
 });
 
-test("a fresh session opens with weekends highlighted and dividers off", () => {
+test("a fresh session opens with weekends highlighted, dividers and Minimap off", () => {
   // The session's own defaults, handed to the menu as app.js hands them: the
-  // weekend band is on, the dividers are off.
+  // weekend band is on, the dividers are off and the Minimap is off.
   const items = optionsItems(false, true, false);
   assert.equal(items[1].checked, true);
   assert.equal(items[2].checked, false);
+  assert.equal(items[3].checked, false);
+});
+
+test("Minimap is checked exactly while its toggle is on", () => {
+  const minimap = (on) => optionsItems(false, true, false, on)[3].checked;
+  assert.equal(minimap(true), true);
+  assert.equal(minimap(false), false);
+  assert.equal(minimap(1), true);
+  assert.equal(minimap(undefined), false);
 });
 
 test("Highlight weekends is checked exactly while the band is drawn", () => {
@@ -45,11 +55,11 @@ test("Grid dividers is checked exactly while the rules are drawn", () => {
   assert.equal(dividers(undefined), false);
 });
 
-test("the three items are independent of one another", () => {
-  const items = optionsItems(true, false, true);
-  assert.deepEqual(items.map((item) => item.checked), [true, false, true]);
-  const all = optionsItems(true, true, true);
-  assert.deepEqual(all.map((item) => item.checked), [true, true, true]);
+test("the four items are independent of one another", () => {
+  const items = optionsItems(true, false, true, false);
+  assert.deepEqual(items.map((item) => item.checked), [true, false, true, false]);
+  const all = optionsItems(true, true, true, true);
+  assert.deepEqual(all.map((item) => item.checked), [true, true, true, true]);
 });
 
 test("the grid divider follows the zoom, falling back to the coarsest", () => {
