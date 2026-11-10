@@ -47,9 +47,10 @@ no runtime dependency.
 - `public/fonts/` - the bundled Archivo variable font and its OFL licence.
 
 The zoom states (day, week, sprint, month) change only what the calendar draws
-and never the stored dates. Sprint shares the week's density and names the
-derived sprint chain in its secondary band, and its button is disabled until
-the plan holds a sprint cadence.
+and never the stored dates. Sprint draws a day at half the week's width, so a
+two-week sprint spans what one week does at Week zoom, and it names the derived
+sprint chain in its secondary band; its button is disabled until the plan holds
+a sprint cadence.
 Beside the zoom, a row-height control changes the drawn height of every row in
 8px steps from 32 to 120, defaulting to 48; it is a view setting for the
 session only and is not written to the plan. A Today control scrolls the view

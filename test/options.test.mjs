@@ -22,12 +22,12 @@ test("Show archived is checked exactly while archived things are shown", () => {
   assert.equal(optionsItems(undefined)[0].checked, false);
 });
 
-test("a fresh session opens with weekends highlighted, dividers and Minimap off", () => {
+test("a fresh session opens with the weekend band off, dividers on and Minimap off", () => {
   // The session's own defaults, handed to the menu as app.js hands them: the
-  // weekend band is on, the dividers are off and the Minimap is off.
-  const items = optionsItems(false, true, false);
-  assert.equal(items[1].checked, true);
-  assert.equal(items[2].checked, false);
+  // weekend band is off, the dividers are on and the Minimap is off.
+  const items = optionsItems(false, false, true);
+  assert.equal(items[1].checked, false);
+  assert.equal(items[2].checked, true);
   assert.equal(items[3].checked, false);
 });
 
