@@ -639,3 +639,96 @@ test("the history lives in memory: a fresh store on the same file starts empty",
   assert.equal(fresh.canRedo(), false);
   assert.equal(fresh.get().people.some((p) => p.name === "Dana Vo"), true);
 });
+
+/* --- sprints ------------------------------------------------------------- */
+
+test("the seed leaves sprints out, so an existing plan is unchanged", () => {
+  const seed = seedPlan();
+  assert.equal(seed.cadence, undefined);
+  assert.equal(seed.sprints, undefined);
+});
+
+test("a plan with a cadence and per-sprint adjustments validates", () => {
+  const plan = seedPlan();
+  plan.cadence = { start: plan.range.start, length: 14, namePrefix: "Sprint", nameNumber: 24 };
+  plan.sprints = [{ index: 2, length: 21 }, { index: 3, name: "Sprint 30 - hardening" }];
+  assert.deepEqual(validatePlan(plan), []);
+
+  // The first number may be a whole number or the digits that set the padding
+  // width, leading zeros included.
+  plan.cadence = { start: plan.range.start, length: 7, namePrefix: "26-", nameNumber: "01" };
+  assert.deepEqual(validatePlan(plan), []);
+});
+
+test("a malformed cadence is refused by name", () => {
+  const plan = seedPlan();
+  plan.cadence = { start: "not-a-date", length: 0, namePrefix: 5, nameNumber: -1 };
+  const errors = validatePlan(plan);
+  assert.ok(errors.some((e) => e.includes("cadence.start")), "cadence.start");
+  assert.ok(errors.some((e) => e.includes("cadence.length")), "cadence.length");
+  assert.ok(errors.some((e) => e.includes("cadence.namePrefix")), "cadence.namePrefix");
+  assert.ok(errors.some((e) => e.includes("cadence.nameNumber")), "cadence.nameNumber");
+
+  plan.cadence = 14;
+  assert.deepEqual(validatePlan(plan), ["cadence must be an object"]);
+});
+
+test("a malformed sprint adjustment is refused by name", () => {
+  const plan = seedPlan();
+  plan.sprints = [{ index: 0, length: -1, name: 5 }];
+  const errors = validatePlan(plan);
+  assert.ok(errors.some((e) => e.includes("sprints[0].index")), "sprints.index");
+  assert.ok(errors.some((e) => e.includes("sprints[0].length")), "sprints.length");
+  assert.ok(errors.some((e) => e.includes("sprints[0].name")), "sprints.name");
+
+  plan.sprints = "nope";
+  assert.deepEqual(validatePlan(plan), ["sprints must be an array"]);
+});
+
+test("the store sets the cadence and adjustments and reloads them", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const cadence = { start: day(0), length: 14, namePrefix: "26-", nameNumber: "01" };
+  const set = store.setSprints({ cadence: cadence, sprints: [{ index: 2, length: 21 }] });
+  assert.deepEqual(set.cadence, cadence);
+  assert.deepEqual(set.sprints, [{ index: 2, length: 21 }]);
+  assert.deepEqual(store.get().cadence, cadence);
+  // Both travel with the plan through a reload.
+  const reloaded = createStore(file);
+  assert.deepEqual(reloaded.get().cadence, cadence);
+  assert.deepEqual(reloaded.get().sprints, [{ index: 2, length: 21 }]);
+});
+
+test("clearing the cadence removes it and its adjustments", () => {
+  const store = createStore(tempFile());
+  store.setSprints({
+    cadence: { start: day(0), length: 14, namePrefix: "Sprint", nameNumber: 1 },
+    sprints: [{ index: 1, length: 7 }]
+  });
+  store.setSprints({ cadence: null, sprints: null });
+  assert.equal(store.get().cadence, undefined);
+  assert.equal(store.get().sprints, undefined);
+});
+
+test("a refused cadence writes nothing and records no history", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = fs.readFileSync(file, "utf8");
+  assert.throws(() => store.setSprints({
+    cadence: { start: "not-a-date", length: 14, namePrefix: "Sprint", nameNumber: 1 },
+    sprints: []
+  }), /cadence.start/);
+  assert.throws(() => store.setSprints({ cadence: null, sprints: [{ index: 0 }] }), /sprints\[0\]\.index/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+});
+
+test("setting the sprints is one undo step, like any other change", () => {
+  const store = createStore(tempFile());
+  const cadence = { start: day(0), length: 14, namePrefix: "Sprint", nameNumber: 1 };
+  store.setSprints({ cadence: cadence, sprints: [{ index: 1, length: 7 }] });
+  store.setSprints({ cadence: cadence, sprints: [{ index: 1, length: 21 }] });
+  assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
+  store.undo();
+  assert.deepEqual(store.get().sprints, [{ index: 1, length: 7 }]);
+});

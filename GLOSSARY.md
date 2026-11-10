@@ -74,8 +74,16 @@ The draggable vertical line on the Timeline. It starts on today, and the date it
 _Avoid_: today line, now line, cursor, playhead, reference line
 
 **Zoom**:
-The drawn width of one day. It changes what you see and never what is stored: dates are always exact days.
+The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - and Sprint shares Week's density while its secondary band names the sprint chain instead of days or weeks.
 _Avoid_: granularity, resolution, scale
+
+**Sprint**:
+A planning increment with a name and a date range, drawn as one cell of the Sprint zoom's secondary band. Sprints form a contiguous chain with no gaps, each starting the day after the previous ends, and the last one may run past the plan period's end rather than being cut in half.
+_Avoid_: iteration, cycle, phase, milestone
+
+**Sprint cadence**:
+The rule the sprint chain is derived from: the first sprint's start date, the default length in days, and a name rule of a prefix and a first number, whose spelling sets the numbering's padding width. The plan also holds per-sprint adjustments keyed by ordinal - a length or a name, either of which re-flows every later sprint, or leaves the rule naming the rest. The chain itself is never stored: it is recomputed from the cadence, the adjustments and the plan period, and days before the cadence's start carry no sprint.
+_Avoid_: sprint schedule, iteration plan, cadence settings
 
 **Archive**:
 To take a Person or a Project out of the Stack and the Timeline while keeping every Assignment it ever had; an archived item can be restored.

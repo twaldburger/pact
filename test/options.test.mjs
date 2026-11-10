@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems } from "../public/lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
 test("the options menu holds Show archived, Highlight weekends and Grid dividers", () => {
@@ -55,6 +55,8 @@ test("the three items are independent of one another", () => {
 test("the grid divider follows the zoom, falling back to the coarsest", () => {
   assert.equal(dividerUnit("day"), "day");
   assert.equal(dividerUnit("week"), "week");
+  // Sprint shares Week's density, so its dividers are the same week cells.
+  assert.equal(dividerUnit("sprint"), "week");
   assert.equal(dividerUnit("month"), "month");
   // An unknown zoom draws the quietest grid, the default's granularity.
   ["year", "Month", "", undefined, null].forEach((zoom) => {
@@ -67,6 +69,15 @@ test("every zoom has a divider unit", () => {
   ZOOM_LEVELS.forEach((level) => {
     assert.ok(["day", "week", "month"].includes(dividerUnit(level)));
   });
+});
+
+test("the Sprints entry states whether a cadence exists yet", () => {
+  assert.equal(sprintsItem(false).key, "sprints");
+  assert.equal(sprintsItem(false).label, "Sprints...");
+  assert.equal(sprintsItem(false).detail, "Not defined yet");
+  assert.equal(sprintsItem(true).detail, "Cadence defined");
+  assert.equal(sprintsItem(1).detail, "Cadence defined");
+  assert.equal(sprintsItem(undefined).detail, "Not defined yet");
 });
 
 test("the period control reads back the stored period", () => {

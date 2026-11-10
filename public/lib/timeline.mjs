@@ -23,12 +23,13 @@ export const ROW_HEIGHT_STEP = 8;
 export const ROW_HEIGHT_DEFAULT = 48;
 
 /*
- * The zoom control: the drawn width of one day, one of three named levels.
+ * The zoom control: the drawn width of one day, one of four named levels.
+ * Sprint shares Week's density and differs only in the band the axis names.
  * The interface opens at month - the recent past plus the next eleven months
  * at a glance - as the plan's default view. Like the row height it is a view
  * setting only, never written to the plan.
  */
-export const ZOOM_LEVELS = ["day", "week", "month"];
+export const ZOOM_LEVELS = ["day", "week", "sprint", "month"];
 export const ZOOM_DEFAULT = "month";
 
 export function isZoom(level) {
