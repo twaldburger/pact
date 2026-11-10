@@ -382,9 +382,10 @@ function updateDividerRules() {
 function drawAxis() {
   var axis = el("div", "tl__axis");
   axis.setAttribute("aria-hidden", "true");
-  // A press in the sticky header places the Marker at that day and lets the
-  // press carry on as a drag, the same way a press on the Marker line does.
-  axis.addEventListener("pointerdown", onAxisDown);
+  // A click in the sticky header places the Marker on the day under the
+  // pointer. Nothing follows while the button is held: the Marker's own
+  // press-to-drag is the only surface that sweeps along the dates.
+  axis.addEventListener("click", onAxisClick);
   axisEl = axis;
 
   var monthBand = el("div", "axis__band axis__months");
@@ -837,12 +838,13 @@ function onMarkerDown(e) {
   e.preventDefault();
   marker.focus();
 }
-// A press on the header band moves the Marker there, then behaves like the
-// Marker's own press so the header can be dragged across too.
-function onAxisDown(e) {
-  if (e.button !== 0 && e.pointerType === "mouse") return;
+// A click on the header band places the Marker on the day under the pointer.
+// A click on the date chip is the chip's own: it is the header's drag handle,
+// so it keeps the band underneath from placing the Marker under the chip's
+// width rather than on the day the chip names.
+function onAxisClick(e) {
+  if (e.target.closest(".marker__date")) return;
   setMarker(indexFromClientX(e.clientX));
-  onMarkerDown(e);
 }
 // The chip is the header's own handle: it drags the Marker it names and keeps
 // the press off the band underneath, which would move the Marker to the chip's
