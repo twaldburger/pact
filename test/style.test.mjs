@@ -147,9 +147,11 @@ test("the Marker's date is anchored to the sticky axis at the marker's x", () =>
   // The chip hangs off the axis, not the marker, and carries the Marker's index.
   assert.match(APP, /axisEl\.appendChild\(markerDate\)/);
   assert.match(APP, /markerDate\.style\.setProperty\("--i", markerIndex\)/);
-  // A press in the header places the Marker, and the chip is its own handle.
-  assert.match(APP, /axis\.addEventListener\("pointerdown", onAxisDown\)/);
-  assert.match(APP, /function onAxisDown\(e\) \{[^}]*setMarker\(indexFromClientX\(e\.clientX\)\)/);
+  // A click in the header places the Marker - not a press, which would sweep -
+  // and the chip is its own drag handle rather than a spot on the band.
+  assert.match(APP, /axis\.addEventListener\("click", onAxisClick\)/);
+  assert.match(APP, /function onAxisClick\(e\) \{[^}]*setMarker\(indexFromClientX\(e\.clientX\)\)/);
+  assert.match(APP, /e\.target\.closest\("\.marker__date"\)/);
   assert.match(APP, /markerDate\.addEventListener\("pointerdown", onChipDown\)/);
 });
 
