@@ -1959,8 +1959,12 @@ down to the last row and no further. */
   color: var(--signal);
 }
 
-/* The Sprints panel's derived list: one row per sprint, its name beside its
-   start and an editable end date. */
+/* The Sprints panel's derived list: one row per sprint, in three columns -
+   the name field, the derived start as plain text, and the editable end date.
+   The panel takes a little more width than the others so the name stays roomy
+   and nothing wraps; the start column is nowrap, so a date is always one line. */
+.panel--sprints { width: 22rem; }
+
 .sprint-list { margin-top: var(--sp-4); }
 
 .sprint-list__heading {
@@ -1972,13 +1976,14 @@ down to the last row and no further. */
 
 .sprint-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--sp-2);
   align-items: center;
   margin-top: var(--sp-2);
 }
 
 .sprint-row input {
+  min-width: 0;
   padding: var(--sp-1) var(--sp-2);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
@@ -1988,15 +1993,13 @@ down to the last row and no further. */
   font-size: var(--fs-data);
 }
 
-.sprint-row__dates {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
+.sprint-row__from {
   font-size: var(--fs-data);
   color: var(--ink-soft);
+  white-space: nowrap;
 }
 
-.sprint-row__dates input { width: 9.5rem; }
+.sprint-row input[type="date"] { width: 8.5rem; }
 
 .noscript {
   margin: var(--sp-6);

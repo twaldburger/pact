@@ -2382,6 +2382,9 @@ function openSprintsPanel(trigger) {
   var cadence = cadenceFrom(data);
   var node = panelShell("Sprints",
     "The chain is derived from the cadence and the plan period; nothing about it is stored.");
+  // The derived list is three columns wide - name, start, end - so this panel
+  // takes a little more room than the others rather than squeezing the name.
+  node.classList.add("panel--sprints");
   var periodStart = data.range ? data.range.start : "";
 
   var form = el("form", "form");
@@ -2467,10 +2470,11 @@ function openSprintsPanel(trigger) {
       });
       row.appendChild(name);
 
-      var dates = el("span", "sprint-row__dates");
+      // The start is derived and never edited: plain text in its own column, so
+      // a long date can never wrap inside the row.
       var from = el("span", "sprint-row__from");
       from.textContent = sp.start;
-      dates.appendChild(from);
+      row.appendChild(from);
 
       var end = dateField(sp.end, "Sprint " + sp.index + " end");
       end.addEventListener("change", function () {
@@ -2487,8 +2491,7 @@ function openSprintsPanel(trigger) {
         }
         save({ cadence: c, sprints: withAdjustment(currentAdjustments(), sp.index, { length: days }) }, renderList);
       });
-      dates.appendChild(end);
-      row.appendChild(dates);
+      row.appendChild(end);
       listWrap.appendChild(row);
     });
     clearBtn.hidden = false;
