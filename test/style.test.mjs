@@ -211,3 +211,44 @@ test("the Look in button reserves one width and ellipsises a long summary", () =
   // The width is a token, so the scope selection has no way to change it.
   assert.match(STYLE, /--scope-w:\s*[^;]+;/);
 });
+
+/* --- the Panels' bound to the viewport ----------------------------------- */
+
+// A panel is fixed and used to grow with its body, so the Sprints panel's
+// derived chain ran past the bottom of the window and its footer - where
+// "Save cadence" and "Clear cadence" live - could not be reached at all. The
+// bound lives on the shared .panel rule so it covers every panel, and the
+// footer sticks to the panel's bottom while the body scrolls under it.
+const PANEL = STYLE.match(/\.panel\s*\{([^}]*)\}/);
+const PANEL_FOOT = STYLE.match(/\.panel__foot\s*\{([^}]*)\}/);
+
+function declaration(rule, name) {
+  // Comments inside the rule carry prose with colons and semicolons of their
+  // own, so strip them before reading a declaration.
+  const found = rule.replace(/\/\*[\s\S]*?\*\//g, "").match(new RegExp(name + ":\\s*([^;]+);"));
+  assert.ok(found, name + " is missing from the rule");
+  return found[1].replace(/\s+/g, " ").trim();
+}
+
+test("a panel is bounded to the viewport and scrolls its own content", () => {
+  assert.ok(PANEL, "the .panel rule is missing");
+  const maxHeight = declaration(PANEL[1], "max-height");
+  assert.match(
+    maxHeight,
+    /^calc\(\s*100(?:dvh|vh)\s*-/,
+    "the bound must be the viewport less the anchor margin, not " + maxHeight
+  );
+  // A viewport bound only holds the panel in place if its own content can
+  // scroll rather than pushing the box taller.
+  assert.equal(declaration(PANEL[1], "overflow-y"), "auto");
+});
+
+test("a panel's footer sticks to its bottom so its actions stay reachable", () => {
+  assert.ok(PANEL_FOOT, "the .panel__foot rule is missing");
+  assert.equal(declaration(PANEL_FOOT[1], "position"), "sticky");
+  assert.equal(declaration(PANEL_FOOT[1], "bottom"), "0");
+  // The footer paints its own bottom padding because the panel carries none,
+  // so the scrolling body cannot show in a band below the actions.
+  assert.equal(declaration(PANEL_FOOT[1], "padding-bottom"), "var(--sp-5)");
+  assert.equal(declaration(PANEL[1], "padding"), "var(--sp-5) var(--sp-5) 0");
+});
