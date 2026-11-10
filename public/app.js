@@ -481,9 +481,6 @@ function drawAxis() {
     if (!c.blank) {
       var label = el("span", "ax-sprint__label");
       label.textContent = c.name;
-      // A sprint cell is a fixed width, so a long name is ellipsised; the whole
-      // name rides on hover.
-      label.title = c.name;
       cell.appendChild(label);
     }
     sprintBand.appendChild(set(cell, c.i, c.n));
@@ -555,9 +552,6 @@ function drawRows() {
     head.setAttribute("data-person", person.id);
     var name = el("span", "rowhead__name");
     name.textContent = person.name;
-    // The row header is a fixed-width surface, so a name too long for it is
-    // cut with an ellipsis; the whole name rides on hover.
-    name.title = person.name;
     head.appendChild(name);
     if (!person.archived) {
       var fig = el("span", "rowhead__fig");
@@ -3064,9 +3058,6 @@ function updateFilterChrome() {
   filterScopeBtn.setAttribute("aria-label", overridden
     ? "Look in - " + scopeSummary(filterScopes) + ", ignored because a typed term names its own field"
     : "Look in - " + scopeSummary(filterScopes));
-  // The fixed-width control ellipsises its summary; the whole statement rides
-  // on hover, exactly as the accessible label carries it.
-  filterScopeBtn.title = filterScopeBtn.getAttribute("aria-label");
   filterScopeBtn.classList.toggle("is-overridden", overridden);
   filterClear.hidden = filterInput.value === "";
   scopeSwitches().forEach(function (btn) {
@@ -3120,9 +3111,6 @@ function updateSuggestions() {
     src.textContent = item.source;
     var val = el("span", "filter__val");
     val.textContent = item.value;
-    // The value's own row is fixed to one line and ellipsised; the whole value
-    // rides on hover.
-    val.title = item.value;
     var n = el("span", "filter__n");
     n.textContent = item.matchLabel;
     row.appendChild(src);

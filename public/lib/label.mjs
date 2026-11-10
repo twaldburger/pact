@@ -71,11 +71,9 @@ export function hoverText(title, share, note) {
  *   - `title` and `share` are the Assignment's, as `labelText` draws them.
  *
  * The whole label is preferred. When only the title fits, the title is drawn
- * whole. When less than that fits, the title is cut at a word boundary when one
- * fits - the longest whole-word prefix that still leaves room for the ellipsis -
- * and only then falls back to the longest character-level prefix, which is the
- * cut a single unbreakable word has to take. Either cut is kept only when
- * `minChars` characters survive it. Anything less draws nothing at all.
+ * whole. When less than that fits, the title is cut to the longest prefix that
+ * still leaves room for the ellipsis, and only when `minChars` characters
+ * survive the cut. Anything less draws nothing at all.
  */
 export function blockLabel(options) {
   const title = options.title == null ? "" : String(options.title);
@@ -91,51 +89,10 @@ export function blockLabel(options) {
   if (measure(full) <= width) return full;
   if (measure(title) <= width) return title;
 
-  const wordCut = wordBoundaryCut(title, width, measure, minChars);
-  if (wordCut !== "") return wordCut;
-
   for (let n = title.length - 1; n >= minChars; n--) {
     if (measure(title.slice(0, n) + ELLIPSIS) <= width) {
       return title.slice(0, n) + ELLIPSIS;
     }
-  }
-  return "";
-}
-
-/*
- * The prefixes of `title` that end on a whole word, longest first, with the
- * whitespace that followed each one dropped: "Meridian Design System" gives
- * "Meridian Design System", then "Meridian Design", then "Meridian". The
- * caller takes the longest that fits, so a cut lands after a word rather than
- * inside one:
- *
- *     Meridian Design...   rather than   Meridia...
- *
- * A single word has no boundary but its own end, which the whole-title
- * preference has already rejected, so the caller falls through to the
- * character-level cut.
- */
-function wordBoundaryPrefixes(title) {
-  const out = [];
-  let i = 0;
-  while (i < title.length) {
-    while (i < title.length && /\s/.test(title.charAt(i))) i++;
-    const start = i;
-    while (i < title.length && !/\s/.test(title.charAt(i))) i++;
-    if (i > start) out.push(title.slice(0, i));
-  }
-  return out.reverse();
-}
-
-// The longest whole-word cut that fits with the ellipsis and keeps at least
-// `minChars` characters. "" when no word boundary works, which is what sends
-// `blockLabel` to its character-level fallback.
-function wordBoundaryCut(title, width, measure, minChars) {
-  const prefixes = wordBoundaryPrefixes(title);
-  for (let i = 0; i < prefixes.length; i++) {
-    const prefix = prefixes[i];
-    if (prefix.length < minChars) break;
-    if (measure(prefix + ELLIPSIS) <= width) return prefix + ELLIPSIS;
   }
   return "";
 }
