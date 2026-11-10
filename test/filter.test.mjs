@@ -47,6 +47,31 @@ function scopes(people, projects, assignments) {
   return { people: people, projects: projects, assignments: assignments };
 }
 
+/*
+ * A plan whose tags collide by substring: `Data` is a substring of
+ * `Data-Quality` and of `Databases`, so exact-tag counts and the matcher's
+ * case-insensitive substring counts disagree wherever they are used.
+ */
+function collidingTagPlan() {
+  return {
+    people: [
+      { id: "p1", name: "Ann Reed", location: "", tags: ["Data", "Design"], note: "" },
+      { id: "p2", name: "Bo Frost", location: "", tags: ["Databases"], note: "" }
+    ],
+    projects: [
+      { id: "pr1", name: "Alpha", notes: "", tags: ["Data"] },
+      { id: "pr2", name: "Beta", notes: "", tags: [] }
+    ],
+    assignments: [
+      { id: "as1", projectId: "pr1", personId: "p1", start: "", end: "", share: 10, tags: ["Data"], note: "" },
+      { id: "as2", projectId: "pr2", personId: "p2", start: "", end: "", share: 10, tags: ["Data-Quality"], note: "" },
+      { id: "as3", projectId: "pr2", personId: "p1", start: "", end: "", share: 10, tags: ["Databases"], note: "" }
+    ]
+  };
+}
+
+const VIEW_BY_UNIT = { person: "people", project: "projects", assignment: "assignments" };
+
 function ids(list) {
   return list.map((item) => item.id);
 }
@@ -201,6 +226,69 @@ test("suggestions only come from the areas being looked in", () => {
   found.forEach((item) => {
     assert.equal(item.source === "Assignment tag" || item.source === "Assignment note", true);
   });
+});
+
+test("every plain suggestion inserts the field-qualified term it counted", () => {
+  const found = filterSuggestions(plan(), "react", defaultScopes()).filter((item) => item.kind !== "prefix");
+  const bySource = {};
+  found.forEach((item) => { bySource[item.source] = item; });
+  // A plain tag row aims the term at the tag field rather than inserting the
+  // bare value, so selecting it filters by that tag.
+  assert.equal(bySource["Person tag"].insert, "person tag: React");
+  assert.equal(bySource["Assignment tag"].insert, "assignment tag: React");
+  // Every other plain kind carries its own field-qualified term too.
+  assert.equal(bySource["Project"].insert, "project: React rewrite");
+  assert.equal(bySource["Person note"].insert, "person note: led the React migration");
+  assert.equal(bySource["Assignment note"].insert, "assignment note: React migration");
+  // And each count comes from exactly the query selecting it runs.
+  found.forEach((item) => {
+    const view = filterPlan(plan(), item.insert, defaultScopes());
+    assert.equal(item.count, view[VIEW_BY_UNIT[item.unit]].length, item.source + ":" + item.value);
+  });
+});
+
+test("a plain tag row counts the projects its own term would draw", () => {
+  const row = filterSuggestions(plan(), "lead", defaultScopes())
+    .find((item) => item.source === "Project tag");
+  assert.equal(row.insert, "project tag: lead");
+  assert.equal(row.matchLabel, "1 project");
+  assert.equal(filterPlan(plan(), row.insert, defaultScopes()).projects.length, 1);
+});
+
+test("a tag suggestion's count uses the matcher's substring rule, not exact equality", () => {
+  const p = collidingTagPlan();
+  const assignment = filterSuggestions(p, "assignment tag: Data", defaultScopes())
+    .find((item) => item.value === "Data");
+  // Substring matches Data, Data-Quality and Databases; exact equality would
+  // say 1.
+  assert.equal(assignment.count, 3);
+  assert.equal(assignment.matchLabel, "3 assignments");
+  assert.equal(filterPlan(p, assignment.insert, defaultScopes()).assignments.length, 3);
+
+  const person = filterSuggestions(p, "person tag: Data", defaultScopes())
+    .find((item) => item.source === "Person tag" && item.value === "Data");
+  assert.equal(person.count, 2);
+  assert.equal(filterPlan(p, person.insert, defaultScopes()).people.length, 2);
+
+  const project = filterSuggestions(p, "project tag: Data", defaultScopes())
+    .find((item) => item.value === "Data");
+  assert.equal(project.count, 1);
+});
+
+test("an alias term's count reflects the alias result in the row's unit", () => {
+  const p = collidingTagPlan();
+  const view = filterPlan(p, "tag: Data", defaultScopes());
+  const rows = filterSuggestions(p, "tag: Data", defaultScopes())
+    .filter((item) => item.value === "Data");
+  rows.forEach((item) => {
+    assert.equal(item.insert, "tag: Data");
+    // The alias spans kinds, so each row reports the alias's own result in its
+    // own unit rather than one field's slice of it.
+    assert.equal(item.count, view[VIEW_BY_UNIT[item.unit]].length, item.source);
+  });
+  assert.equal(rows.find((item) => item.source === "Person tag").count, view.people.length);
+  assert.equal(rows.find((item) => item.source === "Project tag").count, view.projects.length);
+  assert.equal(rows.find((item) => item.source === "Assignment tag").count, view.assignments.length);
 });
 
 test("a match count is worded for the thing it counts", () => {
