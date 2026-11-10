@@ -13,22 +13,49 @@ node server.mjs
 
 That is the whole of the setup: no install, no build, no dependency. The server
 prints the URL it is serving on, by default <http://localhost:4173>. It serves
-`public/` and keeps the plan in `data/pact.json`, which is created on first run
-from a small seeded plan - the three people and four projects the design used,
-with Ben over-committed. That seed is convenience data so the screen is not
-empty on a fresh checkout; it is not part of the repository and is written once,
-on the first run, only if the file is missing.
+`public/` and keeps the plan in `data/default.pact.json`, which is created on
+first run from a small seeded plan - the three people and four projects the
+design used, with Ben over-committed. That seed is convenience data so the
+screen is not empty on a fresh checkout; it is not part of the repository and is
+written once, on the first run, only if the file is missing. A checkout that
+still has the old `data/pact.json` has it moved to the new name on the first run
+with this code.
 
 Set `PORT` to serve elsewhere and `PACT_DATA` to keep the plan file elsewhere.
 
 ## The plan file
 
-`data/pact.json` is the single source of truth. It is written as it changes, and
-reloading the page shows what was saved. Every write is atomic: the new plan is
-written to a temporary file, flushed, then renamed over the old one, so an
-interrupted save cannot truncate the plan. A request that would store invalid
-data is refused with a clear error and nothing is written. The app keeps no
-backups of its own - one file, backed up however you choose.
+The active plan is one file, by default `data/default.pact.json`. It is written
+as it changes, and reloading the page shows what was saved. Every write is
+atomic: the new plan is written to a temporary file beside it, flushed, then
+renamed over the old one, so an interrupted save cannot truncate the plan. A
+request that would store invalid data is refused with a clear error and nothing
+is written. The app keeps no backups of its own - one file, backed up however
+you choose.
+
+The `Plan file...` entry under the Options glyph chooses the file. The panel
+holds the current file's resolved path, a field to type another, Open, and New
+plan. An existing file opens as asked and the panel reports the exact resolved
+path it used, with no confirmation step. A missing file is refused with the
+reason and an offer to create it there; a file that cannot be read or written,
+or a drive that is not mounted, is refused plainly and the current plan stays
+loaded. New plan creates a truly empty plan - no people and no projects - at the
+path you choose, offered under the `.pact.json` suffix; a plain `.json` may
+still be opened but is never offered as a plan by default.
+
+Paths are stored absolute and resolved, and `~` is accepted and expanded. No
+relative paths. The choice is remembered in `data/config.json`, a small settings
+file beside the app that is gitignored like the rest of `data/`; it holds the
+active plan path, and may hold other settings later. Its absence means the
+default. If it exists but cannot be read, the default is used and the app says
+so.
+
+`PACT_DATA`, when set, wins over the config: it is the deliberate per-run
+choice, and the panel says so rather than looking broken.
+
+Before each write the app compares the file on disk with what it last read. If
+something else changed it underneath, that write is refused and reported, so
+last-write-wins becomes a visible choice rather than a silent clobber.
 
 ## The interface
 
@@ -197,9 +224,19 @@ The server exposes a small JSON API over the plan:
 - `POST /api/undo`, `POST /api/redo` - step one change back or forward through
   the running server's in-memory history, and answer `{"undone": true}` or
   `{"redone": true}`. An empty stack answers `400`.
+- `GET /api/plan-file` - the active plan file: its resolved `path`, whether
+  `PACT_DATA` fixes it (`locked`), where the choice came from (`source`), and any
+  one-time `notice` such as the default file's move.
+- `POST /api/plan-file/open` with `{"path": "..."}` - open an existing plan file
+  and make it active, updating the config so the choice survives a restart. A
+  missing file answers `404` and an unwritable one `403`; a path that is not
+  absolute answers `400`.
+- `POST /api/plan-file/new` with `{"path": "..."}` - create an empty plan at the
+  path, under the `.pact.json` suffix, and make it active. A path that already
+  holds a file answers `409`.
 
 Invalid input answers `400` with `{"error": "..."}`; an unknown record answers
-`404`.
+`404`, and a write refused because the file changed underneath answers `409`.
 
 ## Tests
 
@@ -214,7 +251,12 @@ input, and the panel rules in `public/lib/panels.mjs` - tag suggestions,
 Availability and Allocation stepping by the plan's percentage step, the period
 and step controls' validation and refusal wording. Setting the plan's period
 and step, the whole 1..100 acceptance of Availability and Share, and the
-refusal of work outside the period, are pinned against the store and the API. The Timeline geometry
+refusal of work outside the period, are pinned against the store and the API. The plan-file
+choice and its rules in `public/lib/plan-file.mjs` and `lib/config.mjs` - path
+resolution, the `.pact.json` suffix, the config's read and write and its
+absence, `PACT_DATA` precedence, the default file's move, opening an existing
+file, the missing and read-only refusals, the empty new plan and the write that
+refuses a file changed underneath - are pinned the same way. The Timeline geometry
 in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
 steps - is covered without a browser, as is the block-label rule in
 `public/lib/label.mjs` - how much of a title a block has room to draw - and its

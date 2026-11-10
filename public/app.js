@@ -1,9 +1,10 @@
 /* PACT - the plan, drawn from the server's JSON file.
  * Plain JavaScript as an ES module, no framework, no build step. The plan
- * lives in data/pact.json behind /api; every change the screen makes is sent
- * there as it happens, and the screen is redrawn from what the server returns.
- * The panel rules that are not about the DOM live in ./lib/panels.mjs, so
- * `node --test` can pin them. */
+ * lives in the active plan file behind /api; the active file is chosen in the
+ * Plan file panel and remembered in data/config.json. Every change the screen
+ * makes is sent to /api as it happens, and the screen is redrawn from what the
+ * server returns. The panel rules that are not about the DOM live in
+ * ./lib/panels.mjs, so `node --test` can pin them. */
 import {
   DEFAULT_STEP,
   STEP_MAX,
@@ -26,6 +27,7 @@ import {
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem } from "./lib/options.mjs";
+import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
   PALETTE_DEFAULT,
@@ -3433,6 +3435,8 @@ var rangeError = null;
 var stepInput = null;
 var stepError = null;
 var sprintsOptionDetail = null;
+var planFileState = null;
+var planFileOptionDetail = null;
 
 // Every popover in the bar is fixed to the viewport and placed against its
 // trigger. The bar can scroll on its own when the window is narrow, so this
@@ -3556,6 +3560,7 @@ function buildOptionsMenu() {
   optionsMenu.appendChild(buildRangeControl());
   optionsMenu.appendChild(buildStepControl());
   optionsMenu.appendChild(buildSprintsItem());
+  optionsMenu.appendChild(buildPlanFileItem());
 }
 
 /* The Sprints entry: an action, not a toggle. It opens the Sprints panel and
@@ -3580,6 +3585,173 @@ function buildSprintsItem() {
 function updateSprintsItem() {
   if (!sprintsOptionDetail) return;
   sprintsOptionDetail.textContent = sprintsItem(!!sprintCadence).detail;
+}
+
+/* The Plan file entry: an action, not a toggle. It opens the Plan file panel
+ * and its detail names the active file, or says PACT_DATA fixes it. */
+function buildPlanFileItem() {
+  var item = planFileItem(planFileState);
+  var btn = el("button", "options__item options__item--action");
+  btn.type = "button";
+  btn.id = "option-plan-file";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  planFileOptionDetail = el("span", "options__item-detail");
+  planFileOptionDetail.textContent = item.detail;
+  btn.appendChild(planFileOptionDetail);
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openPlanFilePanel(btn);
+  });
+  return btn;
+}
+
+function updatePlanFileItem() {
+  if (!planFileOptionDetail) return;
+  planFileOptionDetail.textContent = planFileItem(planFileState).detail;
+}
+
+// The active file is the server's to know: the menu and the panel read it back
+// rather than keeping a copy that a restart or another window could stale.
+function loadPlanFileState() {
+  return api("GET", "/api/plan-file").then(function (state) {
+    planFileState = state;
+    updatePlanFileItem();
+    return state;
+  }).catch(function () {
+    return planFileState;
+  });
+}
+
+/* The Plan file panel: the active file's resolved path, a field to type
+ * another, Open, and New plan. Opening an existing file reloads it and reports
+ * the exact resolved path; a refusal names the plain reason and leaves the
+ * running plan alone. PACT_DATA is stated rather than looking broken. */
+function openPlanFilePanel(trigger) {
+  loadPlanFileState().then(function (loaded) {
+    var view = planFileView(loaded);
+    var node = panelShell("Plan file",
+      "The one file PACT reads and writes. Every change is saved to it.");
+    node.classList.add("panel--planfile");
+
+    var form = el("form", "form");
+    var current = el("code", "planfile__path");
+    current.textContent = view.path;
+    form.appendChild(formRow("Current", current));
+
+    var pathInput = document.createElement("input");
+    pathInput.type = "text";
+    pathInput.className = "planfile__input";
+    pathInput.id = "planfile-path";
+    pathInput.value = view.path;
+    pathInput.spellcheck = false;
+    pathInput.setAttribute("aria-label", "Plan file path");
+    form.appendChild(formRow("Path", pathInput));
+    node.appendChild(form);
+
+    var status = el("p", "planfile__status");
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    node.appendChild(status);
+
+    var hint = el("p", "panel__sub planfile__hint");
+    node.appendChild(hint);
+
+    var error = errorLine(node);
+
+    // The offer to create, shown only after a missing-file refusal so a plan is
+    // never created silently.
+    var offerBtn = button("btn-ghost", "Create it there", function () {
+      offerBtn.hidden = true;
+      doNew();
+    });
+    offerBtn.hidden = true;
+    node.appendChild(offerBtn);
+
+    var foot = el("div", "panel__foot");
+    var openBtn = button("btn-primary", "Open", doOpen);
+    var newBtn = button("btn-ghost", "New plan", doNew);
+    foot.appendChild(openBtn);
+    foot.appendChild(newBtn);
+    foot.appendChild(el("span", "panel__spacer"));
+    foot.appendChild(button("btn-ghost", "Close", function () { closePanel(true); }));
+    node.appendChild(foot);
+
+    function setStatus(message) {
+      status.textContent = message || "";
+      status.hidden = !message;
+    }
+
+    // A new plan is offered under .pact.json; an existing file opens as typed.
+    function updateHint() {
+      var raw = pathInput.value.trim();
+      var suggested = raw ? withPlanSuffix(raw) : "";
+      hint.textContent = raw && suggested !== raw
+        ? "New plan is created empty at " + suggested + "."
+        : "New plan is created empty - no people, no projects.";
+    }
+
+    function showPath(resolved) {
+      current.textContent = resolved;
+      pathInput.value = resolved;
+      updateHint();
+    }
+
+    function succeeded(result) {
+      error.clear();
+      offerBtn.hidden = true;
+      showPath(result.path);
+      setStatus("Opened " + result.path);
+      planFileState = result;
+      updatePlanFileItem();
+      return refresh({ keepPanel: true });
+    }
+
+    function failed(err, missing) {
+      setStatus("");
+      offerBtn.hidden = !missing;
+      error.set(err && err.message ? err.message : "Could not use that plan file.");
+    }
+
+    function doOpen() {
+      error.clear();
+      if (pathInput.value.trim() === "") { error.set("Enter the path to a plan file."); return; }
+      openBtn.disabled = true;
+      api("POST", "/api/plan-file/open", { path: pathInput.value.trim() })
+        .then(succeeded)
+        .catch(function (err) {
+          var message = err && err.message ? err.message : "";
+          failed(err, /^no plan file at /.test(message));
+        })
+        .then(function () { openBtn.disabled = false; });
+    }
+
+    function doNew() {
+      error.clear();
+      var raw = pathInput.value.trim();
+      if (raw === "") { error.set("Enter a path for the new plan."); return; }
+      newBtn.disabled = true;
+      api("POST", "/api/plan-file/new", { path: withPlanSuffix(raw) })
+        .then(succeeded)
+        .catch(function (err) { failed(err, false); })
+        .then(function () { newBtn.disabled = false; });
+    }
+
+    pathInput.addEventListener("input", updateHint);
+    form.addEventListener("submit", function (e) { e.preventDefault(); doOpen(); });
+    updateHint();
+    if (view.notice) setStatus(view.notice);
+
+    if (view.locked) {
+      pathInput.disabled = true;
+      openBtn.disabled = true;
+      newBtn.disabled = true;
+      setStatus(view.lockMessage);
+    }
+
+    openPanel(node, trigger);
+    if (!view.locked) pathInput.focus();
+  });
 }
 
 /* The Colour palette group: the two schemes, each a checkable item with the
@@ -3784,6 +3956,7 @@ function openOptions(open) {
     updateRangeControl();
     updateStepControl();
     updateSprintsItem();
+    loadPlanFileState();
   }
   optionsMenu.hidden = !open;
   optionsBtn.setAttribute("aria-expanded", open ? "true" : "false");
@@ -3830,6 +4003,7 @@ function boot() {
     bindChrome();
     initFilter();
     initOptions();
+    loadPlanFileState();
     window.requestAnimationFrame(function () {
       var tlRect = tl.getBoundingClientRect();
       var heads = tl.querySelector(".tl__heads");

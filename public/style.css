@@ -2051,6 +2051,43 @@ down to the last row and no further. */
    and nothing wraps; the start column is nowrap, so a date is always one line. */
 .panel--sprints { width: 22rem; }
 
+/* The Plan file panel: a resolved path read back as code, the field that sets
+   it, and the resolved-path report. Wider than the default panel because a
+   plan path is long and is meant to be read whole. */
+.panel--planfile { width: 24rem; }
+
+.planfile__path {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-axis);
+  color: var(--ink);
+}
+
+.planfile__input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.planfile__input:focus-visible { border-color: var(--rule-strong); }
+.planfile__input:disabled { opacity: var(--op-disabled); }
+
+.planfile__status {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.planfile__hint { margin-top: var(--sp-2); overflow-wrap: anywhere; }
+
 .sprint-list { margin-top: var(--sp-4); }
 
 .sprint-list__heading {

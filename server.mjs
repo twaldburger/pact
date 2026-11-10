@@ -1,15 +1,21 @@
 /*
  * PACT server: one local Node process, no dependencies, no build step.
  *
- * It serves public/ and keeps the plan in data/pact.json as the single source
- * of truth behind a small JSON API. Start it with `node server.mjs`; the plan
- * file is created on first run from a seeded plan (convenience data).
+ * It serves public/ and keeps the active plan, by default in
+ * data/default.pact.json, as the single source of truth behind a small JSON
+ * API. The active file is chosen at start from PACT_DATA, then from
+ * data/config.json, then the default; the running server can switch it through
+ * the plan-file API. Start it with `node server.mjs`; the plan file is created
+ * on first run from a seeded plan (convenience data).
  */
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createStore, todayISO, ValidationError, NotFoundError } from "./lib/plan.mjs";
+import { createStore, todayISO, ValidationError, NotFoundError, PlanFileError } from "./lib/plan.mjs";
+import { resolvePlanFile, writeConfig } from "./lib/config.mjs";
+import { resolvePlanPath, withPlanSuffix } from "./public/lib/plan-file.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
 import { normalizeStep } from "./public/lib/panels.mjs";
 
@@ -142,6 +148,37 @@ function serveStatic(res, publicDir, pathname) {
 
 export function createServer(store, options) {
   const publicDir = (options && options.publicDir) || path.join(HERE, "public");
+  const configPath = options && options.configPath;
+  const home = (options && options.home) || os.homedir();
+  const envLocked = !!(options && options.envLocked);
+  // What the plan-file panel reads: the active file, where that choice came
+  // from, whether PACT_DATA fixes it, and any one-time report such as a move.
+  const state = {
+    source: (options && options.source) || "default",
+    notice: (options && options.notice) || ""
+  };
+
+  function planFileState() {
+    return {
+      path: store.planFilePath(),
+      source: state.source,
+      locked: envLocked,
+      notice: state.notice
+    };
+  }
+
+  // The config is the app's own settings store, beside the plan. A failed
+  // config write never fails the plan-file switch that just succeeded; it is
+  // reported and the choice simply does not survive a restart.
+  function persistConfig() {
+    if (!configPath) return;
+    try {
+      writeConfig(configPath, { planFile: store.planFilePath() });
+    } catch (err) {
+      console.error("PACT: could not write " + configPath + ": " + err.message);
+    }
+  }
+
   return http.createServer((req, res) => {
     let pathname;
     let includeArchived = false;
@@ -154,6 +191,33 @@ export function createServer(store, options) {
     }
     Promise.resolve()
       .then(() => {
+        // The plan-file endpoints: read the active file and switch it. Switching
+        // reloads the named file, and the choice is remembered in the config so
+        // it survives a restart.
+        if (pathname === "/api/plan-file") {
+          if (req.method === "GET") return sendJSON(res, 200, planFileState());
+          return sendError(res, 405, "method not allowed");
+        }
+        if (pathname === "/api/plan-file/open" || pathname === "/api/plan-file/new") {
+          if (req.method !== "POST") return sendError(res, 405, "method not allowed");
+          // PACT_DATA is the deliberate per-run choice: the panel says so and
+          // the switch is refused rather than silently ignored.
+          if (envLocked) {
+            return sendError(res, 409, "PACT_DATA is set, so the plan file is fixed for this run");
+          }
+          return readBody(req).then((body) => {
+            const resolved = resolvePlanPath(body && body.path, home);
+            if (resolved.error) return sendError(res, 400, resolved.error);
+            // A new plan is always offered under the .pact.json suffix.
+            const target = pathname === "/api/plan-file/new" ? withPlanSuffix(resolved.path) : resolved.path;
+            if (pathname === "/api/plan-file/new") store.newPlan(target);
+            else store.openPlan(target);
+            persistConfig();
+            state.source = "config";
+            state.notice = "";
+            return sendJSON(res, 200, planFileState());
+          });
+        }
         if (pathname === "/api/plan") {
           if (req.method === "GET") return sendJSON(res, 200, planForClient(store, includeArchived));
           // The plan's settings: the period, set with both ends together, the
@@ -191,6 +255,7 @@ export function createServer(store, options) {
         return serveStatic(res, publicDir, pathname);
       })
       .catch((err) => {
+        if (err instanceof PlanFileError) return sendError(res, err.status || 400, err.message);
         if (err instanceof ValidationError) return sendError(res, 400, err.message);
         if (err instanceof NotFoundError) return sendError(res, 404, err.message);
         console.error(err);
@@ -202,11 +267,26 @@ export function createServer(store, options) {
 
 export function main() {
   const port = Number(process.env.PORT || 4173);
-  const dataFile = process.env.PACT_DATA || path.join(HERE, "data", "pact.json");
-  const store = createStore(dataFile);
-  const server = createServer(store);
+  const dataDir = path.join(HERE, "data");
+  const configFile = path.join(dataDir, "config.json");
+  // PACT_DATA wins, then the config, then the default - moving the old default
+  // name to the new one when that is what sits there.
+  const resolved = resolvePlanFile({
+    dataDir: dataDir,
+    configFile: configFile,
+    env: process.env.PACT_DATA
+  });
+  if (resolved.notice) console.log("PACT: " + resolved.notice);
+  const store = createStore(resolved.path);
+  const server = createServer(store, {
+    configPath: configFile,
+    home: os.homedir(),
+    envLocked: resolved.source === "env",
+    source: resolved.source,
+    notice: resolved.notice
+  });
   server.listen(port, () => {
-    console.log("PACT serving at http://localhost:" + port + " (plan: " + dataFile + ")");
+    console.log("PACT serving at http://localhost:" + port + " (plan: " + store.planFilePath() + ")");
   });
   return { server: server, store: store };
 }
