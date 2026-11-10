@@ -1391,17 +1391,11 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* A Person's name and a Project's name are the same role in the two columns,
-   set the same way. The column is a fixed width, so a name too long for it
-   stays on one line and is cut with an ellipsis rather than wrapping or
-   overflowing; the whole name rides on hover. */
+   set the same way. */
 .rowhead__name {
   font-size: var(--fs-data);
   font-weight: var(--fw-ui);
   line-height: 1.2;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* On its own line, left-aligned under the name so the two read as one column,
@@ -1430,10 +1424,13 @@ h1, h2, h3, p { margin: 0; }
 
 /* The name takes only the room it needs, so the figure stays beside it rather
    than being pushed against the right edge of the column; it gives room up
-   when the name is long enough to need all of it. The cut itself is the
-   one-line rule above, shared with the two-line header. */
+   when the name is long enough to need all of it. */
 :root.is-tight-rows .rowhead__name {
   flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 :root.is-tight-rows .rowhead__fig {
