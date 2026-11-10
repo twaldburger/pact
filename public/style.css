@@ -101,7 +101,7 @@
 }
 
 [data-zoom="week"]  { --day-w: 1rem; }        /* 16px */
-[data-zoom="sprint"] { --day-w: 1rem; }        /* 16px - the week's density */
+[data-zoom="sprint"] { --day-w: 0.5rem; }      /* 8px - half the week's, so a 14-day sprint spans a week's width */
 [data-zoom="month"] { --day-w: 0.3125rem; --axis-h: var(--band-month-h); } /* 5px, month band only */
 
 /* Project fills - the active palette's ten colours as slots 0..9. A Project's

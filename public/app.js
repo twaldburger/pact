@@ -172,10 +172,10 @@ var showArchived = false;
 var minimapEnabled = MINIMAP_DEFAULT;
 // The two grid-display choices: the weekend band and the full-height dividers.
 // Session-only, like Zoom and Row height - never sent to the server and never
-// written to the plan. Weekends start on and dividers off, so a fresh session
-// draws the grid exactly as it always has.
-var highlightWeekends = true;
-var gridDividers = false;
+// written to the plan. Weekends start off and dividers on, so a fresh session
+// opens on the quieter grid with its day boundaries ruled.
+var highlightWeekends = false;
+var gridDividers = true;
 // The Stack rail's folded state: a view setting for the session only, exactly
 // like Zoom and Row height. It is never written to the plan and resets on
 // reload.

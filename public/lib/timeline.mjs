@@ -24,7 +24,8 @@ export const ROW_HEIGHT_DEFAULT = 48;
 
 /*
  * The zoom control: the drawn width of one day, one of four named levels.
- * Sprint shares Week's density and differs only in the band the axis names.
+ * Sprint draws a day at half Week's width and also differs in the band the
+ * axis names.
  * The interface opens at month - the recent past plus the next eleven months
  * at a glance - as the plan's default view. Like the row height it is a view
  * setting only, never written to the plan.

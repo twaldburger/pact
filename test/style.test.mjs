@@ -188,6 +188,34 @@ test("the axis separator ink lands on the Grid divider's boundary", () => {
   assert.equal(-Number(right[1]) - Number(width[1]), 0);
 });
 
+/* --- the zoom day widths ------------------------------------------------- */
+
+// The drawn width of one day per zoom, so a zoom cannot silently drift from
+// the density the interface promises. Sprint is half the Week zoom's, so a
+// 14-day sprint cell and a Week zoom's 7-day cell span the same width.
+const ROOT_REM_PX = 16;
+
+function dayWidthPx(zoom) {
+  const rule = STYLE.match(new RegExp('\\[data-zoom="' + zoom + '"\\]\\s*\\{([^}]*)\\}'));
+  assert.ok(rule, "no [data-zoom=\"" + zoom + "\"] rule");
+  const value = rule[1].match(/--day-w:\s*([\d.]+)rem\s*;/);
+  assert.ok(value, "[data-zoom=\"" + zoom + "\"] sets no rem --day-w");
+  return Number(value[1]) * ROOT_REM_PX;
+}
+
+function sprintCellPx(days) {
+  return dayWidthPx("sprint") * days;
+}
+
+test("the Sprint zoom's day is half the Week zoom's", () => {
+  assert.equal(dayWidthPx("week"), 16);
+  assert.equal(dayWidthPx("sprint"), 8);
+});
+
+test("a 14-day sprint cell equals a Week zoom's 7-day cell", () => {
+  assert.equal(sprintCellPx(14), dayWidthPx("week") * 7);
+});
+
 /* --- the Filter control's fixed footprint -------------------------------- */
 
 // The Look in button's summary text changes length with the scope, so its

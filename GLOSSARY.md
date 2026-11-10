@@ -78,7 +78,7 @@ An overview strip of the Timeline, off by default and turned on under the Option
 _Avoid_: overview, thumbnail, mini-chart, density chart
 
 **Zoom**:
-The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - and Sprint shares Week's density while its secondary band names the sprint chain instead of days or weeks.
+The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - and Sprint draws a day at half Week's width, so a two-week sprint spans what one week does at Week zoom, while its secondary band names the sprint chain instead of days or weeks.
 _Avoid_: granularity, resolution, scale
 
 **Sprint**:

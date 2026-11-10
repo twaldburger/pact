@@ -31,8 +31,8 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
 export function dividerUnit(zoom) {
   if (zoom === "day") return "day";
   if (zoom === "week") return "week";
-  // Sprint shares Week's density but not its boundaries: a sprint is a run of
-  // its own length, so its dividers are the derived sprint cells, not weeks.
+  // Sprint is denser than Week and draws its own boundaries: a sprint is a
+  // run of its own length, so its dividers are the derived sprint cells.
   if (zoom === "sprint") return "sprint";
   return "month";
 }
