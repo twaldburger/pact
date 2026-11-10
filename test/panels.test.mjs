@@ -4,8 +4,10 @@ import {
   clampAvailability,
   stepAvailability,
   suggestPersonTags,
+  suggestProjectTags,
   suggestPersonLocations,
   suggestAssignmentTags,
+  sortTags,
   hasTag,
   withTag,
   withoutTag,
@@ -47,6 +49,23 @@ test("Person tags are suggested from other People only", () => {
   assert.equal(suggestPersonTags([{ id: "solo", tags: ["Atlas"] }], "solo").length, 0);
 });
 
+test("Project tags are suggested from other Projects only", () => {
+  const projects = [
+    { id: "atlas", tags: ["Platform", "lead"] },
+    { id: "borealis", tags: ["delivery", "Platform"] },
+    { id: "summit", tags: ["Delivery", "ops"] }
+  ];
+  // Case-insensitive: Platform already sits on this Project, so it is not
+  // offered back; the others are, first spelling winning, sorted.
+  assert.deepEqual(suggestProjectTags(projects, "atlas"), ["delivery", "ops"]);
+  assert.deepEqual(suggestProjectTags(projects, "summit"), ["lead", "Platform"]);
+  // A new Project is offered every tag in the plan.
+  assert.deepEqual(suggestProjectTags(projects, null), ["delivery", "lead", "ops", "Platform"]);
+  // A Project's own tags never appear, and Person or Assignment tags are never
+  // part of this vocabulary.
+  assert.equal(suggestProjectTags([{ id: "solo", tags: ["Atlas"] }], "solo").length, 0);
+});
+
 test("Locations are suggested from other People only, one per Person", () => {
   const people = [
     { id: "anna", location: "Switzerland" },
@@ -82,10 +101,18 @@ test("Assignment tags are suggested from that Project's other Assignments only",
 test("tags are added and removed case-insensitively", () => {
   assert.equal(hasTag(["React"], "react"), true);
   assert.equal(hasTag(["React"], "vue"), false);
-  assert.deepEqual(withTag(["React"], "design"), ["React", "design"]);
+  // A new tag lands in alphabetical position, case-insensitively, so the
+  // stored array is always A-Z.
+  assert.deepEqual(withTag(["React"], "design"), ["design", "React"]);
   assert.deepEqual(withTag(["React"], "REACT"), ["React"]);
   assert.deepEqual(withTag(["React"], "   "), ["React"]);
   assert.deepEqual(withoutTag(["React", "design"], "react"), ["design"]);
+});
+
+test("sortTags orders case-insensitively without changing a spelling", () => {
+  assert.deepEqual(sortTags(["React", "design", "lead"]), ["design", "lead", "React"]);
+  assert.deepEqual(sortTags(["b", "B", "a"]).length, 3);
+  assert.deepEqual(sortTags([]), []);
 });
 
 test("a refused drop names the archived record and says why", () => {

@@ -10,6 +10,7 @@ import {
   clampAvailability,
   stepAvailability,
   suggestPersonTags,
+  suggestProjectTags,
   suggestPersonLocations,
   suggestAssignmentTags,
   withTag,
@@ -1897,9 +1898,17 @@ function tagEditor(initial, suggest) {
   input.setAttribute("list", listId);
   var datalist = document.createElement("datalist");
   datalist.id = listId;
+  // The input sits in the chip row once and never moves again, so rebuilding
+  // the chips around it cannot drop its focus.
+  chips.appendChild(input);
 
   function render() {
-    chips.innerHTML = "";
+    // The chips are rebuilt around the input, which never leaves the DOM:
+    // re-appending a focused element drops its focus, so a run of tags can be
+    // typed without the mouse, and removing a chip keeps the caret in place.
+    Array.prototype.slice.call(chips.querySelectorAll(".chip")).forEach(function (chip) {
+      chip.remove();
+    });
     tags.forEach(function (tag) {
       var chip = el("span", "chip");
       var text = el("span", "chip__text");
@@ -1915,9 +1924,8 @@ function tagEditor(initial, suggest) {
       });
       chip.appendChild(text);
       chip.appendChild(remove);
-      chips.appendChild(chip);
+      chips.insertBefore(chip, input);
     });
-    chips.appendChild(input);
     datalist.innerHTML = "";
     suggest().forEach(function (tag) {
       var option = document.createElement("option");
@@ -2080,6 +2088,13 @@ function openProjectPanel(project, trigger) {
   }
   form.appendChild(formRow("Colour", swatches));
 
+  // Project tags are offered from other Projects only; Person tags and
+  // Assignment tags are separate vocabularies and are never suggested here.
+  var tags = tagEditor(editing ? project.tags : [], function () {
+    return suggestProjectTags(data.projects, editing ? project.id : null);
+  });
+  form.appendChild(formRow("Tags", tags.node));
+
   var notes = textarea(editing ? project.notes : "");
   form.appendChild(formRow("Notes", notes));
 
@@ -2103,7 +2118,7 @@ function openProjectPanel(project, trigger) {
   var save = saveButton(editing ? "Save" : "Add project", function () {
     var name = nameInput.value.trim();
     if (!name) { error.set("A project needs a name."); nameInput.focus(); return; }
-    var body = { name: name, colour: colour, notes: notes.value };
+    var body = { name: name, colour: colour, notes: notes.value, tags: tags.tags() };
     submitPanel(node, error, function () {
       return editing
         ? api("PATCH", "/api/projects/" + encodeURIComponent(project.id), body)
