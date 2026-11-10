@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   defaultScopes,
   scopeCount,
+  scopeLabel,
   scopeSummary,
   searchedAreas,
   matchesQuery,
@@ -154,6 +155,11 @@ test("an empty result is empty for all three things", () => {
 
 test("the scope control states how many areas are looked in", () => {
   assert.equal(scopeCount(defaultScopes()), 3);
+  assert.equal(scopeLabel(defaultScopes()), "in 3 areas");
+  assert.equal(scopeLabel(scopes(true, false, true)), "in 2 areas");
+  assert.equal(scopeLabel(scopes(false, true, false)), "in 1 area");
+  assert.equal(scopeLabel(scopes(false, false, false)), "in no areas");
+  // The full selection stays on the accessible label.
   assert.equal(scopeSummary(defaultScopes()), "all 3");
   assert.equal(scopeSummary(scopes(true, false, true)), "2 of 3");
   assert.equal(scopeSummary(scopes(false, false, false)), "none");

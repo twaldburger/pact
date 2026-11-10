@@ -42,6 +42,7 @@ import {
   searchEverywhereSuggestion,
   personAssignedShare,
   scopeSummary,
+  scopeLabel,
   searchedAreas,
   parseFilterTerm,
   fieldLabel,
@@ -2611,8 +2612,9 @@ function updateFilterChrome() {
   // A typed term aims at one field, so the plain-term scope is still
   // described but visibly set aside while one is in the field.
   var overridden = term.kind === "field" || term.kind === "unknown";
-  var summary = "Look in: " + scopeSummary(filterScopes);
-  filterScopeBtn.textContent = overridden ? summary + " (ignored)" : summary;
+  // The button names the count; the full selection, and the note that a typed
+  // term sets the scope aside, ride on the accessible label.
+  filterScopeBtn.textContent = scopeLabel(filterScopes);
   filterScopeBtn.setAttribute("aria-label", overridden
     ? "Look in - " + scopeSummary(filterScopes) + ", ignored because a typed term names its own field"
     : "Look in - " + scopeSummary(filterScopes));
