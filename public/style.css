@@ -98,6 +98,7 @@
 }
 
 [data-zoom="week"]  { --day-w: 1rem; }        /* 16px */
+[data-zoom="sprint"] { --day-w: 1rem; }        /* 16px - the week's density */
 [data-zoom="month"] { --day-w: 0.3125rem; --axis-h: var(--band-month-h); } /* 5px, month band only */
 
 /* Project fills - the active palette's ten colours as slots 0..9. A Project's
@@ -696,6 +697,18 @@ h1, h2, h3, p { margin: 0; }
   border-color: var(--ink);
 }
 
+/* The Sprints entry is an action, not a checked toggle: no tick, its detail
+   on the right, set off from the groups above it. */
+.options__item--action {
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--rule);
+}
+
+.options__item-detail {
+  margin-left: auto;
+  color: var(--ink-soft);
+}
+
 /* The plan period: two explicit dates set together, under the menu's items. */
 .options__range {
   display: flex;
@@ -1164,8 +1177,20 @@ h1, h2, h3, p { margin: 0; }
   border-bottom: 1px solid var(--rule);
 }
 
+/* The Sprint zoom's secondary band: sprint names in place of the day and week
+   bands. It is drawn with the others and shown only at Sprint, so a zoom
+   change never has to rebuild the axis. */
+.axis__sprints {
+  height: var(--band-day-h);
+  border-bottom: 1px solid var(--rule);
+  display: none;
+}
+
 [data-zoom="day"] .axis__weeks { display: none; }
 [data-zoom="week"] .axis__days { display: none; }
+[data-zoom="sprint"] .axis__days,
+[data-zoom="sprint"] .axis__weeks { display: none; }
+[data-zoom="sprint"] .axis__sprints { display: flex; }
 [data-zoom="month"] .axis__days,
 [data-zoom="month"] .axis__weeks { display: none; }
 
@@ -1219,6 +1244,22 @@ h1, h2, h3, p { margin: 0; }
   padding-left: var(--sp-3);
   font-size: var(--fs-axis);
   color: var(--ink-soft);
+}
+
+/* A sprint cell's name is left-aligned like the week band's, with the
+   separator ink coming from .ax::after in --rule-strong. A name wider than
+   its cell is truncated rather than spilling onto the next sprint. */
+.ax-sprint {
+  padding-left: var(--sp-3);
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+}
+
+.ax-sprint__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Row-header column - sticky, the left edge of the grid ---------------------- */
@@ -1916,6 +1957,45 @@ down to the last row and no further. */
   font-size: var(--fs-data);
   color: var(--signal);
 }
+
+/* The Sprints panel's derived list: one row per sprint, its name beside its
+   start and an editable end date. */
+.sprint-list { margin-top: var(--sp-4); }
+
+.sprint-list__heading {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.sprint-list__notice { margin-top: var(--sp-3); }
+
+.sprint-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+}
+
+.sprint-row input {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.sprint-row__dates {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.sprint-row__dates input { width: 9.5rem; }
 
 .noscript {
   margin: var(--sp-6);

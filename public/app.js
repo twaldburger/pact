@@ -25,7 +25,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems } from "./lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem } from "./lib/options.mjs";
 import {
   PALETTES,
   PALETTE_DEFAULT,
@@ -88,6 +88,15 @@ import {
   MARKER_RELEASE
 } from "./lib/sort.mjs";
 import { saveStatusWord, NOT_SAVED } from "./lib/save-status.mjs";
+import {
+  cadenceFrom,
+  sprintsFor,
+  SPRINT_LENGTH_DEFAULT,
+  SPRINT_LENGTH_MIN,
+  SPRINT_LENGTH_MAX,
+  NAME_PREFIX_DEFAULT,
+  NAME_NUMBER_DEFAULT
+} from "./lib/sprints.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -133,6 +142,13 @@ var markerDate = null;
 // The sticky axis band the date chip is anchored to, so it stays in the
 // header while the rows scroll under it.
 var axisEl = null;
+// The sprint chain, derived from the plan's cadence, adjustments and period in
+// indexData: never stored, so it can never go stale. Empty without a cadence.
+var sprintCadence = null;
+var sprintList = [];
+// The zoom buttons, kept so a cadence change can enable or disable the Sprint
+// button and step the view away from a zoom it can no longer show.
+var zoomButtons = [];
 // The row height and the geometry derived from it. A view setting for the
 // session only: it is never written to the plan and resets on reload.
 var rowHeight = ROW_HEIGHT_DEFAULT;
@@ -221,6 +237,11 @@ function indexData() {
   rangeEnd = udate(data.range.end);
   DAYS = dayDiff(rangeStart, rangeEnd) + 1;
   startDow = dow(rangeStart);
+
+  // The sprint chain is derived here, from the cadence and adjustments the
+  // plan holds and the period it draws, so nothing about it is stored.
+  sprintCadence = cadenceFrom(data);
+  sprintList = sprintCadence ? sprintsFor(sprintCadence, data.sprints, data.range) : [];
 
   projectById = {};
   data.projects.forEach(function (p) { projectById[p.id] = p; });
@@ -416,9 +437,32 @@ function drawAxis() {
     weekBand.appendChild(set(c, wk.i, wk.n));
   });
 
+  // The Sprint zoom's secondary band: one cell per derived sprint, starting at
+  // the sprint's first day and left-aligned with its name. Days before the
+  // cadence's start have no sprint, so a blank filler holds that stretch and
+  // nothing is derived backwards. The band is drawn with the others and the
+  // zoom's own CSS shows exactly one secondary band.
+  var sprintBand = el("div", "axis__band axis__sprints");
+  if (sprintList.length) {
+    var firstSprint = sprintList[0];
+    if (firstSprint.startIndex > 0) {
+      sprintBand.appendChild(set(el("div", "ax ax-sprint ax-sprint--blank"), 0, firstSprint.startIndex));
+    }
+    sprintList.forEach(function (sp) {
+      var i = clamp(sp.startIndex, 0, DAYS - 1);
+      var last = clamp(sp.endIndex, 0, DAYS - 1);
+      var cell = el("div", "ax ax-sprint");
+      var label = el("span", "ax-sprint__label");
+      label.textContent = sp.name;
+      cell.appendChild(label);
+      sprintBand.appendChild(set(cell, i, Math.max(1, last - i + 1)));
+    });
+  }
+
   axis.appendChild(monthBand);
   axis.appendChild(dayBand);
   axis.appendChild(weekBand);
+  axis.appendChild(sprintBand);
   return axis;
 }
 
@@ -1554,11 +1598,11 @@ function planUrl() {
   return planQuery(showArchived);
 }
 
-function refresh() {
+function refresh(opts) {
   return api("GET", planUrl()).then(function (plan) {
     var previousStart = rangeStart;
     data = plan;
-    render();
+    render(opts);
     // When the range has gained days to the left, hold the owner's view in
     // place rather than letting the restored scroll slip a whole month back.
     if (previousStart) {
@@ -1769,6 +1813,28 @@ function input(value) {
   var i = document.createElement("input");
   i.type = "text";
   i.value = value || "";
+  return i;
+}
+
+// A calendar-date field, used by the Sprints panel.
+function dateField(value, label) {
+  var i = document.createElement("input");
+  i.type = "date";
+  i.value = value || "";
+  i.setAttribute("placeholder", "YYYY-MM-DD");
+  if (label) i.setAttribute("aria-label", label);
+  return i;
+}
+
+// A whole-number field bounded to the sprint length range.
+function numberField(value, label) {
+  var i = document.createElement("input");
+  i.type = "number";
+  i.min = String(SPRINT_LENGTH_MIN);
+  i.max = String(SPRINT_LENGTH_MAX);
+  i.step = "1";
+  i.value = String(value);
+  if (label) i.setAttribute("aria-label", label);
   return i;
 }
 
@@ -2291,6 +2357,171 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
   projectSelect.focus();
 }
 
+/* --- Sprints panel ------------------------------------------------------- */
+
+// The cadence and its adjustment list, beside the Person and Project panels.
+// Every write goes through PATCH /api/plan, like the period and the step: no
+// new route and no new collection. The list is derived from what the server
+// returns, so editing an end date re-flows every later sprint at once without
+// the panel closing.
+function openSprintsPanel(trigger) {
+  var cadence = cadenceFrom(data);
+  var node = panelShell("Sprints",
+    "The chain is derived from the cadence and the plan period; nothing about it is stored.");
+  var periodStart = data.range ? data.range.start : "";
+
+  var form = el("form", "form");
+  var startInput = dateField(cadence ? cadence.start : periodStart, "First sprint starts");
+  var lengthInput = numberField(cadence ? cadence.length : SPRINT_LENGTH_DEFAULT, "Sprint length in days");
+  var prefixInput = input(cadence ? cadence.namePrefix : NAME_PREFIX_DEFAULT);
+  prefixInput.setAttribute("aria-label", "Name prefix");
+  var numberInput = input(cadence ? String(cadence.nameNumber) : String(NAME_NUMBER_DEFAULT));
+  numberInput.setAttribute("aria-label", "First number");
+  form.appendChild(formRow("First sprint starts", startInput));
+  form.appendChild(formRow("Length, days", lengthInput));
+  form.appendChild(formRow("Name prefix", prefixInput));
+  form.appendChild(formRow("First number", numberInput));
+  node.appendChild(form);
+
+  var error = errorLine(node);
+
+  var listWrap = el("div", "sprint-list");
+  node.appendChild(listWrap);
+
+  var notice = el("p", "panel__sub sprint-list__notice");
+  notice.hidden = true;
+  node.appendChild(notice);
+
+  // Every write sends the whole cadence with the current adjustments, so the
+  // store sets the pair in one atomic commit and one undo step.
+  function currentAdjustments() {
+    return (data.sprints || []).map(function (a) { return Object.assign({}, a); });
+  }
+
+  function withAdjustment(adjustments, index, patch) {
+    var found = null;
+    adjustments.forEach(function (a) { if (a.index === index) found = a; });
+    if (!found) {
+      found = { index: index };
+      adjustments.push(found);
+    }
+    Object.keys(patch).forEach(function (k) { found[k] = patch[k]; });
+    return adjustments;
+  }
+
+  function save(payload, after) {
+    error.clear();
+    return api("PATCH", "/api/plan", payload).then(function () {
+      return refresh({ keepPanel: true });
+    }).then(function () {
+      updateSprintsItem();
+      if (after) after();
+    }).catch(function (err) {
+      error.set(err && err.message ? err.message : "Could not save the sprints.");
+    });
+  }
+
+  function renderList() {
+    listWrap.innerHTML = "";
+    var c = cadenceFrom(data);
+    if (!c) {
+      notice.hidden = true;
+      clearBtn.hidden = true;
+      saveCadence.textContent = "Define sprints";
+      return;
+    }
+    saveCadence.textContent = "Save cadence";
+    var list = sprintsFor(c, data.sprints || [], data.range);
+    var before = list.length > 0 && list[0].startIndex > 0;
+    notice.textContent = before
+      ? "The period starts before the first sprint, " + c.start + "; those days carry no sprint."
+      : "";
+    notice.hidden = !before;
+
+    var heading = el("p", "sprint-list__heading");
+    heading.textContent = list.length + (list.length === 1 ? " sprint" : " sprints");
+    listWrap.appendChild(heading);
+
+    list.forEach(function (sp) {
+      var row = el("div", "sprint-row");
+
+      var name = input(sp.name);
+      name.setAttribute("aria-label", "Sprint " + sp.index + " name");
+      name.addEventListener("change", function () {
+        if (name.value.trim() === "") { name.value = sp.name; return; }
+        save({ cadence: c, sprints: withAdjustment(currentAdjustments(), sp.index, { name: name.value }) });
+      });
+      row.appendChild(name);
+
+      var dates = el("span", "sprint-row__dates");
+      var from = el("span", "sprint-row__from");
+      from.textContent = sp.start;
+      dates.appendChild(from);
+
+      var end = dateField(sp.end, "Sprint " + sp.index + " end");
+      end.addEventListener("change", function () {
+        var days = end.value ? dayDiff(udate(sp.start), udate(end.value)) + 1 : 0;
+        if (days < SPRINT_LENGTH_MIN) {
+          error.set("A sprint must end on or after it starts.");
+          end.value = sp.end;
+          return;
+        }
+        if (days > SPRINT_LENGTH_MAX) {
+          error.set("A sprint can be at most " + SPRINT_LENGTH_MAX + " days.");
+          end.value = sp.end;
+          return;
+        }
+        save({ cadence: c, sprints: withAdjustment(currentAdjustments(), sp.index, { length: days }) }, renderList);
+      });
+      dates.appendChild(end);
+      row.appendChild(dates);
+      listWrap.appendChild(row);
+    });
+    clearBtn.hidden = false;
+  }
+
+  var foot = el("div", "panel__foot");
+  var clearBtn = button("btn-danger", "Clear cadence", function () {
+    save({ cadence: null, sprints: [] }, function () {
+      startInput.value = periodStart;
+      lengthInput.value = String(SPRINT_LENGTH_DEFAULT);
+      prefixInput.value = NAME_PREFIX_DEFAULT;
+      numberInput.value = String(NAME_NUMBER_DEFAULT);
+      renderList();
+    });
+  });
+  clearBtn.hidden = !cadence;
+  foot.appendChild(clearBtn);
+  foot.appendChild(el("span", "panel__spacer"));
+
+  var saveCadence = saveButton(cadence ? "Save cadence" : "Define sprints", function () {
+    var start = startInput.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) {
+      error.set("The first sprint needs a valid start date.");
+      return;
+    }
+    var length = Number(lengthInput.value);
+    if (!Number.isInteger(length) || length < SPRINT_LENGTH_MIN || length > SPRINT_LENGTH_MAX) {
+      error.set("The sprint length must be a whole number from " + SPRINT_LENGTH_MIN + " to " + SPRINT_LENGTH_MAX + ".");
+      return;
+    }
+    var number = numberInput.value.trim();
+    if (!/^\d+$/.test(number)) {
+      error.set("The first number must be a whole number.");
+      return;
+    }
+    var next = { start: start, length: length, namePrefix: prefixInput.value, nameNumber: number };
+    save({ cadence: next, sprints: currentAdjustments() }, renderList);
+  });
+  foot.appendChild(saveCadence);
+  node.appendChild(foot);
+
+  form.addEventListener("submit", function (e) { e.preventDefault(); saveCadence.click(); });
+
+  renderList();
+  openPanel(node, trigger);
+}
+
 /* --- zoom ---------------------------------------------------------------- */
 
 // Bring today into the middle of the day area, leaving the sticky row-header
@@ -2325,26 +2556,47 @@ function goToToday() {
   scroller.scrollLeft = Math.max(0, left);
 }
 
+function applyZoom(zoom) {
+  if (!isZoom(zoom)) zoom = ZOOM_DEFAULT;
+  // The Sprint zoom is shown but disabled until a cadence exists; if the
+  // cadence is cleared while the view is on Sprint, step back to Week rather
+  // than leaving a zoom the plan can no longer name.
+  if (zoom === "sprint" && !sprintCadence) zoom = "week";
+  // Hold the Marker where it sits on screen while the scale changes.
+  var sRect = scroller.getBoundingClientRect();
+  var before = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
+  root.setAttribute("data-zoom", zoom);
+  updateDividerRules();
+  zoomButtons.forEach(function (b) {
+    b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
+  });
+  var after = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
+  scroller.scrollLeft += after - before;
+  queueBlockLabels();
+}
+
+// The Sprint button never appears and disappears: it is always in the group and
+// disabled until a cadence exists, with a title saying where to define one.
+function syncZoomControls() {
+  var sprintBtn = document.querySelector('.zoom__btn[data-zoom="sprint"]');
+  if (!sprintBtn) return;
+  var available = !!sprintCadence;
+  sprintBtn.disabled = !available;
+  sprintBtn.setAttribute("aria-disabled", available ? "false" : "true");
+  sprintBtn.title = available ? "" : "Define sprints in Options";
+  if (!available && root.getAttribute("data-zoom") === "sprint") applyZoom("week");
+}
+
 function initZoom() {
-  var buttons = Array.prototype.slice.call(document.querySelectorAll(".zoom__btn"));
-  function choose(zoom) {
-    // Hold the Marker where it sits on screen while the scale changes.
-    var sRect = scroller.getBoundingClientRect();
-    var before = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
-    root.setAttribute("data-zoom", zoom);
-    updateDividerRules();
-    buttons.forEach(function (b) {
-      b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
+  zoomButtons = Array.prototype.slice.call(document.querySelectorAll(".zoom__btn"));
+  zoomButtons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (b.disabled) return;
+      applyZoom(b.getAttribute("data-zoom"));
     });
-    var after = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
-    scroller.scrollLeft += after - before;
-    queueBlockLabels();
-  }
-  buttons.forEach(function (b) {
-    b.addEventListener("click", function () { choose(b.getAttribute("data-zoom")); });
   });
   var initial = root.getAttribute("data-zoom");
-  choose(isZoom(initial) ? initial : ZOOM_DEFAULT);
+  applyZoom(isZoom(initial) ? initial : ZOOM_DEFAULT);
 }
 
 /* --- row height ---------------------------------------------------------- */
@@ -2448,16 +2700,20 @@ function buildEmptyState() {
   return box;
 }
 
-function render() {
+function render(opts) {
   if (!data) return;
   var scrollLeft = scroller.scrollLeft;
-  closePanel(false);
+  // A panel stays open across a redraw only when it asked to: the Sprints
+  // panel rebuilds its own list and must not be closed by the refresh that
+  // follows each edit.
+  if (!(opts && opts.keepPanel)) closePanel(false);
   tl.innerHTML = "";
   stackList.innerHTML = "";
   indexData();
   contextEl.textContent = rangeLabel(data.range.start, data.range.end);
   syncSaveStatus();
   syncHistoryControls();
+  syncZoomControls();
   updateTodayControl();
 
   if (filterQuery.trim() !== "" && filterIsEmpty({
@@ -2992,6 +3248,7 @@ var rangeEndInput = null;
 var rangeError = null;
 var stepInput = null;
 var stepError = null;
+var sprintsOptionDetail = null;
 
 // Every popover in the bar is fixed to the viewport and placed against its
 // trigger. The bar can scroll on its own when the window is narrow, so this
@@ -3103,6 +3360,31 @@ function buildOptionsMenu() {
   optionsMenu.appendChild(buildPaletteControl());
   optionsMenu.appendChild(buildRangeControl());
   optionsMenu.appendChild(buildStepControl());
+  optionsMenu.appendChild(buildSprintsItem());
+}
+
+/* The Sprints entry: an action, not a toggle. It opens the Sprints panel and
+ * its detail states whether a cadence exists yet. */
+function buildSprintsItem() {
+  var item = sprintsItem(!!sprintCadence);
+  var btn = el("button", "options__item options__item--action");
+  btn.type = "button";
+  btn.id = "option-sprints";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  sprintsOptionDetail = el("span", "options__item-detail");
+  sprintsOptionDetail.textContent = item.detail;
+  btn.appendChild(sprintsOptionDetail);
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openSprintsPanel(btn);
+  });
+  return btn;
+}
+
+function updateSprintsItem() {
+  if (!sprintsOptionDetail) return;
+  sprintsOptionDetail.textContent = sprintsItem(!!sprintCadence).detail;
 }
 
 /* The Colour palette group: the two schemes, each a checkable item with the
@@ -3306,6 +3588,7 @@ function openOptions(open) {
     updateOptionsMenu();
     updateRangeControl();
     updateStepControl();
+    updateSprintsItem();
   }
   optionsMenu.hidden = !open;
   optionsBtn.setAttribute("aria-expanded", open ? "true" : "false");

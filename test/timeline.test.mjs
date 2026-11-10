@@ -130,10 +130,10 @@ test("that threshold follows the reader's text size", () => {
 
 test("the plan opens at month zoom", () => {
   assert.equal(ZOOM_DEFAULT, "month");
-  assert.deepEqual(ZOOM_LEVELS, ["day", "week", "month"]);
+  assert.deepEqual(ZOOM_LEVELS, ["day", "week", "sprint", "month"]);
 });
 
-test("only the three named levels are zoom", () => {
+test("only the four named levels are zoom", () => {
   ZOOM_LEVELS.forEach((level) => assert.equal(isZoom(level), true));
   ["", "Month", "year", undefined, null].forEach((level) => {
     assert.equal(isZoom(level), false);

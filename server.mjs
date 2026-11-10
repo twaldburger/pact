@@ -63,6 +63,11 @@ function planForClient(store, includeArchived) {
     range: plan.range,
     // The step is the interface's rule; an absent one reads as the default 10.
     step: normalizeStep(plan.step),
+    // The sprint cadence and its per-sprint adjustments, passed through as
+    // stored. Both are absent until sprints are defined, so a plan without a
+    // cadence reaches the client exactly as it always has.
+    cadence: plan.cadence,
+    sprints: plan.sprints,
     people: visible.people,
     projects: visible.projects,
     assignments: visible.assignments,
@@ -151,12 +156,17 @@ export function createServer(store, options) {
       .then(() => {
         if (pathname === "/api/plan") {
           if (req.method === "GET") return sendJSON(res, 200, planForClient(store, includeArchived));
-          // The plan's settings: the period, set with both ends together, and
-          // the percentage step. Each is its own write and its own body.
+          // The plan's settings: the period, set with both ends together, the
+          // percentage step, and the sprint cadence with its adjustments. Each
+          // is its own write and its own body.
           if (req.method === "PATCH") {
             return readBody(req).then((body) => {
               if (body && Object.prototype.hasOwnProperty.call(body, "step")) {
                 return sendJSON(res, 200, store.setStep(body));
+              }
+              if (body && (Object.prototype.hasOwnProperty.call(body, "cadence") ||
+                  Object.prototype.hasOwnProperty.call(body, "sprints"))) {
+                return sendJSON(res, 200, store.setSprints(body));
               }
               return sendJSON(res, 200, store.setRange(body));
             });

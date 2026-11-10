@@ -30,6 +30,9 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers) {
 export function dividerUnit(zoom) {
   if (zoom === "day") return "day";
   if (zoom === "week") return "week";
+  // Sprint shares Week's density and its boundaries, so its dividers are the
+  // same week cells.
+  if (zoom === "sprint") return "week";
   return "month";
 }
 
@@ -45,6 +48,19 @@ export function paletteItems(active) {
     label: PALETTE_LABELS[key],
     checked: key === name
   }));
+}
+
+/*
+ * The Sprints entry in the Options menu. Unlike the toggles it is an action,
+ * not a checked state: opening it opens the Sprints panel. The detail states
+ * whether a cadence exists yet, so the menu says what opening it will find.
+ */
+export function sprintsItem(hasCadence) {
+  return {
+    key: "sprints",
+    label: "Sprints...",
+    detail: hasCadence ? "Cadence defined" : "Not defined yet"
+  };
 }
 
 /*

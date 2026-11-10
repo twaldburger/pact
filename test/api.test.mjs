@@ -467,3 +467,40 @@ test("the history routes answer only POST", async () => {
   assert.equal((await api(base, "GET", "/api/undo")).status, 405);
   assert.equal((await api(base, "GET", "/api/redo")).status, 405);
 });
+
+/* --- sprints ------------------------------------------------------------- */
+
+test("the cadence and adjustments travel over the same plan route", async () => {
+  const { base, store } = await server();
+  const cadence = { start: day(0), length: 14, namePrefix: "26-", nameNumber: "01" };
+  const set = await api(base, "PATCH", "/api/plan", { cadence: cadence, sprints: [{ index: 2, length: 21 }] });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.body.cadence, cadence);
+  assert.deepEqual(set.body.sprints, [{ index: 2, length: 21 }]);
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.deepEqual(read.body.cadence, cadence);
+  assert.deepEqual(read.body.sprints, [{ index: 2, length: 21 }]);
+
+  const cleared = await api(base, "PATCH", "/api/plan", { cadence: null, sprints: null });
+  assert.equal(cleared.status, 200);
+  const after = await api(base, "GET", "/api/plan");
+  assert.equal(after.body.cadence, undefined);
+  assert.equal(after.body.sprints, undefined);
+  assert.equal(store.get().cadence, undefined);
+});
+
+test("a malformed cadence is refused by name over the API", async () => {
+  const { base, store } = await server();
+  const before = store.get();
+  const refused = await api(base, "PATCH", "/api/plan", {
+    cadence: { start: "not-a-date", length: 14, namePrefix: "Sprint", nameNumber: 1 },
+    sprints: []
+  });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, /cadence.start/);
+  const badAdjustment = await api(base, "PATCH", "/api/plan", { sprints: [{ index: 0 }] });
+  assert.equal(badAdjustment.status, 400);
+  assert.match(badAdjustment.body.error, /sprints\[0\]\.index/);
+  assert.deepEqual(store.get(), before);
+});
