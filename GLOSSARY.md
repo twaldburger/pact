@@ -17,11 +17,15 @@ The one free-text place a Person is at, for grouping and filtering people later.
 _Avoid_: office, site, city, country, timezone, or region
 
 **Person tag**:
-A short free-text label on a Person, for grouping and filtering people later. A new one can be typed, or one already in use on another Person chosen; people's tags and assignments' tags are separate lists.
+A short free-text label on a Person, for grouping and filtering people later. A new one can be typed, or one already in use on another Person chosen; people's tags, projects' tags and assignments' tags are separate lists.
 _Avoid_: skill, role, attribute, capability, or an unqualified "tag"
 
 **Assignment tag**:
-A short free-text label on an Assignment, for grouping and filtering work later. A new one can be typed, or one already used on that Project's other Assignments chosen; assignments' tags and people's tags are separate lists.
+A short free-text label on an Assignment, for grouping and filtering work later. A new one can be typed, or one already used on that Project's other Assignments chosen; assignments' tags, people's tags and projects' tags are separate lists.
+_Avoid_: label, keyword, category, or an unqualified "tag"
+
+**Project tag**:
+A short free-text label on a Project, for grouping and filtering projects later. A new one can be typed, or one already in use on another Project chosen; projects' tags, people's tags and assignments' tags are separate lists.
 _Avoid_: label, keyword, category, or an unqualified "tag"
 
 **Capacity**:
@@ -41,7 +45,7 @@ The state of a Person on a day whose Allocations add up to more than their Capac
 _Avoid_: overload, conflict, double-booking
 
 **Project**:
-A body of work that Assignments place onto People; it carries a name and a colour, and exists independently of any Person.
+A body of work that Assignments place onto People; it carries a name, a colour, any number of Project tags and an optional note, and exists independently of any Person.
 _Avoid_: engagement, job, client, ticket
 
 **Assignment**:
@@ -86,5 +90,5 @@ To step the plan back one change at a time, and Redo to step forward again, from
 _Avoid_: revert, roll back, history, snapshot
 
 **Filter**:
-The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `people: tim` or `project notes: delayed`. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
+The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `project tag:platform`, `people: tim` or `project notes: delayed`, with a bare `tag:` spanning all three kinds and `project tag:` narrowing to Projects. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
 _Avoid_: search, find, search bar, query

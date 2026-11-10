@@ -30,8 +30,8 @@ function plan() {
       { id: "dora", name: "Dora Voss", location: "", tags: [], note: "" }
     ],
     projects: [
-      { id: "react", name: "React rewrite", notes: "phase two" },
-      { id: "borealis", name: "Borealis", notes: "" }
+      { id: "react", name: "React rewrite", notes: "phase two", tags: ["lead"] },
+      { id: "borealis", name: "Borealis", notes: "", tags: [] }
     ],
     assignments: [
       { id: "a-react-anna", projectId: "react", personId: "anna", start: "2026-10-01", end: "2026-10-10", share: 60, tags: ["React"], note: "" },
@@ -235,8 +235,8 @@ test("every canonical field and alias names the field it should search", () => {
     "locations: x": ["person.location"],
     "person tag: x": ["person.tags"],
     "person tags: x": ["person.tags"],
-    "tag: x": ["person.tags", "assignment.tags"],
-    "tags: x": ["person.tags", "assignment.tags"],
+    "tag: x": ["person.tags", "project.tags", "assignment.tags"],
+    "tags: x": ["person.tags", "project.tags", "assignment.tags"],
     "person note: x": ["person.note"],
     "person notes: x": ["person.note"],
     "note: x": ["person.note", "assignment.note"],
@@ -247,6 +247,8 @@ test("every canonical field and alias names the field it should search", () => {
     "projects: x": ["project.name"],
     "project note: x": ["project.notes"],
     "project notes: x": ["project.notes"],
+    "project tag: x": ["project.tags"],
+    "project tags: x": ["project.tags"],
     "assignment tag: x": ["assignment.tags"],
     "assignment tags: x": ["assignment.tags"],
     "assignment note: x": ["assignment.note"],
@@ -377,11 +379,20 @@ test("a typed term propagates exactly as a plain match does", () => {
 });
 
 test("the bare aliases span the fields they promise", () => {
-  // tag: both tag kinds, note: person and assignment notes, name: both names.
+  // tag: all three tag kinds, note: person and assignment notes, name: both names.
   assert.deepEqual(ids(filterPlan(plan(), "tag: react", defaultScopes()).people), ["anna", "cara"]);
   // Anna matches by Person tag, so all of her work comes with her.
   assert.deepEqual(ids(filterPlan(plan(), "tag: react", defaultScopes()).assignments),
     ["a-react-anna", "a-bor-anna", "a-react-cara"]);
+  // `tag:` reaches a Project's tags too; `project tag:` narrows to Projects.
+  const broad = filterPlan(plan(), "tag: lead", defaultScopes());
+  assert.deepEqual(ids(broad.projects), ["react", "borealis"]);
+  assert.deepEqual(ids(broad.people), ["anna", "cara"]);
+  assert.deepEqual(ids(broad.assignments), ["a-react-anna", "a-bor-anna", "a-react-cara"]);
+  const narrow = filterPlan(plan(), "project tag: lead", defaultScopes());
+  assert.deepEqual(ids(narrow.projects), ["react"]);
+  assert.deepEqual(ids(narrow.people), ["anna", "cara"]);
+  assert.deepEqual(ids(narrow.assignments), ["a-react-anna", "a-react-cara"]);
   assert.deepEqual(ids(filterPlan(plan(), "name: react", defaultScopes()).projects), ["react"]);
   // note: reads person notes and assignment notes, not a project's notes.
   const note = filterPlan(plan(), "note: atlas", defaultScopes());
@@ -405,6 +416,9 @@ test("the empty state can name the field a typed term searched", () => {
   assert.equal(fieldLabel(["person.tags"]), "person tags");
   assert.equal(fieldLabel(["person.location"]), "person locations");
   assert.equal(fieldLabel(["person.tags", "assignment.tags"]), "person tags or assignment tags");
+  assert.equal(fieldLabel(["person.tags", "project.tags", "assignment.tags"]),
+    "person tags, project tags or assignment tags");
+  assert.equal(fieldLabel(["project.tags"]), "project tags");
   assert.equal(fieldLabel(["person.name", "project.name"]), "person names or project names");
 });
 
@@ -420,6 +434,10 @@ test("the dropdown teaches the field prefixes as a plain query is typed", () => 
   });
   // Typing a whole alias offers just that prefix.
   assert.deepEqual(filterSuggestions(plan(), "tag", defaultScopes()).map((item) => item.value), ["tag:"]);
+  // `project` opens the three project fields, tag included.
+  const project = filterSuggestions(plan(), "project", defaultScopes())
+    .filter((item) => item.kind === "prefix").map((item) => item.value);
+  assert.deepEqual(project, ["project:", "project note:", "project tag:"]);
 });
 
 test("a typed term's dropdown offers the names and tags of its field", () => {
@@ -430,6 +448,13 @@ test("a typed term's dropdown offers the names and tags of its field", () => {
     assert.equal(item.kind, "value");
     assert.equal(item.insert, "person tag: " + item.value);
   });
+  // Project tags are their own vocabulary, drawn from Projects only.
+  const projectTag = filterSuggestions(plan(), "project tag: le", defaultScopes());
+  assert.equal(projectTag.length, 1);
+  assert.equal(projectTag[0].source, "Project tag");
+  assert.equal(projectTag[0].value, "lead");
+  assert.equal(projectTag[0].matchLabel, "1 project");
+  assert.equal(projectTag[0].insert, "project tag: lead");
   // A prefix with no value yet teaches the whole field, so choosing a value
   // completes the term.
   const empty = filterSuggestions(plan(), "project notes:", defaultScopes());

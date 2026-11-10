@@ -57,7 +57,7 @@ export function searchedAreas(scopes) {
 /*
  * The fields a typed term can name, and the words that name them. A prefix is
  * matched case-insensitively and trimmed, and both the singular and the plural
- * work. The bare `tag:`/`tags:` means both tag kinds, `note:`/`notes:` both
+ * work. The bare `tag:`/`tags:` means all three tag kinds, `note:`/`notes:` both
  * person and assignment notes, and `name:`/`names:` both names; everything
  * else points at exactly one field.
  */
@@ -68,6 +68,7 @@ export const FILTER_FIELDS = [
   "person.note",
   "project.name",
   "project.notes",
+  "project.tags",
   "assignment.tags",
   "assignment.note"
 ];
@@ -80,6 +81,7 @@ export const FIELD_LABELS = {
   "person.note": "person notes",
   "project.name": "project names",
   "project.notes": "project notes",
+  "project.tags": "project tags",
   "assignment.tags": "assignment tags",
   "assignment.note": "assignment notes"
 };
@@ -97,8 +99,8 @@ const PREFIX_FIELDS = {
   "locations": ["person.location"],
   "person tag": ["person.tags"],
   "person tags": ["person.tags"],
-  "tag": ["person.tags", "assignment.tags"],
-  "tags": ["person.tags", "assignment.tags"],
+  "tag": ["person.tags", "project.tags", "assignment.tags"],
+  "tags": ["person.tags", "project.tags", "assignment.tags"],
   "person note": ["person.note"],
   "person notes": ["person.note"],
   "note": ["person.note", "assignment.note"],
@@ -109,6 +111,8 @@ const PREFIX_FIELDS = {
   "projects": ["project.name"],
   "project note": ["project.notes"],
   "project notes": ["project.notes"],
+  "project tag": ["project.tags"],
+  "project tags": ["project.tags"],
   "assignment tag": ["assignment.tags"],
   "assignment tags": ["assignment.tags"],
   "assignment note": ["assignment.note"],
@@ -127,10 +131,11 @@ const TEACHING_PREFIXES = [
   { name: "person note", label: "person notes", fields: ["person.note"] },
   { name: "project", label: "projects by name", fields: ["project.name"] },
   { name: "project note", label: "project notes", fields: ["project.notes"] },
+  { name: "project tag", label: "project tags", fields: ["project.tags"] },
   { name: "assignment tag", label: "assignment tags", fields: ["assignment.tags"] },
   { name: "assignment note", label: "assignment notes", fields: ["assignment.note"] },
   { name: "name", label: "people and projects by name", fields: ["person.name", "project.name"] },
-  { name: "tag", label: "person and assignment tags", fields: ["person.tags", "assignment.tags"] },
+  { name: "tag", label: "person, project and assignment tags", fields: ["person.tags", "project.tags", "assignment.tags"] },
   { name: "note", label: "person and assignment notes", fields: ["person.note", "assignment.note"] }
 ];
 
@@ -184,7 +189,7 @@ export function parseFilterTerm(query) {
 export function unknownFieldHint(prefix) {
   return '"' + String(prefix == null ? "" : prefix) + '" is not a field the Filter knows. ' +
     "Try person, people, person tag, person note, person location, project, " +
-    "project note, assignment tag, assignment note, name, tag or note.";
+    "project note, project tag, assignment tag, assignment note, name, tag or note.";
 }
 
 // The whole query: a case-insensitive substring anywhere in the text. `rea`
@@ -212,6 +217,7 @@ const FIELD_MATCHES = {
   "person.note": function (item, q) { return won(item.note, q); },
   "project.name": function (item, q) { return won(item.name, q); },
   "project.notes": function (item, q) { return won(item.notes, q); },
+  "project.tags": function (item, q) { return someTag(item.tags, q); },
   "assignment.tags": function (item, q) { return someTag(item.tags, q); },
   "assignment.note": function (item, q) { return won(item.note, q); }
 };
@@ -230,7 +236,7 @@ function personMatches(person, q) {
 }
 
 function projectMatches(project, q) {
-  return won(project.name, q) || won(project.notes, q);
+  return won(project.name, q) || won(project.notes, q) || someTag(project.tags, q);
 }
 
 function assignmentMatches(assignment, q) {
@@ -346,6 +352,7 @@ const SOURCE_PROJECT = "Project";
 const SOURCE_PERSON = "Person";
 const SOURCE_ASSIGNMENT_TAG = "Assignment tag";
 const SOURCE_PERSON_TAG = "Person tag";
+const SOURCE_PROJECT_TAG = "Project tag";
 const SOURCE_PROJECT_NOTE = "Project note";
 const SOURCE_ASSIGNMENT_NOTE = "Assignment note";
 const SOURCE_PERSON_NOTE = "Person note";
@@ -388,6 +395,13 @@ function countAssignmentsWithTag(assignments, value) {
   }).length;
 }
 
+function countProjectsWithTag(projects, value) {
+  const q = lower(value);
+  return projects.filter(function (project) {
+    return (project.tags || []).some(function (tag) { return lower(tag) === q; });
+  }).length;
+}
+
 function addCandidate(out, seen, source, value, count, unit) {
   const text = String(value == null ? "" : value).trim();
   if (!text) return;
@@ -416,6 +430,10 @@ function collectField(plan, field, q, out, seen) {
       const text = String(project.notes).trim();
       const count = projects.filter(function (p) { return won(p.notes, text); }).length;
       addCandidate(out, seen, SOURCE_PROJECT_NOTE, text, count, "project");
+    });
+  } else if (field === "project.tags") {
+    collectTags(projects).forEach(function (tag) {
+      addCandidate(out, seen, SOURCE_PROJECT_TAG, tag, countProjectsWithTag(projects, tag), "project");
     });
   } else if (field === "person.name") {
     people.forEach(function (person) {
@@ -476,6 +494,7 @@ function scopedSuggestions(plan, q, scopes) {
   if (s.projects) {
     collectField(plan, "project.name", q, out, seen);
     collectField(plan, "project.notes", q, out, seen);
+    collectField(plan, "project.tags", q, out, seen);
   }
   if (s.people) {
     collectField(plan, "person.name", q, out, seen);

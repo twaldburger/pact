@@ -137,6 +137,19 @@ export function suggestPersonTags(people, currentPersonId) {
 }
 
 /*
+ * Project tags are offered from the other Projects only. Person tags and
+ * Assignment tags are separate vocabularies and are never suggested here, even
+ * when a Project's other tags are empty.
+ */
+export function suggestProjectTags(projects, currentProjectId) {
+  const current = (projects || []).find(function (p) { return p.id === currentProjectId; });
+  const own = collectTags(current ? [current] : []);
+  const others = collectTags((projects || []).filter(function (p) { return p.id !== currentProjectId; }));
+  own.forEach(function (_, key) { others.delete(key); });
+  return sortedValues(others);
+}
+
+/*
  * Locations are offered from the other People only, the single-valued cousin
  * of Person tags: deduplicated case-insensitively with the first spelling
  * winning, and alphabetical.
@@ -164,6 +177,19 @@ export function suggestAssignmentTags(assignments, projectId, currentAssignmentI
   return sortedValues(others);
 }
 
+/*
+ * Every element's tags are stored alphabetically, case-insensitive A-Z, so a
+ * run of tags reads the same wherever it is edited. The spelling typed is kept;
+ * only the order is decided here.
+ */
+export function sortTags(tags) {
+  return (tags || []).slice().sort(function (a, b) {
+    const x = String(a).toLowerCase();
+    const y = String(b).toLowerCase();
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
+}
+
 export function hasTag(tags, raw) {
   const key = tagKey(raw);
   return !!key && (tags || []).some(function (t) { return tagKey(t) === key; });
@@ -173,7 +199,7 @@ export function withTag(tags, raw) {
   const text = String(raw || "").trim();
   const current = (tags || []).slice();
   if (!text || hasTag(current, text)) return current;
-  return current.concat(text);
+  return sortTags(current.concat(text));
 }
 
 export function withoutTag(tags, raw) {

@@ -247,6 +247,54 @@ test("a Person's Location must be a string when it is given", () => {
   assert.throws(() => store.createPerson({ name: "Dana Vo", availability: 90, location: 5 }), ValidationError);
 });
 
+test("a Project's tags are optional free text, stored A-Z", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const project = store.createProject({ name: "Summit", notes: "", tags: ["Platform", "delivery"] });
+  assert.deepEqual(project.tags, ["delivery", "Platform"]);
+  assert.deepEqual(store.updateProject(project.id, { tags: ["ops", "Atlas", "billing"] }).tags,
+    ["Atlas", "billing", "ops"]);
+  // Clearing the list is an ordinary edit.
+  assert.deepEqual(store.updateProject(project.id, { tags: [] }).tags, []);
+  // It survives a reload like any other field.
+  store.updateProject(project.id, { tags: ["Zeta", "alpha"] });
+  assert.deepEqual(createStore(file).get().projects.find((p) => p.id === project.id).tags, ["alpha", "Zeta"]);
+});
+
+test("a Project's tags must be an array of strings when given", () => {
+  const store = createStore(tempFile());
+  assert.throws(() => store.createProject({ name: "Summit", notes: "", tags: "Platform" }),
+    /project\.tags must be an array of strings/);
+  assert.throws(() => store.createProject({ name: "Vale", notes: "", tags: [1] }),
+    /project\.tags must be an array of strings/);
+  const project = store.createProject({ name: "Ridge", notes: "" });
+  assert.throws(() => store.updateProject(project.id, { tags: [null] }),
+    /project\.tags must be an array of strings/);
+});
+
+test("the validator accepts project tags and refuses a bad array by name", () => {
+  const plan = seedPlan();
+  plan.projects[0].tags = ["Platform"];
+  assert.deepEqual(validatePlan(plan), []);
+  plan.projects[0].tags = "Platform";
+  assert.deepEqual(validatePlan(plan), ["projects.tags must be an array of strings"]);
+  plan.projects[0].tags = ["ok", 7];
+  assert.deepEqual(validatePlan(plan), ["projects.tags must be an array of strings"]);
+});
+
+test("a multi-tag edit is stored A-Z for every kind of element", () => {
+  const store = createStore(tempFile());
+  const person = store.createPerson({ name: "Dana Vo", availability: 90, tags: ["qa", "React", "ops"] });
+  assert.deepEqual(person.tags, ["ops", "qa", "React"]);
+  const project = store.createProject({ name: "Summit", notes: "", tags: ["b", "A"] });
+  assert.deepEqual(project.tags, ["A", "b"]);
+  const assignment = store.createAssignment({
+    projectId: "atlas", personId: "anna", start: day(0), end: day(2), share: 10,
+    tags: ["zeta", "Alpha", "beta"]
+  });
+  assert.deepEqual(assignment.tags, ["Alpha", "beta", "zeta"]);
+});
+
 test("assignments can be created, updated and archived", () => {
   const store = createStore(tempFile());
   const created = store.createAssignment({
