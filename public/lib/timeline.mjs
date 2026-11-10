@@ -14,8 +14,8 @@ export const DROP_DAYS = 5;
 
 /*
  * The row-height control: the drawn height of one Person's row, in whole
- * pixels, in steps of eight. It is a view setting only - it is never written
- * to the plan and returns to its default when the interface reloads.
+ * pixels, in steps of eight. It is a view setting stored in the config, never
+ * written to the plan; a missing stored value reads as the default.
  */
 export const ROW_HEIGHT_MIN = 32;
 export const ROW_HEIGHT_MAX = 120;
@@ -28,7 +28,7 @@ export const ROW_HEIGHT_DEFAULT = 48;
  * axis names.
  * The interface opens at month - the recent past plus the next eleven months
  * at a glance - as the plan's default view. Like the row height it is a view
- * setting only, never written to the plan.
+ * setting, never written to the plan.
  */
 export const ZOOM_LEVELS = ["day", "week", "sprint", "month"];
 export const ZOOM_DEFAULT = "month";

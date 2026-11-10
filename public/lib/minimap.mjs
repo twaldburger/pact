@@ -11,8 +11,8 @@
  * scale. The reading is passed through visiblePlan and filterPlan, the same
  * two rules the grid uses, so the strip and the grid can never disagree.
  *
- * The strip is a view setting for the session only: it is never sent to the
- * server and never written to the plan.
+ * The strip is a view setting stored in the config: it is never sent to the
+ * plan.
  */
 import { defaultScopes, filterPlan } from "./filter.mjs";
 import { visiblePlan } from "./visibility.mjs";

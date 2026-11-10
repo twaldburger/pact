@@ -46,9 +46,10 @@ still be opened but is never offered as a plan by default.
 Paths are stored absolute and resolved, and `~` is accepted and expanded. No
 relative paths. The choice is remembered in `data/config.json`, a small settings
 file beside the app that is gitignored like the rest of `data/`; it holds the
-active plan path, and may hold other settings later. Its absence means the
-default. If it exists but cannot be read, the default is used and the app says
-so.
+active plan path and the view state, and may hold other settings later. Its
+absence means the defaults. If it exists but cannot be read, the default is used
+and the app says so; a view setting that cannot be read falls back to its own
+default rather than failing the app.
 
 `PACT_DATA`, when set, wins over the config: it is the deliberate per-run
 choice, and the panel says so rather than looking broken.
@@ -79,8 +80,9 @@ two-week sprint spans what one week does at Week zoom, and it names the derived
 sprint chain in its secondary band; its button is disabled until the plan holds
 a sprint cadence.
 Beside the zoom, a row-height control changes the drawn height of every row in
-8px steps from 32 to 120, defaulting to 48; it is a view setting for the
-session only and is not written to the plan. A Today control scrolls the view
+8px steps from 32 to 120, defaulting to 48; it is a view setting, kept in the
+config and restored on load, and is not written to the plan. A Today control
+scrolls the view
 so today is visible again and moves the Marker back onto today, and the range
 label beside the wordmark names the plan's own extent. The bar is two zones:
 the wordmark and range on the left, and on the right the Filter, Zoom, Row
@@ -91,8 +93,9 @@ The Stack rail collapses to the left from a small chevron control at the right
 of its header. Collapsed, the rail and its list are gone and the timeline, with
 its Person column, takes the whole board; the same control sits at the left
 edge at the same height to bring the rail back, and the Person column keeps its
-width. The state is a view setting for the session only, like Zoom and Row
-height, and is not written to the plan. While the rail is collapsed and the
+width. The state is a view setting like Zoom and Row height, kept in the config
+and restored on load, and is not written to the plan. While the rail is
+collapsed and the
 Filter is active, the control carries the number of Projects the filter leaves;
 the layout stays collapsed. It is a normal button, toggled by click, Enter or
 Space, with no global shortcut.
@@ -105,8 +108,8 @@ that scale. It follows the active Filter and Show archived as the grid does
 and shows an empty map when the filter leaves nothing. The stretch of the
 period the grid currently shows is highlighted, and is draggable, while a
 click on the strip moves the view, so it doubles as a scroll indicator. It is
-off by default, session-only like Zoom and Row height, and independent of the
-collapsible Stack.
+off by default, kept in the config like Zoom and Row height, and independent of
+the collapsible Stack.
 
 The Stack (Projects) and the People rows can each be ordered by something other
 than the order they were added. A small control in each column's header, beside
@@ -116,8 +119,9 @@ days - the sum over a project's assignments of `share/100 * inclusive days` -
 and People by name, free capacity at the Marker, load at the Marker or
 earliest assignment. The default is the order they were added, and ties break
 by name. Ordering is
-display order only: it is session-only like Zoom and Row height, it never
-changes the plan file, and the Filter only changes which rows are shown. A load
+display order only: it is a view setting kept in the config like Zoom and Row
+height, it never changes the plan file, and the Filter only changes which rows
+are shown. A load
 or free-capacity order reads the Marker's date when it is applied and when the
 Marker is released, never while the Marker is dragged.
 
@@ -163,13 +167,23 @@ People and Projects are edited in place. A Person carries a name, an
 Availability stepped by the plan's percentage step, any number of Person tags
 and an optional note; a Project carries a name, a colour slot into the active
 ten-colour palette, any number of Project tags, and notes. The `Colour palette` group in the Options menu switches between the two
-ColorBrewer schemes, Paired and Set3, for the session only; label ink on a
+ColorBrewer schemes, Paired and Set3, kept in the config and restored on load;
+label ink on a
 block is chosen per fill so it stays legible either way. An Assignment's
 popover edits its Allocation, Assignment tags and note, and offers archiving;
 its dates are set by dragging, never typed. A Person's Person tags are suggested
 from other People, a Project's Project tags from other Projects, and an
 Assignment's tags from that Project's other Assignments, because the three
 vocabularies are separate.
+
+The view settings - the Zoom, the Row height, the weekend band and the Grid
+dividers, the Minimap, the Colour palette, whether the Stack rail is folded,
+and the two sort orders - are kept in `data/config.json` beside the plan path
+and restored on each load. The Filter and the Marker deliberately are not: one
+is a query, the other a cursor into the timeline. `Reset view`, under the
+Options glyph beside the Colour palette group, returns all of them to their
+defaults in one press and leaves the plan, the plan path, the Filter and the
+Marker alone. A malformed stored value falls back to that setting's own default.
 
 Archiving a Person or a Project keeps every Assignment and takes it out of the
 plan. The `Show archived` item in the top bar's Options menu reveals archived
@@ -234,6 +248,14 @@ The server exposes a small JSON API over the plan:
 - `POST /api/plan-file/new` with `{"path": "..."}` - create an empty plan at the
   path, under the `.pact.json` suffix, and make it active. A path that already
   holds a file answers `409`.
+- `GET /api/view` - the stored view state: the Zoom, the Row height, the
+  weekend band and the Grid dividers, the Minimap, the Colour palette, whether
+  the Stack rail is folded, and the two sort orders. Every key is present; a
+  missing or malformed stored value reads as that key's default alone.
+- `POST /api/view` with a partial view, such as `{"zoom": "week"}` - store the
+  named keys over the stored view and answer the whole view as it now stands.
+  The plan path and every other config field are left untouched, so the one
+  file serves both. `Reset view` sends the whole default view in one request.
 
 Invalid input answers `400` with `{"error": "..."}`; an unknown record answers
 `404`, and a write refused because the file changed underneath answers `409`.
@@ -263,7 +285,11 @@ steps - is covered without a browser, as is the block-label rule in
 range label. The collapsible Stack's session rules in `public/lib/stack.mjs` -
 the toggle's name and announced state, the collapsed match count and the fact
 that the collapsed state is never written to the plan - are pinned the same
-way.
+way. The view state in `public/lib/view.mjs` and its `GET`/`POST /api/view`
+routes - the defaults with every key absent, each key round-tripping, a
+malformed value falling back for that key alone, and Reset view restoring every
+default while the plan path is unchanged - are covered over the config and the
+API.
 
 ## The font
 

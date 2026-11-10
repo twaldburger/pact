@@ -97,6 +97,7 @@ import {
   markerReordersPeople,
   MARKER_RELEASE
 } from "./lib/sort.mjs";
+import { VIEW_DEFAULTS, normalizeView } from "./lib/view.mjs";
 import { saveStatusWord, NOT_SAVED } from "./lib/save-status.mjs";
 import {
   cadenceFrom,
@@ -130,9 +131,9 @@ var MONTHS = ["January", "February", "March", "April", "May", "June", "July",
 var MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
   "Sep", "Oct", "Nov", "Dec"];
 var DAY_MS = 86400000;
-// The active Colour palette: a view setting for the session only, exactly like
-// Zoom and Row height. It is never written to the plan and opens at Paired
-// every visit. A Project's colour is a slot into whichever palette is active.
+// The active Colour palette: one of the view settings kept in the config and
+// restored on load, Paired until one is chosen. It is never written to the
+// plan. A Project's colour is a slot into whichever palette is active.
 var activePalette = PALETTE_DEFAULT;
 // The plan's percentage step for the session, resolved from the loaded plan:
 // the stored value, or the default of 10 when the plan carries none. The
@@ -160,8 +161,8 @@ var sprintList = [];
 // The zoom buttons, kept so a cadence change can enable or disable the Sprint
 // button and step the view away from a zoom it can no longer show.
 var zoomButtons = [];
-// The row height and the geometry derived from it. A view setting for the
-// session only: it is never written to the plan and resets on reload.
+// The row height and the geometry derived from it. One of the view settings
+// kept in the config and restored on load; never written to the plan.
 var rowHeight = ROW_HEIGHT_DEFAULT;
 var ftePx = 0;
 var stepPx = 0;
@@ -169,22 +170,21 @@ var BASE_PX = 1;
 var lastDragAt = 0;
 var showArchived = false;
 // The Minimap: an overview strip of the Timeline's whole period, off by
-// default and a view setting for the session only, exactly like Zoom and Row
-// height. It is never written to the plan.
+// default. One of the view settings kept in the config and restored on load;
+// never written to the plan.
 var minimapEnabled = MINIMAP_DEFAULT;
 // The two grid-display choices: the weekend band and the full-height dividers.
-// Session-only, like Zoom and Row height - never sent to the server and never
-// written to the plan. Weekends start off and dividers on, so a fresh session
+// Kept in the config and restored on load, like Zoom and Row height - never
+// written to the plan. Weekends start off and dividers on, so a first run
 // opens on the quieter grid with its day boundaries ruled.
 var highlightWeekends = false;
 var gridDividers = true;
-// The Stack rail's folded state: a view setting for the session only, exactly
-// like Zoom and Row height. It is never written to the plan and resets on
-// reload.
+// The Stack rail's folded state: one of the view settings kept in the config
+// and restored on load, like Zoom and Row height; never written to the plan.
 var stackCollapsed = STACK_COLLAPSED_DEFAULT;
-// The sort: session-only, like Zoom and Row height. null is the plan's own
-// order; { key, direction } is a chosen key. The two lists sort
-// independently.
+// The sort: kept in the config and restored on load, like Zoom and Row height.
+// null is the plan's own order; { key, direction } is a chosen key. The two
+// lists sort independently.
 var sortState = { projects: null, people: null };
 // The Filter: session-only text and scope, never written to the plan. The
 // whole plan stays in `assignments` for the row-header figures; `grid*` hold
@@ -2627,7 +2627,10 @@ function syncZoomControls() {
   sprintBtn.disabled = !available;
   sprintBtn.setAttribute("aria-disabled", available ? "false" : "true");
   sprintBtn.title = available ? "" : "Define sprints in Options";
-  if (!available && root.getAttribute("data-zoom") === "sprint") applyZoom("week");
+  if (!available && root.getAttribute("data-zoom") === "sprint") {
+    applyZoom("week");
+    persistView();
+  }
 }
 
 function initZoom() {
@@ -2636,6 +2639,7 @@ function initZoom() {
     b.addEventListener("click", function () {
       if (b.disabled) return;
       applyZoom(b.getAttribute("data-zoom"));
+      persistView();
     });
   });
   var initial = root.getAttribute("data-zoom");
@@ -2655,6 +2659,7 @@ function initRowHeight() {
       rowHeight = stepRowHeight(rowHeight, -1);
       applyRowHeight();
       render();
+      persistView();
     });
   }
   if (up) {
@@ -2662,6 +2667,7 @@ function initRowHeight() {
       rowHeight = stepRowHeight(rowHeight, 1);
       applyRowHeight();
       render();
+      persistView();
     });
   }
   applyRowHeight();
@@ -2697,6 +2703,7 @@ function setStackCollapsed(collapsed) {
   // The timeline's width changes with the rail, so the block labels have new
   // room to measure. Nothing else on the grid moves.
   queueBlockLabels();
+  persistView();
 }
 
 // A real button, toggled by a click - which Enter and Space also fire - and by
@@ -3322,6 +3329,7 @@ function applySort(kind, state) {
   updateSortControl(kind);
   closeSortMenus();
   render();
+  persistView();
   var c = sortControls[kind];
   if (c) c.button.focus();
 }
@@ -3422,6 +3430,65 @@ function initSortControls() {
   });
 }
 
+/* --- view state ---------------------------------------------------------- */
+
+// The view settings in the shape public/lib/view.mjs owns, read from the
+// interface's own state, which every setter keeps in step.
+function currentView() {
+  return {
+    zoom: root.getAttribute("data-zoom"),
+    rowHeight: rowHeight,
+    weekends: highlightWeekends,
+    dividers: gridDividers,
+    minimap: minimapEnabled,
+    palette: activePalette,
+    stackCollapsed: stackCollapsed,
+    sort: { projects: sortState.projects, people: sortState.people }
+  };
+}
+
+// Put a stored view into the interface's own state, normalising it first so a
+// malformed key falls back on its own. Only the state the next draw reads is
+// set here; the caller redraws. The Marker and the Filter are deliberately not
+// part of the view.
+function adoptView(view) {
+  var v = normalizeView(view);
+  activePalette = v.palette;
+  root.setAttribute("data-palette", v.palette);
+  root.setAttribute("data-zoom", v.zoom);
+  rowHeight = v.rowHeight;
+  highlightWeekends = v.weekends;
+  gridDividers = v.dividers;
+  minimapEnabled = v.minimap;
+  stackCollapsed = v.stackCollapsed;
+  sortState = { projects: v.sort.projects, people: v.sort.people };
+  return v;
+}
+
+// Store the whole view whenever the owner changes a setting, so the config
+// always holds one consistent snapshot. A failed write is reported and the
+// change simply does not survive a reload.
+function persistView() {
+  api("POST", "/api/view", currentView()).catch(showError);
+}
+
+// Reset view: every view setting back to the default the app ships with, in
+// one action. The plan path, the Filter and the Marker are deliberately left
+// alone - which is why the owner named it Reset view rather than Reset config.
+function resetView() {
+  adoptView(VIEW_DEFAULTS);
+  applyZoom(root.getAttribute("data-zoom"));
+  applyRowHeight();
+  updateOptionsMenu();
+  updatePaletteMenu();
+  updateSortControl("projects");
+  updateSortControl("people");
+  render();
+  persistView();
+  openOptions(false);
+  if (optionsBtn) optionsBtn.focus();
+}
+
 /* --- options menu -------------------------------------------------------- */
 
 var optionsEl = null;
@@ -3480,28 +3547,30 @@ function setShowArchived(on) {
 }
 
 // Turning the weekend band or the dividers on or off is a view change, not a
-// plan change: it updates the menu and redraws. Nothing is sent to the server,
-// so the plan file is untouched and the choice is gone at the next reload.
+// plan change: it updates the menu, redraws, and stores the new view. The plan
+// file is untouched.
 function setHighlightWeekends(on) {
   highlightWeekends = on;
   updateOptionsMenu();
   render();
+  persistView();
 }
 
 function setGridDividers(on) {
   gridDividers = on;
   updateOptionsMenu();
   render();
+  persistView();
 }
 
 // The Minimap toggle is a view change, not a plan change: it shows or hides
-// the strip and redraws it from the current Filter. Nothing is sent to the
-// server, so the plan file is untouched and the choice is gone at the next
-// reload.
+// the strip, redraws it from the current Filter, and stores the new view. The
+// plan file is untouched.
 function setMinimapEnabled(on) {
   minimapEnabled = on === true;
   updateOptionsMenu();
   syncMinimap();
+  persistView();
 }
 
 function updateOptionsMenu() {
@@ -3521,19 +3590,20 @@ function updatePaletteMenu() {
 }
 
 // Switching palette is a view change, not a plan change: it sets the root's
-// data-palette (which swaps the --proj-* fills) and redraws. Nothing is sent to
-// the server, so the plan file is untouched.
+// data-palette (which swaps the --proj-* fills), redraws and stores the new
+// view. The plan file is untouched.
 function setPalette(name) {
   if (!isPalette(name) || name === activePalette) return;
   activePalette = name;
   root.setAttribute("data-palette", name);
   updatePaletteMenu();
   render();
+  persistView();
 }
 
-// The palette opens at Paired every visit and lives only for the session.
+// The palette is one of the stored view settings, adopted before the first
+// draw; this only puts it on the root for the CSS to read.
 function initPalette() {
-  activePalette = PALETTE_DEFAULT;
   root.setAttribute("data-palette", activePalette);
 }
 
@@ -3557,10 +3627,24 @@ function buildOptionsMenu() {
     optionsMenu.appendChild(btn);
   });
   optionsMenu.appendChild(buildPaletteControl());
+  optionsMenu.appendChild(buildResetViewItem());
   optionsMenu.appendChild(buildRangeControl());
   optionsMenu.appendChild(buildStepControl());
   optionsMenu.appendChild(buildSprintsItem());
   optionsMenu.appendChild(buildPlanFileItem());
+}
+
+/* The Reset view entry: an action, not a toggle. It returns every view
+ * setting to its default in one press and leaves the plan path, the Filter and
+ * the Marker alone. */
+function buildResetViewItem() {
+  var btn = el("button", "options__item options__item--action");
+  btn.type = "button";
+  btn.id = "option-reset-view";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode("Reset view"));
+  btn.addEventListener("click", function () { resetView(); });
+  return btn;
 }
 
 /* The Sprints entry: an action, not a toggle. It opens the Sprints panel and
@@ -3988,7 +4072,12 @@ function initOptions() {
 }
 
 function boot() {
-  api("GET", planUrl()).then(function (plan) {
+  // The stored view first, so the first draw opens on it; a failure to read it
+  // is not fatal - the defaults are simply used.
+  api("GET", "/api/view").catch(function () { return null; }).then(function (view) {
+    adoptView(view);
+    return api("GET", planUrl());
+  }).then(function (plan) {
     data = plan;
     indexData();
     var today = data.today ? udate(data.today) : rangeStart;

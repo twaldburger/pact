@@ -39,8 +39,9 @@ export function dividerUnit(zoom) {
 
 /*
  * The Colour palette group: the two schemes as checkable items, exactly one of
- * them checked. Session-only, like Zoom and Row height - the plan never learns
- * which is active, so it takes no part in optionsItems' saved-state list.
+ * them checked. A view setting stored in the config, like Zoom and Row height
+ * - the plan never learns which is active, so it takes no part in
+ * optionsItems' saved-state list.
  */
 export function paletteItems(active) {
   const name = isPalette(active) ? active : PALETTE_DEFAULT;

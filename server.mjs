@@ -14,7 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createStore, todayISO, ValidationError, NotFoundError, PlanFileError } from "./lib/plan.mjs";
-import { resolvePlanFile, writeConfig } from "./lib/config.mjs";
+import { resolvePlanFile, readView, writeView, writePlanFile } from "./lib/config.mjs";
 import { resolvePlanPath, withPlanSuffix } from "./public/lib/plan-file.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
 import { normalizeStep } from "./public/lib/panels.mjs";
@@ -167,13 +167,14 @@ export function createServer(store, options) {
     };
   }
 
-  // The config is the app's own settings store, beside the plan. A failed
-  // config write never fails the plan-file switch that just succeeded; it is
-  // reported and the choice simply does not survive a restart.
+  // The config is the app's own settings store, beside the plan. Its view
+  // settings and the plan path share the one file, so this write must keep the
+  // view. A failed config write never fails the plan-file switch that just
+  // succeeded; it is reported and the choice simply does not survive a restart.
   function persistConfig() {
     if (!configPath) return;
     try {
-      writeConfig(configPath, { planFile: store.planFilePath() });
+      writePlanFile(configPath, store.planFilePath());
     } catch (err) {
       console.error("PACT: could not write " + configPath + ": " + err.message);
     }
@@ -217,6 +218,17 @@ export function createServer(store, options) {
             state.notice = "";
             return sendJSON(res, 200, planFileState());
           });
+        }
+        // The view settings: the app's own display state, kept in the config
+        // beside the plan file. Reading falls back per key, so a malformed
+        // value never breaks a view. Writing stores the sent keys over the
+        // stored view - one write per change - and never touches the plan path;
+        // the reply is the view as it now stands.
+        if (pathname === "/api/view") {
+          if (req.method === "GET") return sendJSON(res, 200, readView(configPath));
+          if (req.method !== "POST") return sendError(res, 405, "method not allowed");
+          if (!configPath) return sendError(res, 409, "no settings file to write");
+          return readBody(req).then((body) => sendJSON(res, 200, writeView(configPath, body)));
         }
         if (pathname === "/api/plan") {
           if (req.method === "GET") return sendJSON(res, 200, planForClient(store, includeArchived));

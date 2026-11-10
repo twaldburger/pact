@@ -5,10 +5,9 @@
  * rail takes no width. A plain ES module with no imports, so the browser
  * (public/app.js) and `node --test` load exactly the same source.
  *
- * The collapsed state is session-only, exactly like Zoom and Row height: it
- * lives in memory, is never sent to the server, and is never written to the
- * plan. The plan file and the API own their own shape; nothing here can add a
- * field to them.
+ * The collapsed state is a view setting stored in the config, like Zoom and
+ * Row height: it is never written to the plan. The plan file and the API own
+ * their own shape; nothing here can add a field to them.
  */
 
 export const STACK_COLLAPSED_DEFAULT = false;
