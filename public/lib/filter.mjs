@@ -139,6 +139,17 @@ const TEACHING_PREFIXES = [
   { name: "note", label: "person and assignment notes", fields: ["person.note", "assignment.note"] }
 ];
 
+// The term a plain suggestion inserts: the single-field prefix that aims the
+// typed term at the field the suggestion came from, so choosing the row
+// applies exactly what its count describes. Multi-field aliases are left out;
+// a plain candidate always belongs to one field.
+const FIELD_PREFIXES = {};
+TEACHING_PREFIXES.forEach(function (item) {
+  if (item.fields.length === 1 && !FIELD_PREFIXES[item.fields[0]]) {
+    FIELD_PREFIXES[item.fields[0]] = item.name;
+  }
+});
+
 function lower(value) {
   return String(value == null ? "" : value).toLowerCase();
 }
@@ -381,94 +392,81 @@ function collectTags(items) {
   return seen;
 }
 
-function countPeopleWithTag(people, value) {
-  const q = lower(value);
-  return people.filter(function (person) {
-    return (person.tags || []).some(function (tag) { return lower(tag) === q; });
-  }).length;
-}
+// Which Filter view a suggestion's unit is read from.
+const VIEW_BY_UNIT = { person: "people", project: "projects", assignment: "assignments" };
 
-function countAssignmentsWithTag(assignments, value) {
-  const q = lower(value);
-  return assignments.filter(function (assignment) {
-    return (assignment.tags || []).some(function (tag) { return lower(tag) === q; });
-  }).length;
-}
-
-function countProjectsWithTag(projects, value) {
-  const q = lower(value);
-  return projects.filter(function (project) {
-    return (project.tags || []).some(function (tag) { return lower(tag) === q; });
-  }).length;
-}
-
-function addCandidate(out, seen, source, value, count, unit) {
+function addCandidate(out, seen, plan, prefix, source, value, unit) {
   const text = String(value == null ? "" : value).trim();
   if (!text) return;
   const key = source + "\u0000" + lower(text);
   if (seen.has(key)) return;
   seen.add(key);
-  out.push({ source: source, value: text, count: count, unit: unit });
+  // The count comes from the very query selecting the row runs, read in the
+  // row's unit, so a suggestion can never promise a result it does not apply.
+  // A tag value is therefore counted by the matcher's case-insensitive
+  // substring rule, not by exact equality.
+  const insert = prefix + ": " + text;
+  const view = filterPlan(plan, insert, defaultScopes());
+  out.push({
+    source: source,
+    value: text,
+    count: view[VIEW_BY_UNIT[unit]].length,
+    unit: unit,
+    insert: insert
+  });
 }
 
 // Each field's own vocabulary, offered the way it is matched: the values that
 // would satisfy the field. `q` narrows it to values containing the typed text;
-// an empty `q` - a prefix with no value yet - offers the whole field.
-function collectField(plan, field, q, out, seen) {
+// an empty `q` - a prefix with no value yet - offers the whole field. `prefix`
+// is the term a candidate inserts; a plain candidate falls back to the field's
+// own one-field prefix.
+function collectField(plan, field, q, out, seen, prefix) {
   const people = (plan && plan.people) || [];
   const projects = (plan && plan.projects) || [];
   const assignments = (plan && plan.assignments) || [];
+  const fieldPrefix = prefix || FIELD_PREFIXES[field];
 
   if (field === "project.name") {
     projects.forEach(function (project) {
-      const count = assignments.filter(function (a) { return a.projectId === project.id; }).length;
-      addCandidate(out, seen, SOURCE_PROJECT, project.name, count, "assignment");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PROJECT, project.name, "assignment");
     });
   } else if (field === "project.notes") {
     projects.forEach(function (project) {
       if (!project.notes || !won(project.notes, q)) return;
-      const text = String(project.notes).trim();
-      const count = projects.filter(function (p) { return won(p.notes, text); }).length;
-      addCandidate(out, seen, SOURCE_PROJECT_NOTE, text, count, "project");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PROJECT_NOTE, project.notes, "project");
     });
   } else if (field === "project.tags") {
     collectTags(projects).forEach(function (tag) {
-      addCandidate(out, seen, SOURCE_PROJECT_TAG, tag, countProjectsWithTag(projects, tag), "project");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PROJECT_TAG, tag, "project");
     });
   } else if (field === "person.name") {
     people.forEach(function (person) {
-      const text = String(person.name == null ? "" : person.name).trim();
-      const count = people.filter(function (p) { return won(p.name, text); }).length;
-      addCandidate(out, seen, SOURCE_PERSON, text, count, "person");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PERSON, person.name, "person");
     });
   } else if (field === "person.tags") {
     collectTags(people).forEach(function (tag) {
-      addCandidate(out, seen, SOURCE_PERSON_TAG, tag, countPeopleWithTag(people, tag), "person");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PERSON_TAG, tag, "person");
     });
   } else if (field === "person.location") {
     people.forEach(function (person) {
       const text = String(person.location == null ? "" : person.location).trim();
       if (!text || !won(text, q)) return;
-      const count = people.filter(function (p) { return won(p.location, text); }).length;
-      addCandidate(out, seen, SOURCE_PERSON_LOCATION, text, count, "person");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PERSON_LOCATION, text, "person");
     });
   } else if (field === "person.note") {
     people.forEach(function (person) {
       if (!person.note || !won(person.note, q)) return;
-      const text = String(person.note).trim();
-      const count = people.filter(function (p) { return won(p.note, text); }).length;
-      addCandidate(out, seen, SOURCE_PERSON_NOTE, text, count, "person");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_PERSON_NOTE, person.note, "person");
     });
   } else if (field === "assignment.tags") {
     collectTags(assignments).forEach(function (tag) {
-      addCandidate(out, seen, SOURCE_ASSIGNMENT_TAG, tag, countAssignmentsWithTag(assignments, tag), "assignment");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_ASSIGNMENT_TAG, tag, "assignment");
     });
   } else if (field === "assignment.note") {
     assignments.forEach(function (assignment) {
       if (!assignment.note || !won(assignment.note, q)) return;
-      const text = String(assignment.note).trim();
-      const count = assignments.filter(function (a) { return won(a.note, text); }).length;
-      addCandidate(out, seen, SOURCE_ASSIGNMENT_NOTE, text, count, "assignment");
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_ASSIGNMENT_NOTE, assignment.note, "assignment");
     });
   }
 }
@@ -516,12 +514,11 @@ function fieldSuggestions(plan, fields, value, prefix) {
   const out = [];
   const seen = new Set();
   (fields || []).forEach(function (field) {
-    collectField(plan, field, q, out, seen);
+    collectField(plan, field, q, out, seen, prefix);
   });
   const kept = q === "" ? out : out.filter(function (item) { return won(item.value, q); });
   kept.forEach(function (item) {
     item.kind = "value";
-    item.insert = prefix + ": " + item.value;
   });
   return orderCandidates(kept, q);
 }
