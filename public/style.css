@@ -59,6 +59,9 @@
      selection cannot move or resize the Filter control. Anything longer is
      ellipsised. */
   --scope-w: 4.5625rem;
+  /* The Minimap's fixed size, the same at every zoom and window width. */
+  --minimap-w: 12rem;
+  --minimap-h: 3.5rem;
   --add-size: 1.5rem;     /* the square hit area of a header's add control */
   --radius: 0.1875rem;
   --radius-chip: 0.125rem;
@@ -814,6 +817,7 @@ h1, h2, h3, p { margin: 0; }
 /* Board --------------------------------------------------------------------- */
 
 .board {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, var(--rail-w)) minmax(0, 1fr);
   align-items: stretch;
@@ -1076,6 +1080,69 @@ h1, h2, h3, p { margin: 0; }
   position: relative;
   overflow: auto;
   background: var(--canvas);
+}
+
+/* Minimap -------------------------------------------------------------------- */
+
+/* The overview of the plan's whole period, floating at the board's bottom-right
+   while its toggle is on. It is a fixed size at every zoom and never scrolls
+   with the grid. It is its own surface: a press lands on the strip, not on the
+   grid under it, and a press on the grid is never taken by the strip. */
+.minimap {
+  position: absolute;
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  z-index: 50;
+  width: var(--minimap-w);
+  height: var(--minimap-h);
+  overflow: hidden;
+  background: var(--canvas);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.minimap[hidden] { display: none; }
+
+.minimap__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* The aggregate area: the density of used over available capacity, in the same
+   ink the grid's own marks read in. */
+.minimap__fill {
+  fill: color-mix(in srgb, var(--ink) 34%, transparent);
+}
+
+/* Over-allocation is the top of the scale and reads in the signal colour, the
+   same one the grid hatches and the row-header figure with. */
+.minimap__over {
+  fill: var(--signal);
+  opacity: 0.85;
+}
+
+/* The stretch of the period the grid currently shows. Its edges are the same
+   ink as the Marker, so the two read as one instrument. */
+.minimap__window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  border-left: 1px solid var(--ink);
+  border-right: 1px solid var(--ink);
+  cursor: grab;
+  touch-action: none;
+}
+
+.minimap.is-empty .minimap__window {
+  border-color: transparent;
 }
 
 .tl {

@@ -59,6 +59,14 @@ import {
   fteDaysLabel
 } from "./lib/stack.mjs";
 import {
+  MINIMAP_DEFAULT,
+  minimapDensity,
+  visibleDayWindow,
+  centerScrollLeft,
+  dragScrollLeft,
+  trackDayAt
+} from "./lib/minimap.mjs";
+import {
   DROP_DAYS,
   dayRange,
   dropRange,
@@ -109,6 +117,7 @@ var undoBtn = document.getElementById("undo-btn");
 var redoBtn = document.getElementById("redo-btn");
 var boardEl = document.getElementById("board");
 var stackToggle = document.getElementById("rail-toggle");
+var minimapEl = document.getElementById("minimap");
 var stackChevron = document.querySelector(".rail-toggle__path");
 var stackCount = document.getElementById("rail-toggle-count");
 
@@ -157,6 +166,10 @@ var stepPx = 0;
 var BASE_PX = 1;
 var lastDragAt = 0;
 var showArchived = false;
+// The Minimap: an overview strip of the Timeline's whole period, off by
+// default and a view setting for the session only, exactly like Zoom and Row
+// height. It is never written to the plan.
+var minimapEnabled = MINIMAP_DEFAULT;
 // The two grid-display choices: the weekend band and the full-height dividers.
 // Session-only, like Zoom and Row height - never sent to the server and never
 // written to the plan. Weekends start on and dividers off, so a fresh session
@@ -2563,14 +2576,24 @@ function updateTodayControl() {
   todayBtn.title = available ? "" : "Today is outside the plan's period";
 }
 
+// Put a day in the middle of the grid's visible day area, leaving the sticky
+// Person column clear. The one rule goToToday and a press on the Minimap
+// share, held in lib/minimap.mjs.
+function scrollToDayCenter(index) {
+  var left = centerScrollLeft(index, dayWidth(), scroller.clientWidth, headWidth());
+  scroller.scrollLeft = clamp(left, 0, maxScrollLeft());
+}
+
+function maxScrollLeft() {
+  return Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+}
+
 function goToToday() {
   if (!data || !todayInRange()) return;
   var today = data.today ? udate(data.today) : rangeStart;
   var index = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
   setMarker(index);
-  var visible = scroller.clientWidth - headWidth();
-  var left = (index + 0.5) * dayWidth() - visible / 2;
-  scroller.scrollLeft = Math.max(0, left);
+  scrollToDayCenter(index);
 }
 
 function applyZoom(zoom) {
@@ -2590,6 +2613,7 @@ function applyZoom(zoom) {
   var after = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
   scroller.scrollLeft += after - before;
   queueBlockLabels();
+  updateMinimapWindow();
 }
 
 // The Sprint button never appears and disappears: it is always in the group and
@@ -2683,6 +2707,145 @@ function initStackToggle() {
   syncStackToggle();
 }
 
+/* --- the Minimap --------------------------------------------------------- */
+
+// The overview strip is a view setting for the session only. It is drawn over
+// the grid's bottom-right corner and is its own surface: a press on it - to
+// drag the highlighted window or to move the view - never reaches the grid
+// underneath, and the grid's own presses never reach it.
+var minimapDrag = null;
+
+// The area under the density curve: one point per day at that day's density,
+// scaled so a fully allocated day reaches the top. A day past full is over the
+// top and is clipped there, then marked by the over-allocation layer.
+function minimapAreaPath(series, width, height) {
+  var n = series.dayCount;
+  if (!n) return "";
+  var d = "M 0 " + height;
+  for (var i = 0; i < n; i++) {
+    var x = ((i + 0.5) / n) * width;
+    var y = height - Math.min(series.slices[i].density, 1) * height;
+    d += " L " + r4(x) + " " + r4(y);
+  }
+  return d + " L " + width + " " + height + " Z";
+}
+
+// The over-allocation runs: one full-height band per run of consecutive days
+// whose used capacity is past their available capacity, so the crunch reads at
+// the top of the scale and in the signal colour, distinct from merely busy.
+function minimapOverPath(series, width, height) {
+  var n = series.dayCount;
+  if (!n) return "";
+  var d = "";
+  var i = 0;
+  while (i < n) {
+    if (!series.slices[i].over) { i++; continue; }
+    var j = i;
+    while (j + 1 < n && series.slices[j + 1].over) j++;
+    var x0 = r4((i / n) * width);
+    var x1 = r4(((j + 1) / n) * width);
+    d += "M " + x0 + " " + height + " L " + x0 + " 0 L " + x1 + " 0 L " + x1 + " " + height + " Z ";
+    i = j + 1;
+  }
+  return d.trim();
+}
+
+// Redraw the whole strip from the plan, the active Filter and the archive
+// state: the same reading the grid draws from, so the two agree. The window is
+// put back on top of the new area.
+function renderMinimap() {
+  if (!minimapEl || !data) return;
+  var series = minimapDensity(data, filterQuery, filterScopes, showArchived);
+  var fill = minimapEl.querySelector(".minimap__fill");
+  var over = minimapEl.querySelector(".minimap__over");
+  if (fill) fill.setAttribute("d", minimapAreaPath(series, 1000, 100));
+  if (over) over.setAttribute("d", minimapOverPath(series, 1000, 100));
+  // The highlight marks a stretch of a drawn axis. With the filter's empty
+  // state there is no axis, so there is no window to draw.
+  minimapEl.classList.toggle("is-empty", tl.classList.contains("is-empty"));
+  updateMinimapWindow();
+}
+
+// The visible window follows a sideways scroll: its left edge and width are
+// the same day arithmetic, read as a fraction of the plan's period.
+function updateMinimapWindow() {
+  if (!minimapEl || minimapEl.hidden || !data || !rangeStart || !DAYS) return;
+  var node = minimapEl.querySelector(".minimap__window");
+  if (!node) return;
+  if (tl.classList.contains("is-empty")) {
+    node.style.left = "0%";
+    node.style.width = "0%";
+    return;
+  }
+  var win = visibleDayWindow(scroller.scrollLeft, scroller.clientWidth,
+    headWidth(), dayWidth(), DAYS);
+  node.style.left = (win.start / DAYS) * 100 + "%";
+  node.style.width = (win.width / DAYS) * 100 + "%";
+}
+
+// The strip is shown exactly while its toggle is on. Showing it draws it from
+// the current reading; hiding it leaves the grid untouched.
+function syncMinimap() {
+  if (!minimapEl) return;
+  minimapEl.hidden = !minimapEnabled;
+  if (!minimapEnabled) return;
+  renderMinimap();
+}
+
+function minimapTrackDay(clientX) {
+  var rect = minimapEl.getBoundingClientRect();
+  return trackDayAt(clientX, rect.left, rect.width, DAYS);
+}
+
+function centerMinimapAt(clientX) {
+  var left = centerScrollLeft(minimapTrackDay(clientX), dayWidth(),
+    scroller.clientWidth, headWidth());
+  scroller.scrollLeft = clamp(left, 0, maxScrollLeft());
+}
+
+// A press on the highlighted window drags it: the pointer's travel across the
+// strip's width is read as days across the whole range and turned into scroll
+// by the same day width the grid draws with. A press anywhere else on the track
+// moves the view to the day under the pointer, and dragging the track scrubs.
+function onMinimapPointerDown(e) {
+  if (e.button !== 0 && e.pointerType === "mouse") return;
+  e.preventDefault();
+  e.stopPropagation();
+  var windowEl = minimapEl.querySelector(".minimap__window");
+  if (windowEl && e.target !== minimapEl && windowEl.contains(e.target)) {
+    minimapDrag = { mode: "window", startX: e.clientX, startScroll: scroller.scrollLeft };
+  } else {
+    minimapDrag = { mode: "track" };
+    centerMinimapAt(e.clientX);
+  }
+  try { minimapEl.setPointerCapture(e.pointerId); } catch (err) { /* synthetic input */ }
+}
+
+function onMinimapPointerMove(e) {
+  if (!minimapDrag) return;
+  if (minimapDrag.mode === "track") { centerMinimapAt(e.clientX); return; }
+  var rect = minimapEl.getBoundingClientRect();
+  var left = dragScrollLeft(minimapDrag.startScroll, e.clientX - minimapDrag.startX,
+    rect.width, DAYS, dayWidth());
+  scroller.scrollLeft = clamp(left, 0, maxScrollLeft());
+}
+
+function onMinimapPointerUp(e) {
+  minimapDrag = null;
+  try {
+    if (minimapEl.hasPointerCapture(e.pointerId)) minimapEl.releasePointerCapture(e.pointerId);
+  } catch (err) { /* ignored */ }
+}
+
+function initMinimap() {
+  if (!minimapEl) return;
+  minimapEl.addEventListener("pointerdown", onMinimapPointerDown);
+  minimapEl.addEventListener("pointermove", onMinimapPointerMove);
+  minimapEl.addEventListener("pointerup", onMinimapPointerUp);
+  minimapEl.addEventListener("pointercancel", onMinimapPointerUp);
+  syncMinimap();
+}
+
 /* --- render -------------------------------------------------------------- */
 
 // The empty result: it names what was typed, says what was searched and
@@ -2744,6 +2907,7 @@ function render(opts) {
     marker = null;
     scroller.scrollLeft = 0;
     syncStackToggle();
+    syncMinimap();
     return;
   }
   tl.classList.remove("is-empty");
@@ -2798,6 +2962,7 @@ function render(opts) {
   scroller.scrollLeft = scrollLeft;
   drawBlockLabels();
   syncStackToggle();
+  syncMinimap();
   // A held copy outlives the redraw, so the tint and the ghost are put back
   // over the freshly drawn rows.
   updatePastePreview();
@@ -2839,6 +3004,7 @@ function bindChrome() {
   scroller.addEventListener("scroll", function () {
     if (panel) closePanel(false);
     queueBlockLabels();
+    updateMinimapWindow();
   });
 
   // Everything a label's room is decided from: the window, a scale change
@@ -2853,6 +3019,7 @@ function bindChrome() {
     // which the row header's two lines stop fitting.
     applyRowHeight();
     queueBlockLabels();
+    updateMinimapWindow();
   });
   tl.addEventListener("transitionend", function (e) {
     if (e.propertyName === "width") queueBlockLabels();
@@ -3298,7 +3465,8 @@ function repositionPopovers() {
 var OPTION_ACTIONS = {
   archived: function () { setShowArchived(!showArchived); },
   weekends: function () { setHighlightWeekends(!highlightWeekends); },
-  dividers: function () { setGridDividers(!gridDividers); }
+  dividers: function () { setGridDividers(!gridDividers); },
+  minimap: function () { setMinimapEnabled(!minimapEnabled); }
 };
 
 function setShowArchived(on) {
@@ -3322,8 +3490,18 @@ function setGridDividers(on) {
   render();
 }
 
+// The Minimap toggle is a view change, not a plan change: it shows or hides
+// the strip and redraws it from the current Filter. Nothing is sent to the
+// server, so the plan file is untouched and the choice is gone at the next
+// reload.
+function setMinimapEnabled(on) {
+  minimapEnabled = on === true;
+  updateOptionsMenu();
+  syncMinimap();
+}
+
 function updateOptionsMenu() {
-  optionsItems(showArchived, highlightWeekends, gridDividers).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -3357,7 +3535,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  optionsItems(showArchived, highlightWeekends, gridDividers).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled).forEach(function (item) {
     var btn = el("button", "options__item");
     btn.type = "button";
     btn.id = "option-" + item.key;
@@ -3644,6 +3822,7 @@ function boot() {
     markerIndex = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
     initRowHeight();
     initStackToggle();
+    initMinimap();
     initSortControls();
     initPalette();
     render();

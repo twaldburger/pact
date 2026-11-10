@@ -69,6 +69,17 @@ Filter is active, the control carries the number of Projects the filter leaves;
 the layout stays collapsed. It is a normal button, toggled by click, Enter or
 Space, with no global shortcut.
 
+A Minimap item in the Options menu shows an overview strip of the Timeline's
+whole period at the board's bottom-right. Its height is how much of the shown
+rows' available capacity is used on each day - a density rather than an
+absolute assigned share - with over-allocation drawn distinctly at the top of
+that scale. It follows the active Filter and Show archived as the grid does
+and shows an empty map when the filter leaves nothing. The stretch of the
+period the grid currently shows is highlighted, and is draggable, while a
+click on the strip moves the view, so it doubles as a scroll indicator. It is
+off by default, session-only like Zoom and Row height, and independent of the
+collapsible Stack.
+
 The Stack (Projects) and the People rows can each be ordered by something other
 than the order they were added. A small control in each column's header, beside
 its title, offers that list's keys and an ascending/descending toggle. Projects
