@@ -281,7 +281,7 @@ h1, h2, h3, p { margin: 0; }
 
 /* Hover is one quiet tint for every transparent control in the bar; a control
    that is already pressed keeps the ink fill instead. */
-.zoom__btn:hover:not([aria-pressed="true"]),
+.zoom__btn:hover:not([aria-pressed="true"]):not(:disabled),
 .rowheight__btn:hover:not(:disabled),
 .history__btn:hover:not(:disabled),
 .ghost:hover:not([aria-pressed="true"]) {
@@ -295,6 +295,7 @@ h1, h2, h3, p { margin: 0; }
   color: var(--canvas);
 }
 
+.zoom__btn:disabled,
 .rowheight__btn:disabled,
 .history__btn:disabled { opacity: var(--op-disabled); cursor: default; }
 
