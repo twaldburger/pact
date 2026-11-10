@@ -39,6 +39,7 @@ import {
   filterPlan,
   filterIsEmpty,
   filterSuggestions,
+  searchEverywhereSuggestion,
   personAssignedShare,
   scopeSummary,
   searchedAreas,
@@ -2651,7 +2652,11 @@ function updateSuggestions() {
   if (!filterEl) return;
   var q = filterInput.value.trim();
   if (q === "") { hideSuggestions(); return; }
-  suggestionList = filterSuggestions(data, q, filterScopes).slice(0, SUGGESTION_LIMIT);
+  // An untyped query leads with the broad search it would run, so the row that
+  // names it comes first and the vocabulary it found follows.
+  var found = filterSuggestions(data, q, filterScopes);
+  var everywhere = searchEverywhereSuggestion(data, q, filterScopes);
+  suggestionList = (everywhere ? [everywhere].concat(found) : found).slice(0, SUGGESTION_LIMIT);
   if (suggestionList.length === 0) { hideSuggestions(); return; }
   suggestionIndex = 0;
   filterSuggestEl.innerHTML = "";
