@@ -1701,7 +1701,17 @@ down to the last row and no further. */
   position: fixed;
   width: 20rem;
   max-width: calc(100vw - var(--sp-6));
-  padding: var(--sp-5);
+  /* Bounded to the viewport, so a panel with a long body - the Sprints
+     panel's derived chain, above all - scrolls its own content rather than
+     running past the window's bottom edge. The script anchors a panel with
+     an 8px margin at each edge; sp-5 is 16px, so the bound leaves that
+     margin while the whole panel stays readable. */
+  max-height: calc(100dvh - var(--sp-5));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* No bottom padding: the footer's own padding supplies it, so the scrolling
+     body has no band below the footer to show through. */
+  padding: var(--sp-5) var(--sp-5) 0;
   background: var(--canvas);
   border: 1px solid var(--rule);
   border-radius: var(--radius-panel);
@@ -1904,12 +1914,21 @@ down to the last row and no further. */
   outline-offset: var(--base);
 }
 
+/* The footer holds a panel's actions, so it stays against the bottom of the
+   panel while the body scrolls under it instead of scrolling away with the
+   content. Its own bottom padding replaces the panel's, so the panel's
+   background reaches its border and the body cannot show below the actions. */
 .panel__foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--sp-3);
   margin-top: var(--sp-4);
+  padding-bottom: var(--sp-5);
+  background: var(--canvas);
 }
 
 .btn-ghost {
