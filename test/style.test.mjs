@@ -152,3 +152,36 @@ test("the Marker's date is anchored to the sticky axis at the marker's x", () =>
   assert.match(APP, /function onAxisDown\(e\) \{[^}]*setMarker\(indexFromClientX\(e\.clientX\)\)/);
   assert.match(APP, /markerDate\.addEventListener\("pointerdown", onChipDown\)/);
 });
+
+/* --- the Grid dividers and the axis separators share the boundary --------- */
+
+// The full-height Grid dividers sit on the true day boundary
+// B = (i + n) * var(--day-w), the position the blocks and the weekend band use.
+// The axis separator is an absolutely positioned 1px ink laid against the
+// cell's padding edge. A right border on the cell - opaque or transparent -
+// moves that edge one pixel left of B, because absolute positioning resolves
+// against the padding edge rather than the border box, so the ink lands on
+// B - 1 and reads a pixel off the divider. With no right border the padding
+// edge is B and right: -1px hangs the ink onto B; the cell also keeps its full
+// content width, so a centred day number keeps the cell's true centre.
+const AX = STYLE.match(/\.ax\s*\{([^}]*)\}/);
+const AX_AFTER = STYLE.match(/\.ax::after\s*\{([^}]*)\}/);
+
+test("the axis separator ink lands on the Grid divider's boundary", () => {
+  assert.ok(AX, "the .ax rule is missing");
+  assert.ok(AX_AFTER, "the .ax::after rule is missing");
+  // No right border on the cell or on .ax-day / .ax-week / .ax-month: any
+  // such border would pull the ink a pixel left of the boundary.
+  assert.equal(
+    /\.ax(?![a-z])[^{}]*\{[^}]*border-right\s*:/.test(STYLE),
+    false,
+    "an axis cell still carries a right border"
+  );
+  const right = AX_AFTER[1].match(/right:\s*(-?[\d.]+)px\s*;/);
+  const width = AX_AFTER[1].match(/width:\s*([\d.]+)px\s*;/);
+  assert.ok(right, "the .ax::after rule has no right offset");
+  assert.ok(width, "the .ax::after rule has no width");
+  // The ink's left edge is B - right - width, so it sits on B when
+  // -right - width is zero.
+  assert.equal(-Number(right[1]) - Number(width[1]), 0);
+});
