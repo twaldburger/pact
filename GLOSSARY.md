@@ -65,6 +65,16 @@ The plan's extent: an explicit start date and end date the owner sets, both incl
 It is the extent itself, not a view setting, and the app never derives or grows it.
 _Avoid_: range, timeframe, window, horizon
 
+**Plan file**:
+The one JSON file that holds the active plan, by default `data/default.pact.json`, chosen from the `Plan file...` entry under the Options glyph. A path is stored absolute and resolved, with `~` expanded; the choice is remembered in the config beside the app, and `PACT_DATA` wins when it is set. An existing file opens as asked, a missing, read-only or deleted one is refused plainly, and a new plan is created truly empty under the `.pact.json` suffix.
+The app writes only this file, and refuses a write when the file changed underneath it since it was last read.
+_Avoid_: database, data store, document, save, dataset
+
+**Config**:
+The app's own settings file, `data/config.json`, kept beside the plan and gitignored like the rest of `data/`. It holds the active plan file's path - one active plan, never a list of recent ones - and may hold other settings later.
+Its absence means the default; if it exists but cannot be read, the default is used and the app says so rather than failing silently.
+_Avoid_: preferences, settings, options, registry
+
 **Step**:
 The plan's granularity for Availability and Allocation: one whole number of per cent from 1 to 100, stored in the plan beside its period and defaulting to 10 when absent. One step is also the floor, and the ceiling stays 100, so a 10% step floors at 10% and a 1% step at 1%. The interface snaps its steppers, panels and vertical drag by it; the server never enforces it, so changing the step leaves every stored value exactly as it was.
 _Avoid_: increments, resolution, granularity

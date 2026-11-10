@@ -6,13 +6,16 @@ import path from "node:path";
 import {
   createStore,
   seedPlan,
+  emptyPlan,
+  defaultRange,
   validatePlan,
   atomicWrite,
   fromISO,
   toISO,
   todayISO,
   ValidationError,
-  NotFoundError
+  NotFoundError,
+  PlanFileError
 } from "../lib/plan.mjs";
 
 function tempFile() {
@@ -731,4 +734,125 @@ test("setting the sprints is one undo step, like any other change", () => {
   assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
   store.undo();
   assert.deepEqual(store.get().sprints, [{ index: 1, length: 7 }]);
+});
+
+/* --- choosing the plan file ----------------------------------------------- */
+
+test("an empty plan is valid, has no content, and keeps a period", () => {
+  const plan = emptyPlan();
+  assert.deepEqual(validatePlan(plan), []);
+  assert.deepEqual(plan.people, []);
+  assert.deepEqual(plan.projects, []);
+  assert.deepEqual(plan.assignments, []);
+  // The period is the same neighbourhood the seed draws; a plan is never
+  // without an explicit extent.
+  assert.deepEqual(plan.range, defaultRange(fromISO(todayISO())));
+});
+
+test("the store opens an existing plan file and switches to it", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-open-"));
+  const first = path.join(dir, "first.pact.json");
+  const second = path.join(dir, "second.pact.json");
+  const store = createStore(first);
+  store.setRange({ start: "2026-01-01", end: "2026-12-31" });
+  fs.writeFileSync(second, JSON.stringify({
+    range: { start: "2030-01-01", end: "2030-12-31" },
+    people: [], projects: [], assignments: []
+  }, null, 2) + "\n");
+
+  const opened = store.openPlan(second);
+  assert.deepEqual(opened, { path: second });
+  assert.equal(store.planFilePath(), second);
+  assert.deepEqual(store.get().range, { start: "2030-01-01", end: "2030-12-31" });
+  // Switching files clears a history that described the other plan.
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+});
+
+test("a missing plan file is refused and never created", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-missing-"));
+  const active = path.join(dir, "default.pact.json");
+  const store = createStore(active);
+  const before = store.get();
+  const missing = path.join(dir, "not-there.pact.json");
+
+  assert.throws(() => store.openPlan(missing), /no plan file at/);
+  assert.equal(fs.existsSync(missing), false);
+  // The running plan and the active file are untouched.
+  assert.deepEqual(store.get(), before);
+  assert.equal(store.planFilePath(), active);
+});
+
+test("a read-only plan file is refused plainly", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-ro-"));
+  const writable = path.join(dir, "writable.pact.json");
+  const store = createStore(writable);
+  const readOnly = path.join(dir, "readonly.pact.json");
+  fs.copyFileSync(writable, readOnly);
+  fs.chmodSync(readOnly, 0o444);
+  try {
+    assert.throws(() => store.openPlan(readOnly), /not writable/);
+  } finally {
+    fs.chmodSync(readOnly, 0o644);
+  }
+  assert.equal(store.planFilePath(), writable);
+});
+
+test("a new plan is created truly empty and never over an existing file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-new-"));
+  const store = createStore(path.join(dir, "default.pact.json"));
+  const fresh = path.join(dir, "fresh.pact.json");
+
+  const created = store.newPlan(fresh);
+  assert.deepEqual(created, { path: fresh });
+  assert.equal(store.planFilePath(), fresh);
+  assert.deepEqual(store.get().people, []);
+  assert.deepEqual(store.get().projects, []);
+  assert.deepEqual(store.get().assignments, []);
+  // It is on disk as a valid plan and reloads as the same empty one.
+  assert.deepEqual(validatePlan(JSON.parse(fs.readFileSync(fresh, "utf8"))), []);
+  assert.deepEqual(createStore(fresh).get(), store.get());
+
+  // Creating over a file that is already there is refused, not truncated.
+  fs.writeFileSync(fresh, "KEEP");
+  assert.throws(() => store.newPlan(fresh), /already exists/);
+  assert.equal(fs.readFileSync(fresh, "utf8"), "KEEP");
+});
+
+test("a plan file changed underneath refuses the next write", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = store.get();
+  // Something else writes the file with a change the store did not read.
+  const other = seedPlan();
+  other.people.push({ id: "zoe", name: "Zoe", availability: 100, tags: [], note: "" });
+  fs.writeFileSync(file, JSON.stringify(other, null, 2) + "\n");
+
+  const error = (() => {
+    try {
+      store.createPerson({ name: "Dana Vo", availability: 90 });
+      return null;
+    } catch (err) {
+      return err;
+    }
+  })();
+  assert.ok(error instanceof PlanFileError);
+  assert.match(error.message, /changed on disk/);
+  // Nothing was written, and the running plan is the one it last read.
+  assert.deepEqual(store.get(), before);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).people.some((p) => p.id === "zoe"), true);
+});
+
+test("a deleted plan file refuses the next write", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  fs.rmSync(file);
+  assert.throws(() => store.setStep({ step: 5 }), /changed on disk/);
+});
+
+test("the store trusts its own write, so the next write is no false conflict", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  store.createPerson({ name: "Dana Vo", availability: 90 });
+  store.createPerson({ name: "Erin Sol", availability: 70 });
+  assert.equal(store.get().people.length, 5);
 });

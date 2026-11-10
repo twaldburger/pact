@@ -1,5 +1,8 @@
-# The live plan: created on first run from the seed, backed up by the owner.
+# The live plan and the app's own settings: created on first run, backed up by
+# the owner.
 data/pact.json
+data/default.pact.json
+data/config.json
 
 # Leftovers from an interrupted atomic write, if the process is killed.
 data/.*.tmp-*
