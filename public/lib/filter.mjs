@@ -35,14 +35,24 @@ export function scopeCount(scopes) {
   return FILTER_SCOPES.filter(function (key) { return !!s[key]; }).length;
 }
 
-// The control's own statement of what is being looked in: "all 3", "2 of 3"
-// or "none". It never implies that a switched-off area cannot appear, because
-// propagation may still carry it.
+// The control's full statement of what is being looked in, for its accessible
+// label: "all 3", "2 of 3" or "none". It never implies that a switched-off
+// area cannot appear, because propagation may still carry it.
 export function scopeSummary(scopes) {
   const n = scopeCount(scopes);
   if (n === FILTER_SCOPES.length) return "all " + FILTER_SCOPES.length;
   if (n === 0) return "none";
   return n + " of " + FILTER_SCOPES.length;
+}
+
+// The control's short, visible statement of the areas being looked in: "in 3
+// areas", "in 1 area" or "in no areas". The fuller selection, and the note
+// that a typed term sets the scope aside, stay on the accessible label.
+export function scopeLabel(scopes) {
+  const n = scopeCount(scopes);
+  if (n === 0) return "in no areas";
+  if (n === 1) return "in 1 area";
+  return "in " + n + " areas";
 }
 
 // The areas named in the empty state, in the order they are switched on.

@@ -54,10 +54,11 @@
   --band-month-h: 1.75rem;
   --band-day-h: 1.5rem;
   --control-h: 1.75rem;   /* one height for every control in the top bar */
-  /* The Look in button's fixed width. Its summary text changes length with the
-     scope, so the button reserves one width and ellipsises anything longer,
-     and the Filter control's position and size never move. */
-  --scope-w: 8rem;
+  /* The scope button's fixed width: the longest of the three labels it can
+     show ("in no areas"), with room for the button's own padding, so the
+     selection cannot move or resize the Filter control. Anything longer is
+     ellipsised. */
+  --scope-w: 4.5625rem;
   --add-size: 1.5rem;     /* the square hit area of a header's add control */
   --radius: 0.1875rem;
   --radius-chip: 0.125rem;
