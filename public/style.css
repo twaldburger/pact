@@ -1998,6 +1998,19 @@ down to the last row and no further. */
 
 .form textarea { resize: vertical; min-height: 2.5rem; }
 
+/* The Absence mark is a control, not a field: it keeps its own size at the left
+   of the row's control column, beside its label, and reads the bar's own ink
+   rather than the browser's blue accent. */
+.form input[type="checkbox"] {
+  justify-self: start;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--ink);
+}
+
 /* A whole-10% value - a Person's Availability or an Assignment's Share - never
    typed: minus and plus buttons either side of the figure. */
 .stepper {
@@ -2284,7 +2297,7 @@ down to the last row and no further. */
   padding: 0;
   border: 0;
   background: none;
-  accent-color: var(--signal);
+  accent-color: var(--ink);
 }
 
 .holiday__remove {

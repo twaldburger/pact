@@ -304,3 +304,25 @@ test("an absence block is hatched all over, not with the over-allocation band", 
   assert.match(APP, /a\.project\.absence/);
   assert.match(APP, /is-absence/);
 });
+
+/* --- the absence and holiday check marks --------------------------------- */
+
+// The Absence checkbox and the holiday radios were on the browser's own blue
+// accent and the dark-red signal respectively. Both now read the same quiet
+// ink as the bar's controls, and the checkbox sits at the left of its row's
+// control column rather than stretching across it like a text field.
+const ABSENCE_CHECK = STYLE.match(/\.form input\[type="checkbox"\]\s*\{([^}]*)\}/);
+const HOLIDAY_RADIO = STYLE.match(
+  /\.holiday-group \.holiday-row__kind input\[type="radio"\]\s*\{([^}]*)\}/
+);
+
+test("the absence and holiday marks read the app's ink, not the signal", () => {
+  assert.ok(ABSENCE_CHECK, 'the .form input[type="checkbox"] rule is missing');
+  assert.ok(HOLIDAY_RADIO, "the holiday radio rule is missing");
+  assert.equal(declaration(ABSENCE_CHECK[1], "accent-color"), "var(--ink)");
+  assert.equal(declaration(HOLIDAY_RADIO[1], "accent-color"), "var(--ink)");
+  // A stretched grid item centres the native mark in the row; the checkbox
+  // keeps its own size and starts at the control column's left edge.
+  assert.equal(declaration(ABSENCE_CHECK[1], "width"), "auto");
+  assert.equal(declaration(ABSENCE_CHECK[1], "justify-self"), "start");
+});
