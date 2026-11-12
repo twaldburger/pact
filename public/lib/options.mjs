@@ -12,6 +12,7 @@ import {
   isPalette
 } from "./palette.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
+import { MONTHS_SHORT } from "./label.mjs";
 
 export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays) {
   return [
@@ -84,30 +85,60 @@ export function holidaysItem(holidays) {
 }
 
 /*
- * The plan period control that sits with the menu's items: one explicit start
- * date and one explicit end date, set together, and the read-back of what is
- * stored. The two dates are specific days, not months or presets.
+ * The Colour palette row: a disclosure, not a group of items. Its detail names
+ * the active scheme, and expanding it shows the two schemes paletteItems
+ * lists. A view setting stored in the config, like Zoom and Row height.
+ */
+export function paletteControl(active) {
+  const name = isPalette(active) ? active : PALETTE_DEFAULT;
+  return {
+    key: "palette",
+    label: "Colour palette",
+    detail: PALETTE_LABELS[name]
+  };
+}
+
+// One stored range date as the menu states it: the day, the short month and
+// the year, as in "1 Jan 2026". Anything that is not a full ISO date reads
+// empty rather than as a fragment.
+function shortDate(iso) {
+  if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+  return +iso.slice(8, 10) + " " + MONTHS_SHORT[+iso.slice(5, 7) - 1] + " " + iso.slice(0, 4);
+}
+
+/*
+ * The plan period row: one explicit start date and one explicit end date, set
+ * together, plus the read-back of what is stored. The detail names the stored
+ * range so the collapsed row says what expanding it will find; a plan with a
+ * missing or malformed pair says so rather than showing a fragment.
  */
 export function rangeControl(range) {
+  const start = range ? range.start : "";
+  const end = range ? range.end : "";
+  const from = shortDate(start);
+  const to = shortDate(end);
   return {
     key: "range",
     label: "Plan period",
-    start: range ? range.start : "",
-    end: range ? range.end : ""
+    detail: from && to ? from + " - " + to : "Not set",
+    start: start,
+    end: end
   };
 }
 
 /*
- * The percentage step control, beside the period control: one whole number
- * from 1 to 100, applied on its own so a half-typed value never re-steps the
- * plan. It reads back the plan's current step, and an absent one reads as the
+ * The percentage step row, beside the period row: one whole number from 1 to
+ * 100, applied on its own so a half-typed value never re-steps the plan. Its
+ * detail states the plan's current step, and an absent one reads as the
  * default of 10.
  */
 export function stepControl(step) {
+  const value = normalizeStep(step);
   return {
     key: "step",
     label: "Percentage step",
-    value: normalizeStep(step),
+    detail: value + "%",
+    value: value,
     min: STEP_MIN,
     max: STEP_MAX,
     defaultValue: DEFAULT_STEP

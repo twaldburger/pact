@@ -723,20 +723,32 @@ h1, h2, h3, p { margin: 0; }
   color: var(--ink-soft);
 }
 
-/* The plan period: two explicit dates set together, under the menu's items. */
-.options__range {
+/* A disclosure panel: the control a value row opens, in place under it. The
+   explicit `[hidden]` rule beats this flex display, which would otherwise
+   override the browser's own default. */
+.options__disclosure {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  margin-top: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4) var(--sp-2);
-  border-top: 1px solid var(--rule);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
 }
 
-.options__range-label {
-  font-size: var(--fs-data);
-  font-weight: var(--fw-ui);
-  color: var(--ink-soft);
+.options__disclosure[hidden] { display: none; }
+
+/* The disclosure row's state marker: a chevron that turns to point down while
+   the row is open. */
+.options__chevron {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--ink-soft);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 120ms ease;
+}
+
+.options__item--disclosure[aria-expanded="true"] .options__chevron {
+  transform: rotate(90deg);
 }
 
 .options__field {

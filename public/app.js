@@ -26,7 +26,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem, holidaysItem } from "./lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "./lib/options.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -3755,6 +3755,8 @@ var optionsBtn = null;
 var optionsMenu = null;
 var optionButtons = {};
 var paletteButtons = {};
+var disclosureRows = {};
+var openDisclosureKey = null;
 var rangeStartInput = null;
 var rangeEndInput = null;
 var rangeError = null;
@@ -3853,6 +3855,7 @@ function updateOptionsMenu() {
 // The Colour palette is a single choice between two schemes. Both items are
 // checkable; exactly one is checked, and the tick and aria-checked state it.
 function updatePaletteMenu() {
+  setDisclosureDetail("palette", paletteControl(activePalette).detail);
   paletteItems(activePalette).forEach(function (item) {
     var btn = paletteButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
@@ -3896,13 +3899,62 @@ function buildOptionsMenu() {
     optionButtons[item.key] = btn;
     optionsMenu.appendChild(btn);
   });
-  optionsMenu.appendChild(buildPaletteControl());
+  buildDisclosureRow(paletteControl(activePalette), buildPaletteControl());
   optionsMenu.appendChild(buildResetViewItem());
-  optionsMenu.appendChild(buildRangeControl());
-  optionsMenu.appendChild(buildStepControl());
+  buildDisclosureRow(rangeControl(data && data.range), buildRangeControl());
+  buildDisclosureRow(stepControl(data && data.step), buildStepControl());
   optionsMenu.appendChild(buildSprintsItem());
   optionsMenu.appendChild(buildHolidaysItem());
   optionsMenu.appendChild(buildPlanFileItem());
+}
+
+/* A disclosure row: a label and the value it currently holds, opening its own
+ * control in place rather than in a popup. One row is open at a time, and the
+ * value line stays visible on the open row so it keeps its meaning. */
+function buildDisclosureRow(item, panel) {
+  var btn = el("button", "options__item options__item--disclosure");
+  btn.type = "button";
+  btn.id = "option-" + item.key;
+  btn.setAttribute("role", "menuitem");
+  btn.setAttribute("aria-expanded", "false");
+  btn.appendChild(document.createTextNode(item.label));
+  var detail = el("span", "options__item-detail");
+  detail.textContent = item.detail;
+  btn.appendChild(detail);
+  var chevron = el("span", "options__chevron");
+  chevron.setAttribute("aria-hidden", "true");
+  btn.appendChild(chevron);
+  btn.addEventListener("click", function () { toggleDisclosure(item.key); });
+  panel.hidden = true;
+  disclosureRows[item.key] = { btn: btn, detail: detail, panel: panel };
+  optionsMenu.appendChild(btn);
+  optionsMenu.appendChild(panel);
+}
+
+// One disclosure at a time: opening another closes the first, so the menu
+// never grows long.
+function toggleDisclosure(key) {
+  var wasOpen = openDisclosureKey === key;
+  closeDisclosure();
+  var row = disclosureRows[key];
+  if (wasOpen || !row) return;
+  openDisclosureKey = key;
+  row.btn.setAttribute("aria-expanded", "true");
+  row.panel.hidden = false;
+}
+
+function closeDisclosure() {
+  var row = disclosureRows[openDisclosureKey];
+  if (row) {
+    row.btn.setAttribute("aria-expanded", "false");
+    row.panel.hidden = true;
+  }
+  openDisclosureKey = null;
+}
+
+function setDisclosureDetail(key, text) {
+  var row = disclosureRows[key];
+  if (row) row.detail.textContent = text;
 }
 
 /* The Reset view entry: an action, not a toggle. It returns every view
@@ -4133,15 +4185,12 @@ function openPlanFilePanel(trigger) {
   });
 }
 
-/* The Colour palette group: the two schemes, each a checkable item with the
- * menu's own tick. Choosing one recolours every chip and block at once. */
+/* The Colour palette disclosure: the two schemes, each a checkable item with
+ * the menu's own tick. Choosing one recolours every chip and block at once. */
 function buildPaletteControl() {
-  var wrap = el("div", "options__range");
+  var wrap = el("div", "options__disclosure");
   wrap.setAttribute("role", "group");
   wrap.setAttribute("aria-label", "Colour palette");
-  var heading = el("span", "options__range-label");
-  heading.textContent = "Colour palette";
-  wrap.appendChild(heading);
   paletteItems(activePalette).forEach(function (item) {
     var btn = el("button", "options__item");
     btn.type = "button";
@@ -4159,17 +4208,13 @@ function buildPaletteControl() {
   return wrap;
 }
 
-/* The plan period control: one explicit start date and one explicit end date,
- * set together. The fields follow the menu's own item language, and a refused
- * pair is named in the control rather than closing it. */
+/* The plan period disclosure: one explicit start date and one explicit end
+ * date, set together. The fields follow the menu's own item language, and a
+ * refused pair is named in the control rather than closing it. */
 function buildRangeControl() {
-  var item = rangeControl(null);
-  var wrap = el("div", "options__range");
+  var wrap = el("div", "options__disclosure");
   wrap.setAttribute("role", "group");
-  wrap.setAttribute("aria-label", item.label);
-  var heading = el("span", "options__range-label");
-  heading.textContent = item.label;
-  wrap.appendChild(heading);
+  wrap.setAttribute("aria-label", "Plan period");
 
   function field(label, id) {
     var row = el("label", "options__field");
@@ -4218,8 +4263,10 @@ function setRangeError(message) {
 }
 
 function updateRangeControl() {
-  if (!rangeStartInput || !data) return;
+  if (!data) return;
   var item = rangeControl(data.range);
+  setDisclosureDetail("range", item.detail);
+  if (!rangeStartInput) return;
   rangeStartInput.value = item.start;
   rangeEndInput.value = item.end;
   setRangeError("");
@@ -4245,18 +4292,15 @@ function applyRange() {
   });
 }
 
-/* The percentage step control, beside the period control: one whole-number
+/* The percentage step disclosure, beside the period row: one whole-number
  * field from 1 to 100 and its own Apply, so a half-typed value never re-steps
  * the plan. Applying it updates the steppers, the panels and the drag, because
  * every one of them reads the plan's step. */
 function buildStepControl() {
   var item = stepControl(null);
-  var wrap = el("div", "options__range");
+  var wrap = el("div", "options__disclosure");
   wrap.setAttribute("role", "group");
   wrap.setAttribute("aria-label", item.label);
-  var heading = el("span", "options__range-label");
-  heading.textContent = item.label;
-  wrap.appendChild(heading);
 
   var row = el("label", "options__field");
   row.setAttribute("for", "step-input");
@@ -4300,8 +4344,11 @@ function setStepError(message) {
 }
 
 function updateStepControl() {
-  if (!stepInput || !data) return;
-  stepInput.value = String(stepControl(data.step).value);
+  if (!data) return;
+  var item = stepControl(data.step);
+  setDisclosureDetail("step", item.detail);
+  if (!stepInput) return;
+  stepInput.value = String(item.value);
   setStepError("");
 }
 
@@ -4337,6 +4384,8 @@ function openOptions(open) {
     updateSprintsItem();
     updateHolidaysItem();
     loadPlanFileState();
+  } else {
+    closeDisclosure();
   }
   optionsMenu.hidden = !open;
   optionsBtn.setAttribute("aria-expanded", open ? "true" : "false");
