@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem, holidaysItem } from "../public/lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
 test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Grid dividers and Minimap", () => {
@@ -116,21 +116,26 @@ test("the period control reads back the stored period", () => {
   const item = rangeControl({ start: "2026-09-01", end: "2027-10-31" });
   assert.equal(item.key, "range");
   assert.equal(item.label, "Plan period");
+  assert.equal(item.detail, "1 Sep 2026 - 31 Oct 2027");
   assert.equal(item.start, "2026-09-01");
   assert.equal(item.end, "2027-10-31");
-  // With no plan loaded the fields are simply empty, not undefined.
-  assert.deepEqual(rangeControl(null), { key: "range", label: "Plan period", start: "", end: "" });
+  // With no plan loaded the fields are simply empty, and the row says so
+  // rather than showing a fragment of a date.
+  assert.deepEqual(rangeControl(null), { key: "range", label: "Plan period", detail: "Not set", start: "", end: "" });
+  assert.equal(rangeControl({ start: "2026-09-01", end: "" }).detail, "Not set");
+  assert.equal(rangeControl({ start: "2026-9-1", end: "2027-10-31" }).detail, "Not set");
 });
 
 test("the step control reads back the plan's step and defaults to 10", () => {
   assert.deepEqual(stepControl(5), {
-    key: "step", label: "Percentage step", value: 5, min: 1, max: 100, defaultValue: 10
+    key: "step", label: "Percentage step", detail: "5%", value: 5, min: 1, max: 100, defaultValue: 10
   });
-  assert.equal(stepControl(100).value, 100);
-  assert.equal(stepControl(1).value, 1);
+  assert.equal(stepControl(100).detail, "100%");
+  assert.equal(stepControl(1).detail, "1%");
   // An absent or malformed step reads as the default of 10, never as a value
   // that would re-step the plan by something the store would refuse.
   assert.equal(stepControl(undefined).value, 10);
+  assert.equal(stepControl(undefined).detail, "10%");
   assert.equal(stepControl(null).value, 10);
   assert.equal(stepControl(0).value, 10);
   assert.equal(stepControl(101).value, 10);
@@ -146,4 +151,26 @@ test("the Colour palette group is Paired and Set3, exactly one checked", () => {
   // A missing or unknown palette opens at Paired rather than checking nothing.
   assert.deepEqual(paletteItems(undefined).map((item) => item.checked), [true, false]);
   assert.deepEqual(paletteItems("vibrant").map((item) => item.checked), [true, false]);
+});
+
+test("the palette row states the active scheme as its detail", () => {
+  assert.deepEqual(paletteControl("paired"), { key: "palette", label: "Colour palette", detail: "Paired" });
+  assert.equal(paletteControl("set3").detail, "Set3");
+  // A missing or unknown palette reads as Paired, the scheme it opens at.
+  assert.equal(paletteControl(undefined).detail, "Paired");
+  assert.equal(paletteControl("vibrant").detail, "Paired");
+});
+
+test("the palette, period and step are each one collapsed row, not a group", () => {
+  // The menu's second shape: a label and the value it holds, never a heading
+  // over several rows.
+  [paletteControl("paired"), rangeControl({ start: "2026-01-01", end: "2026-12-31" }), stepControl(10)]
+    .forEach((item) => {
+      assert.equal(typeof item.label, "string");
+      assert.equal(typeof item.detail, "string");
+      assert.ok(item.detail.length > 0);
+    });
+  assert.equal(paletteControl("set3").label, "Colour palette");
+  assert.equal(rangeControl(null).label, "Plan period");
+  assert.equal(stepControl(10).label, "Percentage step");
 });
