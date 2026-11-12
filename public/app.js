@@ -3533,10 +3533,17 @@ function adoptView(view) {
 }
 
 // Store the whole view whenever the owner changes a setting, so the config
-// always holds one consistent snapshot. A failed write is reported and the
-// change simply does not survive a reload.
+// always holds one consistent snapshot. Writes are serialised in the order the
+// changes were made: the view is sent whole, so two writes that overlap on the
+// wire could otherwise land out of order and leave the config holding an
+// earlier state - which a press-and-press-again stepper makes likely. A failed
+// write is reported and the change simply does not survive a reload.
+var viewWrite = Promise.resolve();
 function persistView() {
-  api("POST", "/api/view", currentView()).catch(showError);
+  var view = currentView();
+  viewWrite = viewWrite.then(function () {
+    return api("POST", "/api/view", view).catch(showError);
+  });
 }
 
 // Reset view: every view setting back to the default the app ships with, in
