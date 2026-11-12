@@ -1,11 +1,11 @@
 # PACT - scope
 
-Confirmed by the owner on 2026-11-02. The first version is locked except for the interface design, which is still open and will be taken through the frontend-design skill; everything under "later" is deliberately out of it and is not to be built while v1 is unfinished.
+Confirmed by the owner on 2026-11-02. The first version is locked; the interface was designed through the `frontend-design` skill and built. Everything under "later" is deliberately out of the first version.
 
 ## First version
 
 - **People rows** - one row per Person, drawn a full FTE tall, in the order they were added. Each Person's Availability is drawn inside the row as a ceiling line with the unavailable band above it, so an absolute share fills exactly its own height on every row.
-- **Person** - name and availability, stepped by the plan's percentage step, required; any number of Person tags and an optional note. No role or skillset field: labels about a person are Person tags.
+- **Person** - name and availability, stepped by the plan's percentage step, required; an optional Location, any number of Person tags and an optional note. No role or skillset field: labels about a person are Person tags.
 - **Projects** - Projects with name, colour, tags and notes; add and edit them here. The rail collapses to the left from a control at the right of its header; collapsed, the rail and its list are gone, the timeline and its Person column take the full width, and the same control sits at the left edge at the same height to reopen it. The collapsed state is a view setting kept in the config and restored on load, not written to the plan; while collapsed and filtered, the control shows the number of Projects the filter leaves and the layout stays collapsed.
 - **Drag to create** - dragging a Project from the Projects rail onto a Person's row creates an Assignment over a date range.
 - **Horizontal drag** - dragging an Assignment's edge changes its start or end date, snapped to whole days with a readout while dragging.
@@ -29,9 +29,7 @@ Confirmed by the owner on 2026-11-02. The first version is locked except for the
 
 ## The interface
 
-Still to be designed, and deliberately out of the grilling: the interface is to be taken through the `frontend-design` skill, whose first pass is a plan - a four-to-six colour palette with roles, one or two typefaces with roles and a scale, ASCII wireframes of the whole screen, the grid at its zoom states, the assignment popover, the person form and the sprint cadence panel, and the principles that make it specific to PACT. That plan goes up as a visual board for review before any code exists; the second pass builds it.
-
-Brief given to that pass: **a calm planning instrument** - the grid is the hero, colour is spent only where it carries meaning, one strong typeface with a tight scale and aligned figures, quiet chrome with no cards and no shadows, and none of the templated looks (dashboard card kits, gradient washes, tracked-out capital labels).
+Designed through the `frontend-design` skill and built. The brief it was given: **a calm planning instrument** - the grid is the hero, colour is spent only where it carries meaning, one strong typeface with a tight scale and aligned figures, quiet chrome with no cards and no shadows, and none of the templated looks (dashboard card kits, gradient washes, tracked-out capital labels).
 
 ## Later, deliberately not in v1
 
