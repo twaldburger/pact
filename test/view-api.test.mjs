@@ -70,6 +70,7 @@ test("a changed view is stored and read back", async () => {
     rowHeight: 64,
     gridSpacing: { day: 30, week: 20, sprint: 10, month: 6 },
     weekends: true,
+    holidays: true,
     dividers: false,
     minimap: true,
     palette: "set3",

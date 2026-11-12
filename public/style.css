@@ -1192,6 +1192,41 @@ h1, h2, h3, p { margin: 0; }
   border-left: 1px solid var(--rule);
 }
 
+/* Holidays belong to a Person's row, not to the calendar: each is drawn inside
+   its own row at the Location's dates, so the shading follows the rows that
+   location applies to. A full day takes the same fill as the weekend band; a
+   half day is striped, and reads as half rather than as a whole. */
+.holiday {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--i) * var(--day-w));
+  width: calc(var(--n) * var(--day-w));
+  background: var(--off);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.holiday.is-half {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--off) 88%, var(--ink)) 0 2px,
+    transparent 2px 7px
+  );
+}
+
+/* At month zoom a holiday is a sliver of a column, so the fill gives way to a
+   hairline at the holiday's left edge, as the weekend band does. A half day
+   keeps its own mark: a dashed edge against the full day's solid one. */
+[data-zoom="month"] .holiday {
+  background: transparent;
+  border-left: 1px solid var(--rule);
+}
+
+[data-zoom="month"] .holiday.is-half {
+  border-left-style: dashed;
+}
+
 /* The Grid dividers: one full-height rule down the rows at each boundary the
    active zoom divides on. The layer is a sibling of the weekend band, drawn
    after it and before the rows at the same stacking level, so a rule paints
@@ -2133,6 +2168,73 @@ down to the last row and no further. */
 }
 
 .sprint-row input[type="date"] { width: 8.5rem; }
+
+/* The Holidays panel: one card per Location, each holding its date rows. A
+   date row is the date, the full-or-half mark and a remove control, so the
+   three read left to right as the holiday they describe. */
+.panel--holidays { width: 24rem; }
+
+.holiday-list { margin-top: var(--sp-4); }
+
+.holiday-list__empty {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.holiday-group {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.holiday-group__head {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.holiday-group__location {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.holiday-dates { margin-top: var(--sp-2); }
+
+.holiday-row {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-2);
+}
+
+.holiday-group input,
+.holiday-group select {
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.holiday__remove {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+
+.holiday__remove:hover { color: var(--signal); border-color: var(--rule-strong); }
+
+.holiday__add { margin-top: var(--sp-2); }
 
 .noscript {
   margin: var(--sp-6);

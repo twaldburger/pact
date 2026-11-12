@@ -152,13 +152,19 @@ export function suggestProjectTags(projects, currentProjectId) {
 /*
  * Locations are offered from the other People only, the single-valued cousin
  * of Person tags: deduplicated case-insensitively with the first spelling
- * winning, and alphabetical.
+ * winning, and alphabetical. `configured` adds the Locations the holiday
+ * dialog has configured, so the two sources share one suggestion list.
  */
-export function suggestPersonLocations(people, currentPersonId) {
+export function suggestPersonLocations(people, currentPersonId, configured) {
   const current = (people || []).find(function (p) { return p.id === currentPersonId; });
   const own = collectLocations(current ? [current] : []);
   const others = collectLocations((people || []).filter(function (p) { return p.id !== currentPersonId; }));
   own.forEach(function (_, key) { others.delete(key); });
+  const configuredSeen = collectLocations((configured || []).map(function (location) {
+    return { location: location };
+  }));
+  own.forEach(function (_, key) { configuredSeen.delete(key); });
+  configuredSeen.forEach(function (text, key) { if (!others.has(key)) others.set(key, text); });
   return sortedValues(others);
 }
 

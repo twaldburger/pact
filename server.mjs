@@ -74,6 +74,10 @@ function planForClient(store, includeArchived) {
     // cadence reaches the client exactly as it always has.
     cadence: plan.cadence,
     sprints: plan.sprints,
+    // The Locations and dates configured as holidays, passed through as stored.
+    // Absent until holidays are configured, so a plan without them reaches the
+    // client exactly as it always has.
+    holidays: plan.holidays,
     people: visible.people,
     projects: visible.projects,
     assignments: visible.assignments,
@@ -243,6 +247,9 @@ export function createServer(store, options) {
               if (body && (Object.prototype.hasOwnProperty.call(body, "cadence") ||
                   Object.prototype.hasOwnProperty.call(body, "sprints"))) {
                 return sendJSON(res, 200, store.setSprints(body));
+              }
+              if (body && Object.prototype.hasOwnProperty.call(body, "holidays")) {
+                return sendJSON(res, 200, store.setHolidays(body));
               }
               return sendJSON(res, 200, store.setRange(body));
             });

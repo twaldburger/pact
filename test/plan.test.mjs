@@ -736,6 +736,88 @@ test("setting the sprints is one undo step, like any other change", () => {
   assert.deepEqual(store.get().sprints, [{ index: 1, length: 7 }]);
 });
 
+/* --- holidays ------------------------------------------------------------ */
+
+test("the seed leaves holidays out, so an existing plan is unchanged", () => {
+  const seed = seedPlan();
+  assert.equal(seed.holidays, undefined);
+});
+
+test("a plan with holidays per Location validates", () => {
+  const plan = seedPlan();
+  plan.holidays = [
+    { location: "Switzerland", dates: [{ date: "2026-12-25", kind: "full" }, { date: "2026-12-24", kind: "half" }] },
+    { location: "Portugal", dates: [{ date: "2026-08-15", kind: "half" }] }
+  ];
+  assert.deepEqual(validatePlan(plan), []);
+});
+
+test("a malformed holiday entry is refused by name", () => {
+  const plan = seedPlan();
+  plan.holidays = [{
+    location: "  ",
+    dates: [{ date: "not-a-date", kind: "quarter" }, { date: "2026-12-25" }]
+  }];
+  const errors = validatePlan(plan);
+  assert.ok(errors.some((e) => e.includes("holidays[0].location")), "location");
+  assert.ok(errors.some((e) => e.includes("holidays[0].dates[0].date")), "date");
+  assert.ok(errors.some((e) => e.includes("holidays[0].dates[0].kind")), "kind");
+  assert.ok(errors.some((e) => e.includes("holidays[0].dates[1].kind")), "second kind");
+
+  plan.holidays = [{ location: "Switzerland", dates: "2026-12-25" }];
+  assert.deepEqual(validatePlan(plan), ["holidays[0].dates must be an array"]);
+
+  plan.holidays = "Switzerland";
+  assert.deepEqual(validatePlan(plan), ["holidays must be an array"]);
+
+  plan.holidays = [42];
+  assert.deepEqual(validatePlan(plan), ["holidays[0] must be an object"]);
+});
+
+test("the store sets the holidays and they round-trip through the plan file", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const holidays = [
+    { location: "Switzerland", dates: [{ date: day(0), kind: "half" }, { date: day(1), kind: "full" }] },
+    { location: "Portugal", dates: [{ date: day(3), kind: "full" }] }
+  ];
+  const set = store.setHolidays({ holidays: holidays });
+  assert.deepEqual(set.holidays, holidays);
+  assert.deepEqual(store.get().holidays, holidays);
+  // The Location, its dates and the half-day mark all travel with the plan.
+  const reloaded = createStore(file);
+  assert.deepEqual(reloaded.get().holidays, holidays);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).holidays, holidays);
+});
+
+test("clearing the holidays removes them and a refusal writes nothing", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  store.setHolidays({ holidays: [{ location: "Portugal", dates: [{ date: day(0), kind: "full" }] }] });
+  store.setHolidays({ holidays: null });
+  assert.equal(store.get().holidays, undefined);
+
+  const before = fs.readFileSync(file, "utf8");
+  assert.throws(() => store.setHolidays({
+    holidays: [{ location: "Portugal", dates: [{ date: "2026-99-99", kind: "half" }] }]
+  }), /holidays\[0\]\.dates\[0\]\.date/);
+  assert.throws(() => store.setHolidays({ holidays: [{ location: "Portugal", dates: [{ date: day(0), kind: "quarter" }] }] }),
+    /holidays\[0\]\.dates\[0\]\.kind/);
+  assert.throws(() => store.setHolidays({ holidays: [], extra: 1 }), ValidationError);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
+  assert.equal(store.get().holidays, undefined);
+});
+
+test("setting the holidays is one undo step, like any other change", () => {
+  const store = createStore(tempFile());
+  store.setHolidays({ holidays: [{ location: "Portugal", dates: [{ date: day(0), kind: "full" }] }] });
+  store.setHolidays({ holidays: [{ location: "Portugal", dates: [{ date: day(0), kind: "half" }] }] });
+  assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
+  store.undo();
+  assert.equal(store.get().holidays[0].dates[0].kind, "full");
+});
+
 /* --- choosing the plan file ----------------------------------------------- */
 
 test("an empty plan is valid, has no content, and keeps a period", () => {

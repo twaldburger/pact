@@ -108,6 +108,33 @@ test("the step can be read and set over the same plan route", async () => {
   assert.equal(store.get().step, 5);
 });
 
+test("the holidays can be set, read back and refused over the plan route", async () => {
+  const { base, store } = await server();
+  const holidays = [
+    { location: "Switzerland", dates: [{ date: day(0), kind: "half" }, { date: day(1), kind: "full" }] },
+    { location: "Portugal", dates: [{ date: day(3), kind: "full" }] }
+  ];
+  const set = await api(base, "PATCH", "/api/plan", { holidays: holidays });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.body, { holidays: holidays });
+  assert.deepEqual(store.get().holidays, holidays);
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.deepEqual(read.body.holidays, holidays);
+
+  const bad = await api(base, "PATCH", "/api/plan", {
+    holidays: [{ location: "Portugal", dates: [{ date: "2026-13-01", kind: "quarter" }] }]
+  });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /holidays\[0\]\.dates\[0\]/);
+  // The refusal left the stored holidays alone.
+  assert.deepEqual(store.get().holidays, holidays);
+
+  const cleared = await api(base, "PATCH", "/api/plan", { holidays: null });
+  assert.equal(cleared.status, 200);
+  assert.equal(store.get().holidays, undefined);
+});
+
 test("the server accepts an off-step whole value over the API", async () => {
   const { base } = await server();
   const created = await api(base, "POST", "/api/assignments", {

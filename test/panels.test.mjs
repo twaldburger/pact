@@ -125,6 +125,23 @@ test("Locations are suggested from other People only, one per Person", () => {
   assert.deepEqual(suggestPersonLocations(people, null), ["Portugal", "Switzerland"]);
 });
 
+test("the Locations the holidays configure join the Person suggestions", () => {
+  const people = [
+    { id: "anna", location: "Switzerland" },
+    { id: "cara", location: "Portugal" }
+  ];
+  // A configured Location nobody uses is offered; one already in use on
+  // another Person is not duplicated, whichever spelling comes first.
+  assert.deepEqual(suggestPersonLocations(people, "anna", ["Portugal", "Spain"]),
+    ["Portugal", "Spain"]);
+  // The current Person's own Location is excluded, as it is for People's own
+  // Locations; a configured one is still offered.
+  assert.deepEqual(suggestPersonLocations(people, "cara", ["Portugal", "Spain"]),
+    ["Spain", "Switzerland"]);
+  // No configured Locations leaves the list exactly as it was.
+  assert.deepEqual(suggestPersonLocations(people, "anna", []), ["Portugal"]);
+});
+
 test("Assignment tags are suggested from that Project's other Assignments only", () => {
   const assignments = [
     { id: "a1", projectId: "atlas", tags: ["React", "shadow"] },
