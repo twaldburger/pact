@@ -4,7 +4,8 @@ import {
   isWeekend,
   workingFraction,
   isWorkingDay,
-  workingDays
+  workingDays,
+  planWorkingDays
 } from "../public/lib/workdays.mjs";
 
 // 2026-01-01 is a Thursday, so the span 01..05 is Thu, Fri, Sat, Sun, Mon.
@@ -83,4 +84,34 @@ test("the half day leaves half a working day in the glossary's own example", () 
     [{ location: "Switzerland", dates: [{ date: "2026-01-06", kind: "half" }] }]);
   assert.equal(halfDay, 4.5);
   assert.ok(Math.abs(0.6 * halfDay - 2.7) < 1e-9);
+});
+
+// The plan-wide count a sprint uses: a date off for any configured Location is
+// off for the whole plan.
+const SWISS_AND_PORTUGAL = [
+  SWISS,
+  { location: "Portugal", dates: [{ date: "2026-01-05", kind: "full" }] }
+];
+
+test("the plan-wide count is the weekends alone when no holidays are configured", () => {
+  assert.equal(planWorkingDays("2026-01-01", "2026-01-05", []), 3);
+  assert.equal(planWorkingDays("2026-01-01", "2026-01-05", undefined), 3);
+});
+
+test("the plan-wide count takes every Location's holidays, not one Location's", () => {
+  // Switzerland marks Thu full and Fri half; Portugal marks Mon full, so the
+  // three weekdays contribute 0 + 0.5 + 0 = 0.5 working days.
+  assert.equal(planWorkingDays("2026-01-01", "2026-01-05", SWISS_AND_PORTUGAL), 0.5);
+  // Either Location alone leaves a different count, so the union is doing work.
+  assert.equal(workingDays("2026-01-01", "2026-01-05", "Switzerland", SWISS_AND_PORTUGAL), 1.5);
+  assert.equal(workingDays("2026-01-01", "2026-01-05", "Portugal", SWISS_AND_PORTUGAL), 2);
+});
+
+test("the plan-wide count shares the weekend, half-day and malformed edges", () => {
+  // A weekend holiday does not subtract twice.
+  assert.equal(planWorkingDays("2026-01-03", "2026-01-04", SWISS_AND_PORTUGAL), 0);
+  assert.equal(planWorkingDays("nope", "2026-01-05", SWISS_AND_PORTUGAL), 0);
+  assert.equal(planWorkingDays("2026-01-05", "2026-01-01", SWISS_AND_PORTUGAL), 0);
+  // A single ordinary day counts itself.
+  assert.equal(planWorkingDays("2026-01-05", "2026-01-05", []), 1);
 });

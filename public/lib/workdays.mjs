@@ -17,9 +17,10 @@
  * Absences (#115) join the rule here when they land: an absence is a range of
  * days off for one Person, so it is another subtraction of `workingFraction`
  * in the same count, not a second rule. No plan field and no view setting is
- * read beyond the holidays and the Person's Location.
+ * read beyond the holidays, and the Person's Location where the count is for
+ * one Person rather than the whole plan.
  */
-import { holidaysFor } from "./holidays.mjs";
+import { holidaysFor, holidayLocations } from "./holidays.mjs";
 
 const DAY_MS = 86400000;
 
@@ -51,6 +52,24 @@ function holidayOff(holidays, location) {
   return off;
 }
 
+/*
+ * The holiday time off each date for the whole plan, as `date -> fraction
+ * off`, with every Location's marks merged: a date any Location takes off is
+ * off here. A sprint belongs to the plan rather than to one Person, so its
+ * count cannot read one Location's holidays and takes all of them; with none
+ * configured it is empty and weekends are the only subtraction.
+ */
+function holidayOffEverywhere(holidays) {
+  const off = new Map();
+  holidayLocations(holidays).forEach(function (location) {
+    holidaysFor(holidays, location).forEach(function (day) {
+      const taken = day.kind === "half" ? 0.5 : 1;
+      off.set(day.date, Math.min(1, (off.get(day.date) || 0) + taken));
+    });
+  });
+  return off;
+}
+
 // Saturday or Sunday, read in UTC so an ISO date names the same day wherever
 // the caller runs.
 export function isWeekend(dateISO) {
@@ -78,18 +97,17 @@ export function isWorkingDay(dateISO, location, holidays) {
 }
 
 /*
- * The working days in `[startISO, endISO]`, both ends inclusive, for one
- * Location: each date contributes its working fraction, so a span over a
- * weekend, a holiday and a half day counts only the time actually worked. A
- * malformed or reversed pair has no working days rather than a negative count.
+ * The shared span arithmetic: walk `[startISO, endISO]` a day at a time,
+ * skipping weekends and subtracting each date's time off from `off`. A
+ * malformed or reversed pair has no working days rather than a negative
+ * count.
  */
-export function workingDays(startISO, endISO, location, holidays) {
+function countWorkingDays(startISO, endISO, off) {
   if (!isISODate(startISO) || !isISODate(endISO)) return 0;
   const start = udate(startISO);
   const end = udate(endISO);
   const span = Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1;
   if (span <= 0) return 0;
-  const off = holidayOff(holidays, location);
   let total = 0;
   for (let i = 0; i < span; i++) {
     const d = new Date(start.getTime() + i * DAY_MS);
@@ -99,4 +117,26 @@ export function workingDays(startISO, endISO, location, holidays) {
     total += taken === undefined ? 1 : Math.max(0, 1 - taken);
   }
   return total;
+}
+
+/*
+ * The working days in `[startISO, endISO]`, both ends inclusive, for one
+ * Person's Location: each date contributes its working fraction, so a span
+ * over a weekend, a holiday and a half day counts only the time actually
+ * worked. A malformed or reversed pair has no working days rather than a
+ * negative count.
+ */
+export function workingDays(startISO, endISO, location, holidays) {
+  return countWorkingDays(startISO, endISO, holidayOff(holidays, location));
+}
+
+/*
+ * The same count for the whole plan rather than one Person: a date counts
+ * unless it is a weekend or any configured Location marks it off. A sprint
+ * spans every Person, so its figure is the count the plan as a whole works -
+ * with no holidays configured it is the weekends alone, exactly the same rule
+ * as `workingDays`.
+ */
+export function planWorkingDays(startISO, endISO, holidays) {
+  return countWorkingDays(startISO, endISO, holidayOffEverywhere(holidays));
 }

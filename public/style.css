@@ -2103,11 +2103,12 @@ down to the last row and no further. */
   color: var(--signal);
 }
 
-/* The Sprints panel's derived list: one row per sprint, in three columns -
-   the name field, the derived start as plain text, and the editable end date.
-   The panel takes a little more width than the others so the name stays roomy
-   and nothing wraps; the start column is nowrap, so a date is always one line. */
-.panel--sprints { width: 22rem; }
+/* The Sprints panel's derived list: one row per sprint, in four columns -
+   the name field, the derived start as plain text, the editable end date, and
+   the row's days figure. The panel takes a little more width than the others
+   so the name stays roomy and nothing wraps; the start and days columns are
+   nowrap, so a date and its figures are always one line. */
+.panel--sprints { width: 30rem; }
 
 /* The Plan file panel: a resolved path read back as code, the field that sets
    it, and the resolved-path report. Wider than the default panel because a
@@ -2157,7 +2158,7 @@ down to the last row and no further. */
 
 .sprint-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: var(--sp-2);
   align-items: center;
   margin-top: var(--sp-2);
@@ -2175,6 +2176,12 @@ down to the last row and no further. */
 }
 
 .sprint-row__from {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.sprint-row__days {
   font-size: var(--fs-data);
   color: var(--ink-soft);
   white-space: nowrap;
