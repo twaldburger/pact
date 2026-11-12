@@ -1,13 +1,14 @@
 /*
  * PACT ordering: the rules that put the Stack (Projects) and the People rows
- * in an order other than the one they were added in. A plain ES module with
- * no imports, so the browser (public/app.js) and `node --test` load exactly
- * the same source.
+ * in an order other than the one they were added in. A plain ES module
+ * importing only the working-day rule, so the browser (public/app.js) and
+ * `node --test` load exactly the same source.
  *
  * Ordering is display order only. It is a view setting stored in the config,
  * like Zoom and Row height; it never reaches the plan file. With no key chosen
  * the caller's own order is returned untouched, and ties always break by name.
  */
+import { isWorkingDay, workingDays } from "./workdays.mjs";
 
 export const ASCENDING = "asc";
 export const DESCENDING = "desc";
@@ -95,7 +96,8 @@ export function inclusiveDays(startISO, endISO) {
 /*
  * Each Project's measures, across all of its Assignments in the whole plan:
  * the earliest start, the latest end and the total assigned FTE-days - the sum
- * over its Assignments of `share/100 * inclusive days`. Projects without any
+ * over its Assignments of `share/100 * working days`, the days that are not a
+ * weekend or a holiday for the Assignment's Person. Projects without any
  * Assignment keep null dates and zero FTE-days.
  */
 export function projectMeasures(plan) {
@@ -103,6 +105,11 @@ export function projectMeasures(plan) {
   ((plan && plan.projects) || []).forEach(function (project) {
     out[project.id] = { firstStart: null, lastEnd: null, fteDays: 0 };
   });
+  const people = {};
+  ((plan && plan.people) || []).forEach(function (person) {
+    people[person.id] = person;
+  });
+  const holidays = plan && plan.holidays;
   ((plan && plan.assignments) || []).forEach(function (assignment) {
     const m = out[assignment.projectId];
     if (!m) return;
@@ -112,8 +119,10 @@ export function projectMeasures(plan) {
     if (assignment.end && (m.lastEnd === null || assignment.end > m.lastEnd)) {
       m.lastEnd = assignment.end;
     }
+    const person = people[assignment.personId];
+    const location = person ? person.location : "";
     m.fteDays += (Number(assignment.share) || 0) / 100 *
-      inclusiveDays(assignment.start, assignment.end);
+      workingDays(assignment.start, assignment.end, location, holidays);
   });
   return out;
 }
@@ -139,9 +148,13 @@ export function personMeasures(plan) {
  * A Person's load on one day: the total allocated share active at that date,
  * as a fraction of a full working week. The whole plan is read, not the
  * filtered view, so the order and the row-header figure describe the same
- * Person. ISO dates compare exactly as strings.
+ * Person. A day that is not a working day for the Person - a weekend or a
+ * holiday - carries no load at all, so it never counts towards the figure. ISO
+ * dates compare exactly as strings.
  */
 export function personLoadAt(plan, personId, dateISO) {
+  const person = ((plan && plan.people) || []).find(function (p) { return p.id === personId; });
+  if (!isWorkingDay(dateISO, person ? person.location : "", plan && plan.holidays)) return 0;
   let total = 0;
   ((plan && plan.assignments) || []).forEach(function (assignment) {
     if (assignment.personId !== personId) return;
