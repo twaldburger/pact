@@ -24,6 +24,15 @@ export function isHolidayKind(value) {
   return value === "full" || value === "half";
 }
 
+/*
+ * The radio-group name for one holiday date row. Each row's pair carries its
+ * own name, so two rows on the same Location card cannot interfere with each
+ * other's choice; the Location and date indices keep every row distinct.
+ */
+export function holidayKindGroupName(groupIndex, dateIndex) {
+  return "holiday-kind-" + groupIndex + "-" + dateIndex;
+}
+
 // A Location is matched case-insensitively and trimmed, the same way the
 // Person Location suggestions deduplicate, so "Switzerland" and "switzerland"
 // name the same set of holidays.

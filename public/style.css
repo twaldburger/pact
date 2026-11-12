@@ -2221,6 +2221,35 @@ down to the last row and no further. */
   font-size: var(--fs-data);
 }
 
+/* The full-or-half mark is a radio pair, so a choice costs one click. The
+   pair shares the date row's mark column and wraps to a second line rather
+   than squeezing the date field when the panel is at its narrowest. */
+.holiday-row__kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-data);
+}
+
+.holiday-row__kind-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+/* The card's broad input rule pads and frames every field; a radio keeps its
+   own native mark instead. */
+.holiday-group .holiday-row__kind input[type="radio"] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--signal);
+}
+
 .holiday__remove {
   padding: var(--sp-1) var(--sp-2);
   border: 1px solid var(--rule);
