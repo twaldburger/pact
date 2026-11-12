@@ -75,19 +75,24 @@ no runtime dependency.
 - `public/fonts/` - the bundled Archivo variable font and its OFL licence.
 
 The zoom states (day, week, sprint, month) change only what the calendar draws
-and never the stored dates. Sprint draws a day at half the week's width, so a
-two-week sprint spans what one week does at Week zoom, and it names the derived
-sprint chain in its secondary band; its button is disabled until the plan holds
-a sprint cadence.
-Beside the zoom, a row-height control changes the drawn height of every row in
-8px steps from 32 to 120, defaulting to 48; it is a view setting, kept in the
-config and restored on load, and is not written to the plan. A Today control
-scrolls the view
-so today is visible again and moves the Marker back onto today, and the range
+and never the stored dates. Sprint opens on half the week's width, so by
+default a two-week sprint spans what one week does at Week zoom, and it names
+the derived sprint chain in its secondary band; its button is disabled until
+the plan holds a sprint cadence. Two pairs of steppers sit beside the zoom: a
+row-height control changes the drawn height of every row in 8px steps from 32
+to 120, defaulting to 48, drawing vertical arrows, and a grid-spacing control
+changes the drawn width of one day in 2px steps from 2 to 48, drawing
+horizontal arrows. Both are view settings, kept in the config and restored on
+load, and neither is written to the plan. Each of the four zooms remembers its
+own spacing, so re-entering a zoom returns to the width last set for it rather
+than resetting, and Reset view restores Day, Week, Sprint and Month to 44, 16,
+8 and 5px. A Today control sits between the Filter and the zoom group, scrolling
+the view
+so today is visible again and moving the Marker back onto today, and the range
 label beside the wordmark names the plan's own extent. The bar is two zones:
-the wordmark and range on the left, and on the right the Filter, Zoom, Row
-height and Today controls in that order, then the Options menu that holds the
-less frequent controls.
+the wordmark and range on the left, and on the right the Filter, Today, Zoom,
+Row height, Grid spacing and Undo/Redo controls in that order, then the Options
+menu that holds the less frequent controls.
 
 The Stack rail collapses to the left from a small chevron control at the right
 of its header. Collapsed, the rail and its list are gone and the timeline, with
@@ -176,7 +181,8 @@ from other People, a Project's Project tags from other Projects, and an
 Assignment's tags from that Project's other Assignments, because the three
 vocabularies are separate.
 
-The view settings - the Zoom, the Row height, the weekend band and the Grid
+The view settings - the Zoom and its Grid spacing, the Row height, the weekend
+band and the Grid
 dividers, the Minimap, the Colour palette, whether the Stack rail is folded,
 and the two sort orders - are kept in `data/config.json` beside the plan path
 and restored on each load. The Filter and the Marker deliberately are not: one
@@ -248,10 +254,11 @@ The server exposes a small JSON API over the plan:
 - `POST /api/plan-file/new` with `{"path": "..."}` - create an empty plan at the
   path, under the `.pact.json` suffix, and make it active. A path that already
   holds a file answers `409`.
-- `GET /api/view` - the stored view state: the Zoom, the Row height, the
-  weekend band and the Grid dividers, the Minimap, the Colour palette, whether
-  the Stack rail is folded, and the two sort orders. Every key is present; a
-  missing or malformed stored value reads as that key's default alone.
+- `GET /api/view` - the stored view state: the Zoom, the Row height, the Grid
+  spacing - one width per zoom - the weekend band and the Grid dividers, the
+  Minimap, the Colour palette, whether the Stack rail is folded, and the two
+  sort orders. Every key is present; a missing or malformed stored value reads
+  as that key's default alone.
 - `POST /api/view` with a partial view, such as `{"zoom": "week"}` - store the
   named keys over the stored view and answer the whole view as it now stands.
   The plan path and every other config field are left untouched, so the one
@@ -279,15 +286,17 @@ resolution, the `.pact.json` suffix, the config's read and write and its
 absence, `PACT_DATA` precedence, the default file's move, opening an existing
 file, the missing and read-only refusals, the empty new plan and the write that
 refuses a file changed underneath - are pinned the same way. The Timeline geometry
-in `public/lib/timeline.mjs` - drawn ranges, drops, moves and the row-height
-steps - is covered without a browser, as is the block-label rule in
+in `public/lib/timeline.mjs` - drawn ranges, drops, moves, the row-height steps
+and the grid-spacing clamp and step - is covered without a browser, as is the
+block-label rule in
 `public/lib/label.mjs` - how much of a title a block has room to draw - and its
 range label. The collapsible Stack's session rules in `public/lib/stack.mjs` -
 the toggle's name and announced state, the collapsed match count and the fact
 that the collapsed state is never written to the plan - are pinned the same
 way. The view state in `public/lib/view.mjs` and its `GET`/`POST /api/view`
 routes - the defaults with every key absent, each key round-tripping, a
-malformed value falling back for that key alone, and Reset view restoring every
+malformed value falling back for that key alone, each zoom keeping its own grid
+spacing, and Reset view restoring every
 default while the plan path is unchanged - are covered over the config and the
 API.
 

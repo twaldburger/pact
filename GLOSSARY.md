@@ -76,7 +76,7 @@ Its absence means the default; if it exists but cannot be read, the default is u
 _Avoid_: preferences, settings, options, registry
 
 **View setting**:
-One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom, the Row height, the weekend band and the Grid dividers, the Minimap, the Colour palette, whether the Stack is collapsed, and the two sort orders. The Filter and the Marker are deliberately not view settings - one is a query, the other a cursor into the timeline - so neither persists. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker alone. A malformed stored value falls back to that setting's default on its own.
+One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band and the Grid dividers, the Minimap, the Colour palette, whether the Stack is collapsed, and the two sort orders. The Filter and the Marker are deliberately not view settings - one is a query, the other a cursor into the timeline - so neither persists. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker alone. A malformed stored value falls back to that setting's default on its own.
 _Avoid_: preference, option, display state
 
 **Step**:
@@ -88,12 +88,16 @@ The draggable vertical line on the Timeline. It starts on today, and the date it
 _Avoid_: today line, now line, cursor, playhead, reference line
 
 **Minimap**:
-An overview strip of the Timeline, off by default and turned on under the Options glyph, fixed at the board's bottom-right. Its height is how much of the shown rows' available capacity is used on each day rather than an absolute assigned share, and a day past full is over-allocation, drawn at the top of that scale in the signal colour. It follows the Filter and Show archived as the grid does and shows an empty map when the Filter leaves nothing, and it highlights the stretch of the period the grid currently shows, which can be dragged - or the strip clicked - to scroll the Timeline. It is session-only, exactly like Zoom and Row height, and is independent of the collapsible Stack.
+An overview strip of the Timeline, off by default and turned on under the Options glyph, fixed at the board's bottom-right. Its height is how much of the shown rows' available capacity is used on each day rather than an absolute assigned share, and a day past full is over-allocation, drawn at the top of that scale in the signal colour. It follows the Filter and Show archived as the grid does and shows an empty map when the Filter leaves nothing, and it highlights the stretch of the period the grid currently shows, which can be dragged - or the strip clicked - to scroll the Timeline. It is a view setting, kept in the Config and restored on load like Zoom and Row height, and is independent of the collapsible Stack.
 _Avoid_: overview, thumbnail, mini-chart, density chart
 
 **Zoom**:
-The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - and Sprint draws a day at half Week's width, so a two-week sprint spans what one week does at Week zoom, while its secondary band names the sprint chain instead of days or weeks.
+The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - each opening on its own Grid spacing; Sprint opens at half Week's width, so by default a two-week sprint spans what one week does at Week zoom, while its secondary band names the sprint chain instead of days or weeks.
 _Avoid_: granularity, resolution, scale
+
+**Grid spacing**:
+The drawn width of one day for the active Zoom, in whole pixels, set by the horizontal-arrow pair between the row-height stepper and Undo/Redo. Each of the four zooms remembers its own value, so re-entering a zoom returns to the width last set for it rather than resetting. The Zoom buttons open the defaults - Day 44, Week 16, Sprint 8, Month 5 - and the pair then moves the active zoom's width in 2px steps between 2 and 48, disabled at each end. A block too narrow for its label draws nothing, exactly as before, and its label above still names the Project.
+_Avoid_: day width, column width, density, gap
 
 **Sprint**:
 A planning increment with a name and a date range, drawn as one cell of the Sprint zoom's secondary band. Sprints form a contiguous chain with no gaps, each starting the day after the previous ends, and the last one may run past the plan period's end rather than being cut in half.

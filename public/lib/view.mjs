@@ -16,9 +16,12 @@
  */
 import {
   ZOOM_DEFAULT,
+  ZOOM_LEVELS,
   isZoom,
   ROW_HEIGHT_DEFAULT,
-  clampRowHeight
+  clampRowHeight,
+  GRID_SPACING_DEFAULTS,
+  clampGridSpacing
 } from "./timeline.mjs";
 import { PALETTE_DEFAULT, isPalette } from "./palette.mjs";
 import { STACK_COLLAPSED_DEFAULT } from "./stack.mjs";
@@ -38,6 +41,7 @@ import {
 export const VIEW_DEFAULTS = Object.freeze({
   zoom: ZOOM_DEFAULT,
   rowHeight: ROW_HEIGHT_DEFAULT,
+  gridSpacing: GRID_SPACING_DEFAULTS,
   weekends: false,
   dividers: true,
   minimap: MINIMAP_DEFAULT,
@@ -50,6 +54,7 @@ export const VIEW_DEFAULTS = Object.freeze({
 export const VIEW_KEYS = Object.freeze([
   "zoom",
   "rowHeight",
+  "gridSpacing",
   "weekends",
   "dividers",
   "minimap",
@@ -81,6 +86,21 @@ export function normalizeSort(kind, value) {
   return { key: def.key, direction: direction };
 }
 
+// One zoom's spacing as stored: a whole number of pixels inside the range, or
+// that zoom's own default when the stored value is missing or malformed. Each
+// of the four falls back alone, so one bad width never loses the other three.
+function normalizeGridSpacing(raw) {
+  const source = isPlainObject(raw) ? raw : {};
+  const spacing = {};
+  ZOOM_LEVELS.forEach((zoom) => {
+    const value = source[zoom];
+    spacing[zoom] = typeof value === "number" && Number.isFinite(value)
+      ? clampGridSpacing(value)
+      : GRID_SPACING_DEFAULTS[zoom];
+  });
+  return spacing;
+}
+
 /*
  * A stored view read into the full shape, every key present. Anything that is
  * not a plain object reads as all defaults, and each key falls back on its own:
@@ -93,6 +113,7 @@ export function normalizeView(raw) {
     rowHeight: typeof source.rowHeight === "number" && Number.isFinite(source.rowHeight)
       ? clampRowHeight(source.rowHeight)
       : VIEW_DEFAULTS.rowHeight,
+    gridSpacing: normalizeGridSpacing(source.gridSpacing),
     weekends: booleanOr(source.weekends, VIEW_DEFAULTS.weekends),
     dividers: booleanOr(source.dividers, VIEW_DEFAULTS.dividers),
     minimap: booleanOr(source.minimap, VIEW_DEFAULTS.minimap),

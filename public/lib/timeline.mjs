@@ -37,6 +37,42 @@ export function isZoom(level) {
   return ZOOM_LEVELS.indexOf(level) !== -1;
 }
 
+/*
+ * The Grid spacing control: the drawn width of one day, in whole pixels, for the
+ * active zoom. Each zoom keeps its own spacing beside the Zoom in the view
+ * state, so re-entering a zoom returns to the width last set for it rather than
+ * resetting it. Its four defaults are the widths the four Zoom buttons open on,
+ * and like the row height it is never written to the plan.
+ */
+export const GRID_SPACING_MIN = 2;
+export const GRID_SPACING_MAX = 48;
+export const GRID_SPACING_STEP = 2;
+export const GRID_SPACING_DEFAULTS = Object.freeze({
+  day: 44,
+  week: 16,
+  sprint: 8,
+  month: 5
+});
+
+// Keep any value inside the range, rounded to a whole pixel, so a control press
+// can never leave a day at a width the interface does not draw. It does not
+// snap to the two-pixel step, because Month's default of 5px is not on that
+// grid and stepping from it stays odd.
+export function clampGridSpacing(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(GRID_SPACING_MAX, Math.max(GRID_SPACING_MIN, Math.round(n)));
+}
+
+// One step of the Grid spacing pair: two pixels, clamped at both ends. A
+// malformed value has no step, so the caller keeps what it has.
+export function stepGridSpacing(value, delta) {
+  const current = clampGridSpacing(value);
+  if (current === null) return null;
+  const direction = delta < 0 ? -1 : 1;
+  return clampGridSpacing(current + direction * GRID_SPACING_STEP);
+}
+
 // Below this a row is short enough that the row header's own details tighten:
 // the load figure steps down a size, and the archived row's controls shrink to
 // fit. It is measured in the interface's own pixels, not the row's, so it has

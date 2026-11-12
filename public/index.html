@@ -31,16 +31,44 @@
         <div class="filter__suggest" id="filter-suggest" role="listbox"
           aria-label="Filter suggestions" hidden></div>
       </div>
+      <button type="button" class="ghost" id="today">Today</button>
       <div class="zoom" role="group" aria-label="Zoom - the width of one day">
         <button type="button" class="zoom__btn" data-zoom="day" aria-pressed="false">Day</button>
         <button type="button" class="zoom__btn" data-zoom="week" aria-pressed="false">Week</button>
         <button type="button" class="zoom__btn" data-zoom="month" aria-pressed="true">Month</button>
         <button type="button" class="zoom__btn" data-zoom="sprint" aria-pressed="false">Sprint</button>
       </div>
-      <button type="button" class="ghost" id="today">Today</button>
       <div class="rowheight" role="group" aria-label="Row height - the height of one person's row">
-        <button type="button" class="rowheight__btn" id="row-decrease" aria-label="Shorter rows">−</button>
-        <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows">+</button>
+        <button type="button" class="rowheight__btn" id="row-decrease" aria-label="Shorter rows" title="Shorter rows">
+          <svg class="stepper__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3v10"/>
+            <path d="M4 9l4 4 4-4"/>
+          </svg>
+        </button>
+        <button type="button" class="rowheight__btn" id="row-increase" aria-label="Taller rows" title="Taller rows">
+          <svg class="stepper__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 13V3"/>
+            <path d="M4 7l4-4 4 4"/>
+          </svg>
+        </button>
+      </div>
+      <div class="spacing" role="group" aria-label="Grid spacing - the width of one day">
+        <button type="button" class="spacing__btn" id="spacing-decrease" aria-label="Narrower days" title="Narrower days">
+          <svg class="stepper__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13 8H3"/>
+            <path d="M7 4 3 8l4 4"/>
+          </svg>
+        </button>
+        <button type="button" class="spacing__btn" id="spacing-increase" aria-label="Wider days" title="Wider days">
+          <svg class="stepper__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 8h10"/>
+            <path d="M9 4l4 4-4 4"/>
+          </svg>
+        </button>
       </div>
       <div class="history" role="group" aria-label="Undo and Redo">
         <button type="button" class="history__btn" id="undo-btn"
