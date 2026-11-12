@@ -280,3 +280,27 @@ test("a panel's footer sticks to its bottom so its actions stay reachable", () =
   assert.equal(declaration(PANEL_FOOT[1], "padding-bottom"), "var(--sp-5)");
   assert.equal(declaration(PANEL[1], "padding"), "var(--sp-5) var(--sp-5) 0");
 });
+
+/* --- the absence bar's hatch ---------------------------------------------- */
+
+// An absence is drawn hatched all over, distinctly from the over-allocation
+// band's top strip, so the two treatments cannot be confused on the grid.
+const ABSENCE_HATCH = STYLE.match(/\.blk\.is-absence::before\s*\{([^}]*)\}/);
+const OVER_HATCH = STYLE.match(/\.blk__hatch\s*\{([^}]*)\}/);
+
+test("an absence block is hatched all over, not with the over-allocation band", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  assert.ok(ABSENCE_HATCH, "the .blk.is-absence::before rule is missing");
+  assert.ok(OVER_HATCH, "the .blk__hatch rule is missing");
+  // The absence hatch covers the whole block and follows a repeating gradient.
+  assert.match(ABSENCE_HATCH[1], /inset:\s*0/);
+  assert.match(ABSENCE_HATCH[1], /repeating-linear-gradient/);
+  assert.doesNotMatch(ABSENCE_HATCH[1], /height:\s*var\(--hatch-px\)/);
+  // The over-allocation band is only the top strip, in --signal.
+  assert.match(OVER_HATCH[1], /height:\s*var\(--hatch-px\)/);
+  assert.match(OVER_HATCH[1], /var\(--signal\)/);
+  // The class comes from the Project's own absence mark, and the block's label
+  // is still read from the fill, so the hatch and the label agree.
+  assert.match(APP, /a\.project\.absence/);
+  assert.match(APP, /is-absence/);
+});

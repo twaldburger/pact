@@ -150,6 +150,22 @@ test("the row-header figure counts no non-working day", () => {
   assert.equal(personAssignedShare(whole, "anna", "2026-10-06"), 0.6);
 });
 
+test("an absence reduces capacity without adding to the assigned figure", () => {
+  const whole = plan();
+  whole.projects.push({ id: "holiday", name: "Holiday", absence: true });
+  // Anna's React work is 60% through 2026-10-10. A 50% absence beside it
+  // takes half of each day off but adds nothing to what she is allocated.
+  whole.assignments.push({
+    id: "a-hol-anna", projectId: "holiday", personId: "anna",
+    start: "2026-10-01", end: "2026-10-10", share: 50, tags: ["Holiday"], note: ""
+  });
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-05"), 0.6);
+  // A full absence makes the day non-working, so it carries no load at all.
+  whole.assignments[whole.assignments.length - 1].share = 100;
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-05"), 0);
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-06"), 0);
+});
+
 test("the whole plan is never changed by filtering", () => {
   const whole = plan();
   const before = JSON.stringify(whole);

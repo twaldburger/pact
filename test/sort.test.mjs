@@ -200,6 +200,32 @@ test("a holiday for the Person's Location carries no load on that date", () => {
   assert.ok(Math.abs(personLoadAt(p, "p1", "2026-06-16") - 0.6) < 1e-9);
 });
 
+test("an absence carries no load and takes its share out of the working day", () => {
+  const p = {
+    people: [{ id: "p1", name: "Anna", availability: 100 }],
+    projects: [
+      { id: "atlas", name: "Atlas" },
+      { id: "holiday", name: "Holiday", absence: true }
+    ],
+    assignments: [
+      { id: "a1", projectId: "atlas", personId: "p1", start: "2026-06-01", end: "2026-06-30", share: 60 },
+      { id: "a2", projectId: "holiday", personId: "p1", start: "2026-06-15", end: "2026-06-15", share: 50 }
+    ]
+  };
+  // The half absence adds nothing: the load is still the 60% of work alone.
+  assert.ok(Math.abs(personLoadAt(p, "p1", "2026-06-15") - 0.6) < 1e-9);
+  // A full absence on the Monday makes it non-working, so no load at all.
+  p.assignments[1].share = 100;
+  assert.equal(personLoadAt(p, "p1", "2026-06-15"), 0);
+  assert.ok(Math.abs(personLoadAt(p, "p1", "2026-06-16") - 0.6) < 1e-9);
+  // An absence does not add to any Project's assigned FTE-days either: work
+  // over the absent Monday counts four days rather than five, while the
+  // absence's own Project measures the day it takes off.
+  const measures = projectMeasures(p);
+  assert.ok(Math.abs(measures.atlas.fteDays - (21 * 0.6)) < 1e-9, measures.atlas.fteDays);
+  assert.ok(Math.abs(measures.holiday.fteDays - 1) < 1e-9, measures.holiday.fteDays);
+});
+
 test("with no sort chosen the caller's own order is returned untouched", () => {
   const p = plan();
   const reversed = p.projects.slice().reverse();

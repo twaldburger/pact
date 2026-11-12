@@ -285,6 +285,28 @@ test("the validator accepts project tags and refuses a bad array by name", () =>
   assert.deepEqual(validatePlan(plan), ["projects.tags must be an array of strings"]);
 });
 
+test("a Project's absence mark round-trips and is validated", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const project = store.createProject({ name: "Holiday", notes: "", absence: true });
+  assert.equal(project.absence, true);
+  // It survives a reload like any other field, and can be turned back off.
+  assert.equal(createStore(file).get().projects.find((p) => p.id === project.id).absence, true);
+  assert.equal(store.updateProject(project.id, { absence: false }).absence, false);
+  assert.equal(createStore(file).get().projects.find((p) => p.id === project.id).absence, false);
+  // A mark that is not a boolean is refused on create and on update.
+  assert.throws(() => store.createProject({ name: "Sick", notes: "", absence: "yes" }),
+    /project\.absence must be a boolean/);
+  assert.throws(() => store.updateProject(project.id, { absence: 1 }),
+    /project\.absence must be a boolean/);
+  // The stored plan's own validator names the same refusal.
+  const plan = seedPlan();
+  plan.projects[0].absence = "yes";
+  assert.deepEqual(validatePlan(plan), ["projects.absence must be a boolean"]);
+  plan.projects[0].absence = true;
+  assert.deepEqual(validatePlan(plan), []);
+});
+
 test("a multi-tag edit is stored A-Z for every kind of element", () => {
   const store = createStore(tempFile());
   const person = store.createPerson({ name: "Dana Vo", availability: 90, tags: ["qa", "React", "ops"] });
