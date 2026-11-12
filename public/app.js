@@ -113,7 +113,10 @@ import {
   NAME_NUMBER_DEFAULT
 } from "./lib/sprints.mjs";
 import {
+  HOLIDAY_KINDS,
+  HOLIDAY_KIND_DEFAULT,
   HOLIDAY_KIND_LABELS,
+  holidayKindGroupName,
   holidayLocations,
   holidayCellsFor,
   isHolidayKind
@@ -2666,17 +2669,23 @@ function openHolidaysPanel(trigger) {
         date.addEventListener("change", function () { entry.date = date.value; });
         row.appendChild(date);
 
-        var kind = document.createElement("select");
-        kind.className = "holiday-row__kind";
+        var kind = el("div", "holiday-row__kind");
+        kind.setAttribute("role", "radiogroup");
         kind.setAttribute("aria-label", "Full or half day");
-        ["full", "half"].forEach(function (name) {
-          var option = document.createElement("option");
-          option.value = name;
-          option.textContent = HOLIDAY_KIND_LABELS[name];
+        var kindName = holidayKindGroupName(gi, di);
+        var kindValue = isHolidayKind(entry.kind) ? entry.kind : HOLIDAY_KIND_DEFAULT;
+        HOLIDAY_KINDS.forEach(function (name) {
+          var option = el("label", "holiday-row__kind-option");
+          var radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = kindName;
+          radio.value = name;
+          radio.checked = name === kindValue;
+          radio.addEventListener("change", function () { entry.kind = name; });
+          option.appendChild(radio);
+          option.appendChild(document.createTextNode(HOLIDAY_KIND_LABELS[name]));
           kind.appendChild(option);
         });
-        kind.value = entry.kind;
-        kind.addEventListener("change", function () { entry.kind = kind.value; });
         row.appendChild(kind);
 
         row.appendChild(button("holiday__remove", "\u00d7", function () {

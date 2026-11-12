@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   HOLIDAY_KINDS,
+  HOLIDAY_KIND_DEFAULT,
   HOLIDAY_KIND_LABELS,
   isHolidayKind,
+  holidayKindGroupName,
   locationKey,
   holidayLocations,
   holidaysFor,
@@ -27,6 +29,24 @@ test("a holiday mark is exactly full or half", () => {
   assert.equal(isHolidayKind(""), false);
   assert.equal(isHolidayKind(undefined), false);
   assert.deepEqual(HOLIDAY_KIND_LABELS, { full: "Full day", half: "Half day" });
+});
+
+// The row's radio pair takes its group name from this helper, so this is what
+// keeps two rows on one card - and the same row drawn twice - apart.
+test("each holiday date row's radio pair has its own group name", () => {
+  assert.equal(HOLIDAY_KIND_DEFAULT, "full");
+  // Same row, same name: a re-render must not split one row's pair.
+  assert.equal(holidayKindGroupName(0, 0), holidayKindGroupName(0, 0));
+  // Two rows on one card differ by date index.
+  assert.notEqual(holidayKindGroupName(0, 0), holidayKindGroupName(0, 1));
+  // Two cards differ by Location index even at the same date index.
+  assert.notEqual(holidayKindGroupName(0, 0), holidayKindGroupName(1, 0));
+  // Every pair across a two-card board is distinct.
+  const names = [];
+  for (const gi of [0, 1]) {
+    for (const di of [0, 1, 2]) names.push(holidayKindGroupName(gi, di));
+  }
+  assert.equal(new Set(names).size, names.length);
 });
 
 test("a Location is matched case-insensitively, trimmed and single-valued", () => {
