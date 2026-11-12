@@ -13,10 +13,11 @@ import {
 } from "./palette.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 
-export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
     { key: "weekends", label: "Highlight weekends", checked: !!highlightWeekends },
+    { key: "holidays", label: "Highlight holidays", checked: !!highlightHolidays },
     { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
     { key: "minimap", label: "Minimap", checked: !!minimap }
   ];
@@ -62,6 +63,23 @@ export function sprintsItem(hasCadence) {
     key: "sprints",
     label: "Sprints...",
     detail: hasCadence ? "Cadence defined" : "Not defined yet"
+  };
+}
+
+/*
+ * The Holidays entry in the Options menu. Like the Sprints entry it is an
+ * action, not a checked state: opening it opens the Holidays panel. The detail
+ * counts the dates configured, so the menu says what opening it will find.
+ */
+export function holidaysItem(holidays) {
+  const count = (holidays || []).reduce(function (total, group) {
+    const dates = group && Array.isArray(group.dates) ? group.dates : [];
+    return total + dates.length;
+  }, 0);
+  return {
+    key: "holidays",
+    label: "Holidays...",
+    detail: count === 0 ? "None yet" : count + (count === 1 ? " date" : " dates")
   };
 }
 

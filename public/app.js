@@ -26,7 +26,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem } from "./lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem, holidaysItem } from "./lib/options.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -112,6 +112,12 @@ import {
   NAME_PREFIX_DEFAULT,
   NAME_NUMBER_DEFAULT
 } from "./lib/sprints.mjs";
+import {
+  HOLIDAY_KIND_LABELS,
+  holidayLocations,
+  holidayCellsFor,
+  isHolidayKind
+} from "./lib/holidays.mjs";
 
 var root = document.documentElement;
 var tl = document.getElementById("tl");
@@ -186,6 +192,10 @@ var minimapEnabled = MINIMAP_DEFAULT;
 // written to the plan. Weekends start off and dividers on, so a first run
 // opens on the quieter grid with its day boundaries ruled.
 var highlightWeekends = false;
+// The holiday band, off by default: when on, each Person's row shades the days
+// off their own Location has configured. Kept in the config and restored on
+// load, like the weekend band - never written to the plan.
+var highlightHolidays = false;
 var gridDividers = true;
 // The Stack rail's folded state: one of the view settings kept in the config
 // and restored on load, like Zoom and Row height; never written to the plan.
@@ -615,6 +625,14 @@ function drawRows() {
     var ceiling = el("span", "ceiling");
     ceiling.style.setProperty("--ceiling-px", yPx(person.availability / 100) + "px");
     row.appendChild(ceiling);
+
+    // The holiday band is per row: it shades only the days off the Person's own
+    // Location has configured, so a row whose Location has none is untouched.
+    if (highlightHolidays) {
+      holidayCellsFor(data.holidays, person.location, data.range.start, DAYS).forEach(function (cell) {
+        row.appendChild(set(el("span", "holiday" + (cell.kind === "half" ? " is-half" : "")), cell.i, cell.n));
+      });
+    }
 
     layoutPerson(person, gridAssignments).forEach(function (group) {
       group.segs.forEach(function (s) {
@@ -2125,9 +2143,9 @@ function openPersonPanel(person, trigger) {
   form.appendChild(formRow("Name", nameInput));
 
   // A Person's Location is one free-text place, suggested from the Locations
-  // already used on other People.
+  // already used on other People and the Locations the holidays configure.
   var location = suggestedInput(editing ? person.location : "", function () {
-    return suggestPersonLocations(data.people, editing ? person.id : null);
+    return suggestPersonLocations(data.people, editing ? person.id : null, holidayLocations(data.holidays));
   });
   form.appendChild(formRow("Location", location.node));
 
@@ -2572,6 +2590,162 @@ function openSprintsPanel(trigger) {
   node.appendChild(foot);
 
   form.addEventListener("submit", function (e) { e.preventDefault(); saveCadence.click(); });
+
+  renderList();
+  openPanel(node, trigger);
+}
+
+/* --- Holidays panel ------------------------------------------------------ */
+
+// The Locations and their dates off, beside the Sprints panel. Every write is
+// one PATCH /api/plan with the whole list, so the store sets it in one atomic
+// commit and one undo step, and the holidays travel with the plan. The panel
+// stays open across the save so a run of dates can be entered in one sitting.
+function openHolidaysPanel(trigger) {
+  var node = panelShell("Holidays",
+    "Each holiday is one date and a full or half day off, per Location. They travel with the plan.");
+  node.classList.add("panel--holidays");
+
+  var working = (data.holidays || []).map(function (group) {
+    return {
+      location: typeof group.location === "string" ? group.location : "",
+      dates: (Array.isArray(group.dates) ? group.dates : []).map(function (entry) {
+        return {
+          date: typeof entry.date === "string" ? entry.date : "",
+          kind: isHolidayKind(entry.kind) ? entry.kind : "full"
+        };
+      })
+    };
+  });
+
+  var error = errorLine(node);
+  var listWrap = el("div", "holiday-list");
+  node.appendChild(listWrap);
+
+  // The Locations already in use on People are offered while a holiday Location
+  // is typed, so the two vocabularies stay in step.
+  var listId = "holiday-locations";
+  var datalist = document.createElement("datalist");
+  datalist.id = listId;
+  suggestPersonLocations(data.people, null, holidayLocations(data.holidays)).forEach(function (text) {
+    var option = document.createElement("option");
+    option.value = text;
+    datalist.appendChild(option);
+  });
+  node.appendChild(datalist);
+
+  function renderList() {
+    listWrap.innerHTML = "";
+    if (!working.length) {
+      var empty = el("p", "holiday-list__empty");
+      empty.textContent = "No holidays configured yet.";
+      listWrap.appendChild(empty);
+      return;
+    }
+    working.forEach(function (group, gi) {
+      var card = el("div", "holiday-group");
+
+      var head = el("div", "holiday-group__head");
+      var location = input(group.location);
+      location.className = "holiday-group__location";
+      location.placeholder = "Location";
+      location.setAttribute("list", listId);
+      location.setAttribute("aria-label", "Holiday location");
+      location.addEventListener("input", function () { group.location = location.value; });
+      head.appendChild(location);
+      head.appendChild(button("holiday__remove", "Remove location", function () {
+        working.splice(gi, 1);
+        renderList();
+      }));
+      card.appendChild(head);
+
+      var dates = el("div", "holiday-dates");
+      group.dates.forEach(function (entry, di) {
+        var row = el("div", "holiday-row");
+        var date = dateField(entry.date, "Holiday date");
+        date.addEventListener("change", function () { entry.date = date.value; });
+        row.appendChild(date);
+
+        var kind = document.createElement("select");
+        kind.className = "holiday-row__kind";
+        kind.setAttribute("aria-label", "Full or half day");
+        ["full", "half"].forEach(function (name) {
+          var option = document.createElement("option");
+          option.value = name;
+          option.textContent = HOLIDAY_KIND_LABELS[name];
+          kind.appendChild(option);
+        });
+        kind.value = entry.kind;
+        kind.addEventListener("change", function () { entry.kind = kind.value; });
+        row.appendChild(kind);
+
+        row.appendChild(button("holiday__remove", "\u00d7", function () {
+          group.dates.splice(di, 1);
+          renderList();
+        }));
+        dates.appendChild(row);
+      });
+      card.appendChild(dates);
+      card.appendChild(button("btn-ghost holiday__add", "Add date", function () {
+        group.dates.push({ date: "", kind: "full" });
+        renderList();
+      }));
+      listWrap.appendChild(card);
+    });
+  }
+
+  // The typed list as it should be stored: Locations trimmed, empty dates and
+  // empty groups dropped, and each group's dates put in date order. Returns the
+  // message to refuse with, or null when the list may be saved.
+  function normalize() {
+    var out = [];
+    for (var i = 0; i < working.length; i += 1) {
+      var group = working[i];
+      var location = group.location.trim();
+      if (location === "") return "Each holiday Location needs a name.";
+      var dates = [];
+      for (var d = 0; d < group.dates.length; d += 1) {
+        var entry = group.dates[d];
+        if (entry.date === "") return "Each holiday needs a date.";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return "Each holiday date must be a real date.";
+        dates.push({ date: entry.date, kind: isHolidayKind(entry.kind) ? entry.kind : "full" });
+      }
+      dates.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+      if (dates.length) out.push({ location: location, dates: dates });
+    }
+    return out;
+  }
+
+  var foot = el("div", "panel__foot");
+  foot.appendChild(button("btn-ghost", "Add location", function () {
+    working.push({ location: "", dates: [{ date: "", kind: "full" }] });
+    renderList();
+  }));
+  foot.appendChild(el("span", "panel__spacer"));
+  var save = saveButton("Save holidays", function () {
+    var normalized = normalize();
+    if (typeof normalized === "string") { error.set(normalized); return; }
+    error.clear();
+    save.disabled = true;
+    api("PATCH", "/api/plan", { holidays: normalized.length ? normalized : null })
+      .then(function () { return refresh({ keepPanel: true }); })
+      .then(function () {
+        updateHolidaysItem();
+        working = (data.holidays || []).map(function (group) {
+          return {
+            location: group.location,
+            dates: group.dates.map(function (entry) { return { date: entry.date, kind: entry.kind }; })
+          };
+        });
+        renderList();
+      })
+      .catch(function (err) {
+        error.set(err && err.message ? err.message : "Could not save the holidays.");
+      })
+      .then(function () { save.disabled = false; });
+  });
+  foot.appendChild(save);
+  node.appendChild(foot);
 
   renderList();
   openPanel(node, trigger);
@@ -3502,6 +3676,7 @@ function currentView() {
       month: gridSpacing.month
     },
     weekends: highlightWeekends,
+    holidays: highlightHolidays,
     dividers: gridDividers,
     minimap: minimapEnabled,
     palette: activePalette,
@@ -3522,6 +3697,7 @@ function adoptView(view) {
   rowHeight = v.rowHeight;
   gridSpacing = Object.assign({}, v.gridSpacing);
   highlightWeekends = v.weekends;
+  highlightHolidays = v.holidays;
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
   stackCollapsed = v.stackCollapsed;
@@ -3576,6 +3752,7 @@ var rangeError = null;
 var stepInput = null;
 var stepError = null;
 var sprintsOptionDetail = null;
+var holidaysOptionDetail = null;
 var planFileState = null;
 var planFileOptionDetail = null;
 
@@ -3610,6 +3787,7 @@ function repositionPopovers() {
 var OPTION_ACTIONS = {
   archived: function () { setShowArchived(!showArchived); },
   weekends: function () { setHighlightWeekends(!highlightWeekends); },
+  holidays: function () { setHighlightHolidays(!highlightHolidays); },
   dividers: function () { setGridDividers(!gridDividers); },
   minimap: function () { setMinimapEnabled(!minimapEnabled); }
 };
@@ -3625,6 +3803,15 @@ function setShowArchived(on) {
 // file is untouched.
 function setHighlightWeekends(on) {
   highlightWeekends = on;
+  updateOptionsMenu();
+  render();
+  persistView();
+}
+
+// The holiday band is a view change in the same shape: it updates the menu,
+// redraws, and stores the new view. The plan file is untouched.
+function setHighlightHolidays(on) {
+  highlightHolidays = on;
   updateOptionsMenu();
   render();
   persistView();
@@ -3648,7 +3835,7 @@ function setMinimapEnabled(on) {
 }
 
 function updateOptionsMenu() {
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -3683,7 +3870,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays).forEach(function (item) {
     var btn = el("button", "options__item");
     btn.type = "button";
     btn.id = "option-" + item.key;
@@ -3705,6 +3892,7 @@ function buildOptionsMenu() {
   optionsMenu.appendChild(buildRangeControl());
   optionsMenu.appendChild(buildStepControl());
   optionsMenu.appendChild(buildSprintsItem());
+  optionsMenu.appendChild(buildHolidaysItem());
   optionsMenu.appendChild(buildPlanFileItem());
 }
 
@@ -3743,6 +3931,30 @@ function buildSprintsItem() {
 function updateSprintsItem() {
   if (!sprintsOptionDetail) return;
   sprintsOptionDetail.textContent = sprintsItem(!!sprintCadence).detail;
+}
+
+/* The Holidays entry: an action, not a toggle. It opens the Holidays panel and
+ * its detail counts the dates already configured. */
+function buildHolidaysItem() {
+  var item = holidaysItem(data && data.holidays);
+  var btn = el("button", "options__item options__item--action");
+  btn.type = "button";
+  btn.id = "option-holidays";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  holidaysOptionDetail = el("span", "options__item-detail");
+  holidaysOptionDetail.textContent = item.detail;
+  btn.appendChild(holidaysOptionDetail);
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openHolidaysPanel(btn);
+  });
+  return btn;
+}
+
+function updateHolidaysItem() {
+  if (!holidaysOptionDetail) return;
+  holidaysOptionDetail.textContent = holidaysItem(data && data.holidays).detail;
 }
 
 /* The Plan file entry: an action, not a toggle. It opens the Plan file panel
@@ -4114,6 +4326,7 @@ function openOptions(open) {
     updateRangeControl();
     updateStepControl();
     updateSprintsItem();
+    updateHolidaysItem();
     loadPlanFileState();
   }
   optionsMenu.hidden = !open;

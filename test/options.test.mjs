@@ -1,14 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem } from "../public/lib/options.mjs";
+import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, sprintsItem, holidaysItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
-test("the options menu holds Show archived, Highlight weekends, Grid dividers and Minimap", () => {
+test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Grid dividers and Minimap", () => {
   const items = optionsItems(false, true, false);
-  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "dividers", "minimap"]);
+  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "holidays", "dividers", "minimap"]);
   assert.deepEqual(items.map((item) => item.label), [
     "Show archived",
     "Highlight weekends",
+    "Highlight holidays",
     "Grid dividers",
     "Minimap"
   ]);
@@ -22,21 +23,30 @@ test("Show archived is checked exactly while archived things are shown", () => {
   assert.equal(optionsItems(undefined)[0].checked, false);
 });
 
-test("a fresh session opens with the weekend band off, dividers on and Minimap off", () => {
+test("a fresh session opens with the weekend band and holiday band off, dividers on and Minimap off", () => {
   // The session's own defaults, handed to the menu as app.js hands them: the
-  // weekend band is off, the dividers are on and the Minimap is off.
+  // two highlight bands are off, the dividers are on and the Minimap is off.
   const items = optionsItems(false, false, true);
   assert.equal(items[1].checked, false);
-  assert.equal(items[2].checked, true);
-  assert.equal(items[3].checked, false);
+  assert.equal(items[2].checked, false);
+  assert.equal(items[3].checked, true);
+  assert.equal(items[4].checked, false);
 });
 
 test("Minimap is checked exactly while its toggle is on", () => {
-  const minimap = (on) => optionsItems(false, true, false, on)[3].checked;
+  const minimap = (on) => optionsItems(false, true, false, on)[4].checked;
   assert.equal(minimap(true), true);
   assert.equal(minimap(false), false);
   assert.equal(minimap(1), true);
   assert.equal(minimap(undefined), false);
+});
+
+test("Highlight holidays is checked exactly while its band is drawn", () => {
+  const holidays = (on) => optionsItems(false, false, false, false, on)[2].checked;
+  assert.equal(holidays(true), true);
+  assert.equal(holidays(false), false);
+  assert.equal(holidays(1), true);
+  assert.equal(holidays(undefined), false);
 });
 
 test("Highlight weekends is checked exactly while the band is drawn", () => {
@@ -48,18 +58,18 @@ test("Highlight weekends is checked exactly while the band is drawn", () => {
 });
 
 test("Grid dividers is checked exactly while the rules are drawn", () => {
-  const dividers = (on) => optionsItems(false, false, on)[2].checked;
+  const dividers = (on) => optionsItems(false, false, on)[3].checked;
   assert.equal(dividers(true), true);
   assert.equal(dividers(false), false);
   assert.equal(dividers(1), true);
   assert.equal(dividers(undefined), false);
 });
 
-test("the four items are independent of one another", () => {
-  const items = optionsItems(true, false, true, false);
-  assert.deepEqual(items.map((item) => item.checked), [true, false, true, false]);
-  const all = optionsItems(true, true, true, true);
-  assert.deepEqual(all.map((item) => item.checked), [true, true, true, true]);
+test("the items are independent of one another", () => {
+  const items = optionsItems(true, false, true, false, true);
+  assert.deepEqual(items.map((item) => item.checked), [true, false, true, true, false]);
+  const all = optionsItems(true, true, true, true, true);
+  assert.deepEqual(all.map((item) => item.checked), [true, true, true, true, true]);
 });
 
 test("the grid divider follows the zoom, falling back to the coarsest", () => {
@@ -87,6 +97,19 @@ test("the Sprints entry states whether a cadence exists yet", () => {
   assert.equal(sprintsItem(true).detail, "Cadence defined");
   assert.equal(sprintsItem(1).detail, "Cadence defined");
   assert.equal(sprintsItem(undefined).detail, "Not defined yet");
+});
+
+test("the Holidays entry counts the configured dates", () => {
+  assert.equal(holidaysItem(undefined).key, "holidays");
+  assert.equal(holidaysItem(undefined).label, "Holidays...");
+  assert.equal(holidaysItem(undefined).detail, "None yet");
+  assert.equal(holidaysItem([]).detail, "None yet");
+  assert.equal(holidaysItem([{ location: "Portugal", dates: [{ date: "2026-12-25", kind: "full" }] }]).detail,
+    "1 date");
+  assert.equal(holidaysItem([
+    { location: "Portugal", dates: [{ date: "2026-12-25", kind: "full" }] },
+    { location: "Switzerland", dates: [{ date: "2026-08-01", kind: "half" }] }
+  ]).detail, "2 dates");
 });
 
 test("the period control reads back the stored period", () => {
