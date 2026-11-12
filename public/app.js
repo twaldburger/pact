@@ -534,8 +534,16 @@ function drawAxis() {
 
 /* --- drawing: rows ------------------------------------------------------- */
 
+// An Assignment under a Project marked as an absence: time off the Person
+// rather than work, so it never adds load and is drawn hatched.
+function aIsAbsence(a) {
+  return !!(a.project && a.project.absence);
+}
+
 // Stack a person's assignments by start order, one rectangle per run of equal
 // offset and over-allocation, so a block only ever sits where its share does.
+// An absence takes no stacked space and no load: it is drawn at the bottom of
+// the row, and never pushes work up or triggers the over-allocation band.
 function layoutPerson(person, list) {
   var mine = (list || assignments).filter(function (a) { return a.person === person; })
     .sort(function (a, b) {
@@ -547,19 +555,25 @@ function layoutPerson(person, list) {
   var avail = person.availability / 100;
   var totalByDay = {};
   mine.forEach(function (a) {
+    if (aIsAbsence(a)) return;
     for (var d = a.startIdx; d <= a.endIdx; d++) {
       totalByDay[d] = (totalByDay[d] || 0) + a.share / 100;
     }
   });
 
   return mine.map(function (a, ai) {
-    var earlier = mine.slice(0, ai);
     var h = a.share / 100;
     var segs = [];
+    if (aIsAbsence(a)) {
+      segs.push({ key: "absence", offset: 0, hatch: 0, start: a.startIdx, end: a.endIdx });
+      return { a: a, h: h, segs: segs };
+    }
+    var earlier = mine.slice(0, ai);
     var cur = null;
     for (var d = a.startIdx; d <= a.endIdx; d++) {
       var offset = 0;
       earlier.forEach(function (b) {
+        if (aIsAbsence(b)) return;
         if (b.startIdx <= d && b.endIdx >= d) offset += b.share / 100;
       });
       var total = totalByDay[d] || 0;
@@ -657,7 +671,8 @@ function drawRows() {
 function blockFor(group, s) {
   var a = group.a;
   var archived = !!(a.raw && a.raw.archived);
-  var b = el("div", "blk" + (archived ? " is-archived" : ""));
+  var absence = aIsAbsence(a);
+  var b = el("div", "blk" + (archived ? " is-archived" : "") + (absence ? " is-absence" : ""));
   b.setAttribute("role", "button");
   b.setAttribute("tabindex", "0");
   b.setAttribute("data-assignment", a.id);
@@ -668,6 +683,7 @@ function blockFor(group, s) {
   b.title = hoverText(a.project.name, a.share, a.raw && a.raw.note);
   b.setAttribute("aria-label", a.project.name + " on " + a.person.name + ", " +
     a.share + "% from " + fmtRange(a.start, a.end) +
+    (absence ? ", absence" : "") +
     (archived ? ", archived" : "") +
     ". Enter for details.");
   b.style.setProperty("--block-ink", "var(--proj-" + a.project.colour + ")");
@@ -1918,6 +1934,16 @@ function textarea(value) {
   return t;
 }
 
+// A checkbox, used by the Project panel's Absence mark. The row's own label
+// names it; the aria-label carries the same word to the control.
+function checkbox(value, label) {
+  var box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = !!value;
+  if (label) box.setAttribute("aria-label", label);
+  return { node: box, value: function () { return box.checked; } };
+}
+
 function button(cls, label, handler) {
   var b = el("button", cls);
   b.type = "button";
@@ -2250,6 +2276,12 @@ function openProjectPanel(project, trigger) {
   var notes = textarea(editing ? project.notes : "");
   form.appendChild(formRow("Notes", notes));
 
+  // An absence is a Project whose Assignments take time off the Person rather
+  // than adding work: the mark changes how the figures and the bar are read,
+  // never how the Project is stored.
+  var absence = checkbox(editing ? !!project.absence : false, "Absence");
+  form.appendChild(formRow("Absence", absence.node));
+
   node.appendChild(form);
   var error = errorLine(node);
 
@@ -2270,7 +2302,7 @@ function openProjectPanel(project, trigger) {
   var save = saveButton(editing ? "Save" : "Add project", function () {
     var name = nameInput.value.trim();
     if (!name) { error.set("A project needs a name."); nameInput.focus(); return; }
-    var body = { name: name, colour: colour, notes: notes.value, tags: tags.tags() };
+    var body = { name: name, colour: colour, notes: notes.value, tags: tags.tags(), absence: absence.value() };
     submitPanel(node, error, function () {
       return editing
         ? api("PATCH", "/api/projects/" + encodeURIComponent(project.id), body)

@@ -5,6 +5,8 @@ import {
   workingFraction,
   isWorkingDay,
   workingDays,
+  absenceProjectIds,
+  absencesFor,
   planWorkingDays
 } from "../public/lib/workdays.mjs";
 
@@ -84,6 +86,50 @@ test("the half day leaves half a working day in the glossary's own example", () 
     [{ location: "Switzerland", dates: [{ date: "2026-01-06", kind: "half" }] }]);
   assert.equal(halfDay, 4.5);
   assert.ok(Math.abs(0.6 * halfDay - 2.7) < 1e-9);
+});
+
+/* --- absences ------------------------------------------------------------ */
+
+function absence(start, end, share) {
+  return { start: start, end: end, share: share };
+}
+
+test("a full absence takes a whole working day, a half absence half of one", () => {
+  const full = [absence("2026-01-05", "2026-01-05", 100)];
+  const half = [absence("2026-01-05", "2026-01-05", 50)];
+  // The week 05..09 is Mon..Fri: five working days with no absence.
+  assert.equal(workingDays("2026-01-05", "2026-01-09", "", [], full), 4);
+  assert.equal(workingDays("2026-01-05", "2026-01-09", "", [], half), 4.5);
+  assert.equal(workingFraction("2026-01-05", "", [], full), 0);
+  assert.equal(isWorkingDay("2026-01-05", "", [], full), false);
+  assert.equal(workingFraction("2026-01-05", "", [], half), 0.5);
+  // A half absence is still a working day, half of one.
+  assert.equal(isWorkingDay("2026-01-05", "", [], half), true);
+});
+
+test("an absence and a holiday on one day share the whole-day cap", () => {
+  const half = [absence("2026-01-02", "2026-01-02", 50)];
+  // The Swiss half holiday already leaves half; the absence takes the rest.
+  assert.equal(workingFraction("2026-01-02", "Switzerland", [SWISS], half), 0);
+  // A weekend is off however many absences cover it.
+  assert.equal(workingDays("2026-01-03", "2026-01-04", "", [],
+    [absence("2026-01-03", "2026-01-04", 100)]), 0);
+});
+
+test("the absence rule reads the Plan's absence Projects and their Assignments", () => {
+  const plan = {
+    projects: [{ id: "holiday", name: "Holiday", absence: true }, { id: "atlas", name: "Atlas" }],
+    assignments: [
+      { id: "a1", projectId: "holiday", personId: "anna", start: "2026-01-05", end: "2026-01-06", share: 100 },
+      { id: "a2", projectId: "atlas", personId: "anna", start: "2026-01-05", end: "2026-01-09", share: 40 }
+    ]
+  };
+  assert.deepEqual([...absenceProjectIds(plan)], ["holiday"]);
+  assert.deepEqual(absencesFor(plan, "anna"), [plan.assignments[0]]);
+  assert.deepEqual(absencesFor(plan, "ben"), []);
+  // A Plan with no absence flag has none, so the count is the holidays alone.
+  assert.equal(absencesFor({ projects: [{ id: "atlas" }], assignments: [] }, "anna").length, 0);
+  assert.equal(workingDays("2026-01-05", "2026-01-09", "", [], absencesFor(plan, "anna")), 3);
 });
 
 // The plan-wide count a sprint uses: a date off for any configured Location is

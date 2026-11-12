@@ -21,7 +21,7 @@
  * the scope. There is one owner for that rule: parseFilterTerm, below, is what
  * both the filter and the suggestions read.
  */
-import { isWorkingDay } from "./workdays.mjs";
+import { absenceProjectIds, absencesFor, isWorkingDay } from "./workdays.mjs";
 
 export const FILTER_SCOPES = ["people", "projects", "assignments"];
 
@@ -360,15 +360,20 @@ export function filterIsEmpty(view) {
  * A Person's assigned share on one day, read from the whole plan. The
  * row-header figure is the Person's own load and must never be narrowed by the
  * filter, so this is handed the unfiltered plan. A day that is not a working
- * day for the Person - a weekend or a holiday - carries no load at all. Dates
- * are ISO strings, so the comparison is exact and needs no parsing.
+ * day for the Person - a weekend, a holiday or a full absence - carries no load
+ * at all, and an absence never counts as work: its share is not added to the
+ * figure. Dates are ISO strings, so the comparison is exact and needs no
+ * parsing.
  */
 export function personAssignedShare(plan, personId, dateISO) {
   const person = ((plan && plan.people) || []).find(function (p) { return p.id === personId; });
-  if (!isWorkingDay(dateISO, person ? person.location : "", plan && plan.holidays)) return 0;
+  const absences = absencesFor(plan, personId);
+  if (!isWorkingDay(dateISO, person ? person.location : "", plan && plan.holidays, absences)) return 0;
+  const absenceIds = absenceProjectIds(plan);
   let total = 0;
   ((plan && plan.assignments) || []).forEach(function (assignment) {
     if (assignment.personId !== personId) return;
+    if (absenceIds.has(assignment.projectId)) return;
     if (assignment.start <= dateISO && assignment.end >= dateISO) total += assignment.share / 100;
   });
   return total;

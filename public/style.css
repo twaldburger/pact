@@ -1681,6 +1681,23 @@ h1, h2, h3, p { margin: 0; }
   pointer-events: none;
 }
 
+/* An absence: the same block, hatched all over so it is never mistaken for an
+   allocated Project. The stripes are cut from --block-label, the ink that reads
+   on that fill, so the hatch shows on a pastel and a dark colour alike and the
+   label on top of it stays legible. */
+.blk.is-absence::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--block-label) 32%, transparent) 0 2px,
+    transparent 2px 6px
+  );
+  pointer-events: none;
+}
+
 .blk__tag {
   position: absolute;
   left: 0.375rem;
