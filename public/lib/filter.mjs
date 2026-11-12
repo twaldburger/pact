@@ -3,9 +3,10 @@
  * typed term at one field, and the suggestions that teach the plan's own
  * vocabulary.
  *
- * A plain ES module with no imports, so the browser (public/app.js) and
- * `node --test` load exactly the same source. The filter is session-only: it
- * is never sent to the server and never written to the plan.
+ * A plain ES module importing only the working-day rule, so the browser
+ * (public/app.js) and `node --test` load exactly the same source. The filter
+ * is session-only: it is never sent to the server and never written to the
+ * plan.
  *
  * Hiding is decided per thing - a Person, a Project or an Assignment matches
  * the typed text anywhere in its own fields - and then propagated, because a
@@ -20,6 +21,7 @@
  * the scope. There is one owner for that rule: parseFilterTerm, below, is what
  * both the filter and the suggestions read.
  */
+import { isWorkingDay } from "./workdays.mjs";
 
 export const FILTER_SCOPES = ["people", "projects", "assignments"];
 
@@ -357,10 +359,13 @@ export function filterIsEmpty(view) {
 /*
  * A Person's assigned share on one day, read from the whole plan. The
  * row-header figure is the Person's own load and must never be narrowed by the
- * filter, so this is handed the unfiltered plan. Dates are ISO strings, so the
- * comparison is exact and needs no parsing.
+ * filter, so this is handed the unfiltered plan. A day that is not a working
+ * day for the Person - a weekend or a holiday - carries no load at all. Dates
+ * are ISO strings, so the comparison is exact and needs no parsing.
  */
 export function personAssignedShare(plan, personId, dateISO) {
+  const person = ((plan && plan.people) || []).find(function (p) { return p.id === personId; });
+  if (!isWorkingDay(dateISO, person ? person.location : "", plan && plan.holidays)) return 0;
   let total = 0;
   ((plan && plan.assignments) || []).forEach(function (assignment) {
     if (assignment.personId !== personId) return;

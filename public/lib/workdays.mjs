@@ -1,0 +1,102 @@
+/*
+ * PACT working days: which calendar days count as worked, and how much of a
+ * part-worked one does.
+ *
+ * A working day is a calendar day that is not a Saturday or Sunday and not a
+ * holiday configured for the Person's Location. The glossary's rule, and the
+ * unit every figure that measures time is counted in. `holidays.mjs` owns the
+ * per-Location lookup; this module adds the weekend and the marks that take
+ * time out of a day, and nothing else.
+ *
+ * A half holiday leaves half a working day rather than none, so the count is
+ * fractional where it has to be. A plain ES module importing only
+ * `holidays.mjs`, which itself imports nothing, so the server, the browser
+ * (public/app.js) and `node --test` read exactly the same source. Every rule
+ * here is pure.
+ *
+ * Absences (#115) join the rule here when they land: an absence is a range of
+ * days off for one Person, so it is another subtraction of `workingFraction`
+ * in the same count, not a second rule. No plan field and no view setting is
+ * read beyond the holidays and the Person's Location.
+ */
+import { holidaysFor } from "./holidays.mjs";
+
+const DAY_MS = 86400000;
+
+function isISODate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(Date.UTC(+value.slice(0, 4), +value.slice(5, 7) - 1, +value.slice(8, 10)));
+  return d.toISOString().slice(0, 10) === value;
+}
+
+function udate(iso) {
+  return new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)));
+}
+
+function toISO(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+/*
+ * The holiday time off each date for one Location, as `date -> fraction off`.
+ * Two marks on one date add up, and the total is held at a whole day so a
+ * doubled entry cannot take more than the day away.
+ */
+function holidayOff(holidays, location) {
+  const off = new Map();
+  holidaysFor(holidays, location).forEach(function (day) {
+    const taken = day.kind === "half" ? 0.5 : 1;
+    off.set(day.date, Math.min(1, (off.get(day.date) || 0) + taken));
+  });
+  return off;
+}
+
+// Saturday or Sunday, read in UTC so an ISO date names the same day wherever
+// the caller runs.
+export function isWeekend(dateISO) {
+  if (!isISODate(dateISO)) return false;
+  const dow = udate(dateISO).getUTCDay();
+  return dow === 0 || dow === 6;
+}
+
+/*
+ * The fraction of one date that counts as worked for a Location: 1 on an
+ * ordinary working day, 0.5 on a half holiday, and 0 on a weekend or a full
+ * holiday. A malformed date has no working time. A Location with no configured
+ * holidays is affected by weekends alone.
+ */
+export function workingFraction(dateISO, location, holidays) {
+  if (!isISODate(dateISO) || isWeekend(dateISO)) return 0;
+  const taken = holidayOff(holidays, location).get(dateISO);
+  return taken === undefined ? 1 : Math.max(0, 1 - taken);
+}
+
+// Whether a date is a working day at all - the fraction above is greater than
+// zero. A half holiday is still a working day, half of one.
+export function isWorkingDay(dateISO, location, holidays) {
+  return workingFraction(dateISO, location, holidays) > 0;
+}
+
+/*
+ * The working days in `[startISO, endISO]`, both ends inclusive, for one
+ * Location: each date contributes its working fraction, so a span over a
+ * weekend, a holiday and a half day counts only the time actually worked. A
+ * malformed or reversed pair has no working days rather than a negative count.
+ */
+export function workingDays(startISO, endISO, location, holidays) {
+  if (!isISODate(startISO) || !isISODate(endISO)) return 0;
+  const start = udate(startISO);
+  const end = udate(endISO);
+  const span = Math.round((end.getTime() - start.getTime()) / DAY_MS) + 1;
+  if (span <= 0) return 0;
+  const off = holidayOff(holidays, location);
+  let total = 0;
+  for (let i = 0; i < span; i++) {
+    const d = new Date(start.getTime() + i * DAY_MS);
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    const taken = off.get(toISO(d));
+    total += taken === undefined ? 1 : Math.max(0, 1 - taken);
+  }
+  return total;
+}

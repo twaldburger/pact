@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fteDaysFigure, fteDaysLabel } from "../public/lib/stack.mjs";
 import {
   ASCENDING,
   DESCENDING,
@@ -124,14 +125,44 @@ test("the project measures are the earliest start, latest end and FTE-days", () 
   const m = projectMeasures(plan());
   assert.equal(m.pr1.firstStart, "2026-01-10");
   assert.equal(m.pr1.lastEnd, "2026-06-20");
-  // 10 days * 0.5 + 5 days * 1.0 + 11 days * 0.3 = 13.3 FTE-days
-  assert.ok(Math.abs(m.pr1.fteDays - 13.3) < 1e-9, m.pr1.fteDays);
+  // Working days only: 6 * 0.5 + 4 * 1.0 + 8 * 0.3 = 9.4 FTE-days.
+  assert.ok(Math.abs(m.pr1.fteDays - 9.4) < 1e-9, m.pr1.fteDays);
   assert.equal(m.pr2.firstStart, "2026-01-01");
   assert.equal(m.pr2.lastEnd, "2026-06-30");
-  // 5 * 0.2 + 30 * 0.4 + 30 * 0.8 = 37
-  assert.ok(Math.abs(m.pr2.fteDays - 37) < 1e-9, m.pr2.fteDays);
+  // 3 * 0.2 + 22 * 0.4 + 22 * 0.8 = 27.
+  assert.ok(Math.abs(m.pr2.fteDays - 27) < 1e-9, m.pr2.fteDays);
   // A project with no assignment has no dates and no FTE-days.
   assert.deepEqual(m.pr3, { firstStart: null, lastEnd: null, fteDays: 0 });
+});
+
+test("the rail's FTE-days figure reads the same working-day count", () => {
+  const m = projectMeasures(plan());
+  assert.equal(fteDaysFigure(m.pr1.fteDays), "9 d");
+  assert.equal(fteDaysLabel(m.pr1.fteDays), "9 FTE-days");
+  assert.equal(fteDaysFigure(m.pr2.fteDays), "27 d");
+});
+
+test("a holiday for the Person's Location takes that day out of the FTE-days", () => {
+  // One Person in Switzerland and one with no Location, the same two-day
+  // range: 2026-01-01 (Thursday) and 2026-01-02 (Friday). The Swiss holiday
+  // on the Thursday leaves only Friday, so their Assignment is half the size.
+  const p = {
+    people: [
+      { id: "swiss", name: "Swiss", availability: 100, location: "Switzerland" },
+      { id: "plain", name: "Plain", availability: 100 }
+    ],
+    projects: [{ id: "q1", name: "Q1" }, { id: "q2", name: "Q2" }],
+    holidays: [{ location: "Switzerland", dates: [{ date: "2026-01-01", kind: "full" }] }],
+    assignments: [
+      { id: "a1", projectId: "q1", personId: "swiss", start: "2026-01-01", end: "2026-01-02", share: 100 },
+      { id: "a2", projectId: "q2", personId: "plain", start: "2026-01-01", end: "2026-01-02", share: 100 }
+    ]
+  };
+  const m = projectMeasures(p);
+  // The Swiss Person loses the holiday Thursday and keeps Friday: one day.
+  assert.ok(Math.abs(m.q1.fteDays - 1) < 1e-9, m.q1.fteDays);
+  // A Person with no Location has no configured holidays, so both days count.
+  assert.ok(Math.abs(m.q2.fteDays - 2) < 1e-9, m.q2.fteDays);
 });
 
 test("the person measure is the earliest assignment start", () => {
@@ -148,9 +179,25 @@ test("the load is the share active at the date, from the whole plan", () => {
   assert.ok(Math.abs(personLoadAt(p, "p2", "2026-06-15") - 0.4) < 1e-9);
   assert.ok(Math.abs(personLoadAt(p, "p3", "2026-06-15") - 0.8) < 1e-9);
   assert.equal(personLoadAt(p, "p4", "2026-06-15"), 0);
-  // The ends are inclusive.
-  assert.ok(Math.abs(personLoadAt(p, "p1", "2026-01-10") - 0.5) < 1e-9);
+  // The ends are inclusive, but a weekend day carries no load: 2026-01-10 and
+  // 11 are Saturday and Sunday, so the first working day of the Assignment is
+  // Monday the 12th.
+  assert.ok(Math.abs(personLoadAt(p, "p1", "2026-01-12") - 0.5) < 1e-9);
+  assert.equal(personLoadAt(p, "p1", "2026-01-10"), 0);
   assert.equal(personLoadAt(p, "p1", "2026-01-09"), 0);
+});
+
+test("a holiday for the Person's Location carries no load on that date", () => {
+  const p = {
+    people: [{ id: "p1", name: "Anna", availability: 100, location: "Switzerland" }],
+    holidays: [{ location: "Switzerland", dates: [{ date: "2026-06-15", kind: "full" }] }],
+    assignments: [
+      { id: "a1", projectId: "pr1", personId: "p1", start: "2026-06-01", end: "2026-06-30", share: 60 }
+    ]
+  };
+  assert.equal(personLoadAt(p, "p1", "2026-06-15"), 0);
+  // The next working day is unaffected.
+  assert.ok(Math.abs(personLoadAt(p, "p1", "2026-06-16") - 0.6) < 1e-9);
 });
 
 test("with no sort chosen the caller's own order is returned untouched", () => {

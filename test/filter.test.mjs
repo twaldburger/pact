@@ -137,6 +137,19 @@ test("a person's row-header figure is read from the whole plan", () => {
   assert.equal(personAssignedShare(whole, "anna", "2026-10-05"), 0.6);
 });
 
+test("the row-header figure counts no non-working day", () => {
+  const whole = plan();
+  // Anna is busy across the weekend of 2026-10-03/04, but a Saturday carries
+  // no load, so only the Monday reads 60%.
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-03"), 0);
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-04"), 0);
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-05"), 0.6);
+  // A holiday on the Monday takes that day out too.
+  whole.holidays = [{ location: "Switzerland", dates: [{ date: "2026-10-05", kind: "full" }] }];
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-05"), 0);
+  assert.equal(personAssignedShare(whole, "anna", "2026-10-06"), 0.6);
+});
+
 test("the whole plan is never changed by filtering", () => {
   const whole = plan();
   const before = JSON.stringify(whole);
