@@ -9,11 +9,11 @@ Someone whose time the plan schedules, identified by a name and carrying an opti
 _Avoid_: resource, user, employee, staff member
 
 **Availability**:
-The most a Person can be scheduled for - their own 100%, expressed as a share of a full working week. Allocations are absolute, so Availability is the ceiling they are compared against rather than the scale they are measured on.
+The most a Person can be scheduled for - their own 100%, expressed as a share of a full working week. The full working week is the nominal week an FTE describes, not the particular calendar week a date falls in, so a week holding a holiday or an absence holds fewer working days rather than a smaller share. Allocations are absolute, so Availability is the ceiling they are compared against rather than the scale they are measured on.
 _Avoid_: capacity, part-time factor, utilisation limit
 
 **Location**:
-The one free-text place a Person is at, for grouping and filtering people later. It is optional and single-valued: a new one can be typed, or one already in use on another Person chosen, matched case-insensitively with the first spelling winning. It is deliberately not a fixed country list, and nothing on the grid draws it.
+The one free-text place a Person is at, for grouping and filtering people later. It is optional and single-valued: a new one can be typed, or one already in use on another Person chosen, matched case-insensitively with the first spelling winning. It is deliberately not a fixed country list, and it is also the key a Person's holidays are configured under, so the dates configured for a Location are the ones shaded on that Location's rows.
 _Avoid_: office, site, city, country, timezone, or region
 
 **Person tag**:
@@ -28,13 +28,37 @@ _Avoid_: label, keyword, category, or an unqualified "tag"
 A short free-text label on a Project, for grouping and filtering projects later. A new one can be typed, or one already in use on another Project chosen; projects' tags, people's tags and assignments' tags are separate lists.
 _Avoid_: label, keyword, category, or an unqualified "tag"
 
+**Calendar day**:
+A single day as the plan counts it, however it is worked: one column of the Timeline at Day zoom, and the unit a Plan period, a sprint's length and an Assignment's date range are stated in. It is the raw span, weekends, holidays and absences included, where a Working day is the day the plan counts as worked.
+_Avoid_: day, weekday, business day
+
+**Weekend**:
+Saturday and Sunday, the two days of the week the plan treats as not worked for everyone, wherever they are. The weekend band shades them across the grid as a view setting; the shading follows the rule rather than making it.
+_Avoid_: rest day, non-working day, holiday
+
+**Holiday**:
+A date configured against a Location and marked as a full day or a half day off, so the People at that Location do not work it. The list travels with the plan rather than coming from a library, so it is the owner's own and reaches any place a Location names, and a half day takes half of that day rather than all of it.
+_Avoid_: public holiday, bank holiday, vacation, leave, absence
+
+**Absence**:
+A Project marked as an absence, so every Assignment under it takes time away from the Person rather than adding work to them: its days are not working days, and the time comes off the Capacity the Person offers on the days it covers instead of counting towards what they are allocated. Because it is a Project, it is tracked like any other work - a date range, a share, tags - so holiday, sick leave and rotation can be its Project tags rather than a Project each.
+_Avoid_: holiday, leave, time off, vacation, non-working day
+
+**Working day**:
+A calendar day that is not a weekend, a holiday or an absence - a day the plan counts as worked. It is the unit the figures that measure time are counted in, so an Assignment spanning a holiday week is smaller than the same span in an ordinary one.
+_Avoid_: business day, workday, weekday
+
 **Capacity**:
-The total time a Person offers, which their Availability expresses as a share of a full working week - so an 80% Availability is 0.8 FTE of Capacity.
+The total time a Person offers, which their Availability expresses as a share of a full working week - so an 80% Availability is 0.8 FTE of Capacity. A holiday or an absence takes its time out of the Capacity the Person offers on the days it covers, so an absence lowers what is available instead of counting towards what is allocated.
 _Avoid_: bandwidth, headcount, utilisation
 
 **FTE**:
 A full working week of one Person; Availability and Capacity are spoken of in it when a share alone would be ambiguous.
 _Avoid_: full-time equivalent, heads
+
+**FTE-day**:
+One working day of one Person at a full Allocation, the unit a Project's or an Assignment's size is summed in; the FTE is the same unit one week long. A 60% Assignment over five working days is 3 FTE-days.
+_Avoid_: person-day, man-day, day
 
 **Allocation**:
 The share of a full working week that one Assignment takes, set in the plan's Step. It is absolute: 60% is 0.6 FTE whether the Person is 100% or 80% available, which is what makes FTE-days add up across People and Projects.
