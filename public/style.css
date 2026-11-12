@@ -219,11 +219,12 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* One control language for the whole bar. The zoom segments, the row-height
-   stepper and the archive toggle share a height, a border, a radius, a type
-   role and a state set; only their width differs, and the archive toggle is
-   the one of them that also carries a pressed state. */
+   and Grid-spacing steppers and the archive toggle share a height, a border, a
+   radius, a type role and a state set; only their width differs, and the
+   archive toggle is the one of them that also carries a pressed state. */
 .zoom,
 .rowheight,
+.spacing,
 .history,
 .ghost {
   display: flex;
@@ -237,6 +238,7 @@ h1, h2, h3, p { margin: 0; }
 
 .zoom,
 .rowheight,
+.spacing,
 .history { overflow: hidden; }
 
 .ghost {
@@ -251,6 +253,7 @@ h1, h2, h3, p { margin: 0; }
 
 .zoom__btn,
 .rowheight__btn,
+.spacing__btn,
 .history__btn {
   appearance: none;
   display: inline-flex;
@@ -271,12 +274,16 @@ h1, h2, h3, p { margin: 0; }
 
 .zoom__btn:last-child,
 .rowheight__btn:last-child,
+.spacing__btn:last-child,
 .history__btn:last-child { border-right: 0; }
 
-/* Row height and Undo/Redo - quiet square pairs beside the zoom, each disabled
-   at the end of its range: 32..120 for the row height, an empty stack for the
-   history. */
+/* The row height, the Grid spacing and Undo/Redo - quiet square pairs beside
+   the zoom, each disabled at the end of its range: 32..120 for the row height,
+   2..48 for the Grid spacing, an empty stack for the history. The two steppers
+   are distinguished by their marks, vertical for the row height and horizontal
+   for the Grid spacing, so the pair of pairs reads as two axes. */
 .rowheight__btn,
+.spacing__btn,
 .history__btn {
   min-width: var(--control-h);
   padding: 0;
@@ -286,6 +293,7 @@ h1, h2, h3, p { margin: 0; }
    that is already pressed keeps the ink fill instead. */
 .zoom__btn:hover:not([aria-pressed="true"]):not(:disabled),
 .rowheight__btn:hover:not(:disabled),
+.spacing__btn:hover:not(:disabled),
 .history__btn:hover:not(:disabled),
 .ghost:hover:not([aria-pressed="true"]) {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
@@ -300,6 +308,7 @@ h1, h2, h3, p { margin: 0; }
 
 .zoom__btn:disabled,
 .rowheight__btn:disabled,
+.spacing__btn:disabled,
 .history__btn:disabled { opacity: var(--op-disabled); cursor: default; }
 
 /* One control language for the quiet actions that sit in a column's own
@@ -624,7 +633,8 @@ h1, h2, h3, p { margin: 0; }
 
 /* Undo and Redo: the bar's control language as a square pair beside the row
    height, each stepping the plan's history one action at a time. */
-.history__glyph {
+.history__glyph,
+.stepper__glyph {
   display: block;
   width: 0.875rem;
   height: 0.875rem;

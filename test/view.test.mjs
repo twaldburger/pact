@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VIEW_DEFAULTS, VIEW_KEYS, normalizeView, normalizeSort } from "../public/lib/view.mjs";
-import { ZOOM_DEFAULT } from "../public/lib/timeline.mjs";
+import {
+  ZOOM_DEFAULT,
+  GRID_SPACING_DEFAULTS,
+  GRID_SPACING_MIN,
+  GRID_SPACING_MAX,
+  clampGridSpacing,
+  stepGridSpacing
+} from "../public/lib/timeline.mjs";
 import { PALETTE_DEFAULT } from "../public/lib/palette.mjs";
 import { STACK_COLLAPSED_DEFAULT } from "../public/lib/stack.mjs";
 import { MINIMAP_DEFAULT } from "../public/lib/minimap.mjs";
@@ -13,6 +20,7 @@ test("the defaults are exactly what the app shipped with", () => {
   assert.deepEqual(VIEW_DEFAULTS, {
     zoom: "month",
     rowHeight: 48,
+    gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
     weekends: false,
     dividers: true,
     minimap: false,
@@ -22,6 +30,7 @@ test("the defaults are exactly what the app shipped with", () => {
   });
   // The single owners of each value, so the two cannot drift.
   assert.equal(VIEW_DEFAULTS.zoom, ZOOM_DEFAULT);
+  assert.deepEqual(VIEW_DEFAULTS.gridSpacing, GRID_SPACING_DEFAULTS);
   assert.equal(VIEW_DEFAULTS.palette, PALETTE_DEFAULT);
   assert.equal(VIEW_DEFAULTS.minimap, MINIMAP_DEFAULT);
   assert.equal(VIEW_DEFAULTS.stackCollapsed, STACK_COLLAPSED_DEFAULT);
@@ -32,6 +41,7 @@ test("an absent view, or any non-object, reads as every default", () => {
     assert.deepEqual(normalizeView(raw), {
       zoom: "month",
       rowHeight: 48,
+      gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
       weekends: false,
       dividers: true,
       minimap: false,
@@ -52,6 +62,7 @@ test("every key survives a normalise at a non-default value", () => {
   const stored = {
     zoom: "day",
     rowHeight: 120,
+    gridSpacing: { day: 48, week: 30, sprint: 2, month: 7 },
     weekends: true,
     dividers: false,
     minimap: true,
@@ -81,6 +92,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
   const stored = {
     zoom: "year",
     rowHeight: "tall",
+    gridSpacing: { day: "wide", week: 30, sprint: null, month: 7 },
     weekends: "yes",
     dividers: 1,
     minimap: "on",
@@ -91,6 +103,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
   assert.deepEqual(normalizeView(stored), {
     zoom: "month",
     rowHeight: 48,
+    gridSpacing: { day: 44, week: 30, sprint: 8, month: 7 },
     weekends: false,
     dividers: true,
     minimap: false,
@@ -126,10 +139,40 @@ test("a row height is snapped and clamped, never left off the scale", () => {
   assert.equal(normalizeView({ rowHeight: Number.NaN }).rowHeight, 48);
 });
 
+test("each zoom keeps its own spacing, a missing or malformed one falling back alone", () => {
+  assert.deepEqual(normalizeView({}).gridSpacing, { day: 44, week: 16, sprint: 8, month: 5 });
+  // A missing spacing object, and one that only names a single zoom.
+  assert.deepEqual(normalizeView({ gridSpacing: null }).gridSpacing,
+    { day: 44, week: 16, sprint: 8, month: 5 });
+  assert.deepEqual(normalizeView({ gridSpacing: { day: 30 } }).gridSpacing,
+    { day: 30, week: 16, sprint: 8, month: 5 });
+  // One bad width falls back for its zoom alone; the rest are kept.
+  assert.deepEqual(normalizeView({ gridSpacing: { day: 30, week: "wide", sprint: 2, month: 48 } }).gridSpacing,
+    { day: 30, week: 16, sprint: 2, month: 48 });
+});
+
+test("a spacing is clamped to 2..48 and stepped in twos", () => {
+  assert.equal(clampGridSpacing(-10), GRID_SPACING_MIN);
+  assert.equal(clampGridSpacing(0), GRID_SPACING_MIN);
+  assert.equal(clampGridSpacing(1000), GRID_SPACING_MAX);
+  assert.equal(clampGridSpacing(30), 30);
+  assert.equal(clampGridSpacing(Number.NaN), null);
+  // The step keeps Month's odd default odd and clamps at each end.
+  assert.equal(stepGridSpacing(5, 1), 7);
+  assert.equal(stepGridSpacing(5, -1), 3);
+  assert.equal(stepGridSpacing(3, -1), GRID_SPACING_MIN);
+  assert.equal(stepGridSpacing(47, 1), GRID_SPACING_MAX);
+  assert.equal(stepGridSpacing(2, -1), GRID_SPACING_MIN);
+  assert.equal(stepGridSpacing(48, 1), GRID_SPACING_MAX);
+  assert.equal(stepGridSpacing("wide", 1), null);
+});
+
 test("normalise returns a fresh object every time", () => {
   const a = normalizeView({});
   const b = normalizeView({});
   a.sort.projects = { key: "name", direction: ASCENDING };
+  a.gridSpacing.day = 2;
   assert.equal(b.sort.projects, null);
   assert.equal(normalizeView({}).sort.people, null);
+  assert.equal(b.gridSpacing.day, 44);
 });

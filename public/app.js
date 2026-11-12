@@ -81,7 +81,11 @@ import {
   isZoom,
   stepRowHeight,
   rowGeometry,
-  isRowHeaderTight
+  isRowHeaderTight,
+  GRID_SPACING_MIN,
+  GRID_SPACING_MAX,
+  GRID_SPACING_DEFAULTS,
+  stepGridSpacing
 } from "./lib/timeline.mjs";
 import {
   ASCENDING,
@@ -164,6 +168,10 @@ var zoomButtons = [];
 // The row height and the geometry derived from it. One of the view settings
 // kept in the config and restored on load; never written to the plan.
 var rowHeight = ROW_HEIGHT_DEFAULT;
+// The Grid spacing: the drawn width of one day, one value per zoom, so a zoom
+// returns to its own width when it is re-entered. One of the view settings kept
+// in the config and restored on load; never written to the plan.
+var gridSpacing = Object.assign({}, GRID_SPACING_DEFAULTS);
 var ftePx = 0;
 var stepPx = 0;
 var BASE_PX = 1;
@@ -344,6 +352,21 @@ function applyRowHeight() {
   if (down) down.disabled = rowHeight <= ROW_HEIGHT_MIN;
   if (up) up.disabled = rowHeight >= ROW_HEIGHT_MAX;
   root.classList.toggle("is-tight-rows", isRowHeaderTight(rowHeight, textScale()));
+}
+
+// Apply the active zoom's Grid spacing to the grid: one inline --day-w, which
+// overrides the stylesheet's own per-zoom defaults, and the pair's disabled
+// ends. Switching zoom applies that zoom's stored width rather than resetting
+// it; nothing here is persisted.
+function applyGridSpacing() {
+  var zoom = root.getAttribute("data-zoom");
+  if (!isZoom(zoom)) zoom = ZOOM_DEFAULT;
+  var value = gridSpacing[zoom];
+  root.style.setProperty("--day-w", value + "px");
+  var down = document.getElementById("spacing-decrease");
+  var up = document.getElementById("spacing-increase");
+  if (down) down.disabled = value <= GRID_SPACING_MIN;
+  if (up) up.disabled = value >= GRID_SPACING_MAX;
 }
 
 /* --- the shape of the calendar ------------------------------------------ */
@@ -2608,6 +2631,7 @@ function applyZoom(zoom) {
   var sRect = scroller.getBoundingClientRect();
   var before = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
   root.setAttribute("data-zoom", zoom);
+  applyGridSpacing();
   updateDividerRules();
   zoomButtons.forEach(function (b) {
     b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
@@ -2648,9 +2672,9 @@ function initZoom() {
 
 /* --- row height ---------------------------------------------------------- */
 
-// The top-bar pair that changes the drawn height of every row. Each press
-// moves it by one 8px step across 32..120; it is applied to the grid and
-// remembered nowhere.
+// The top-bar pair that changes the drawn height of every row, drawn with
+// vertical arrows. Each press moves it by one 8px step across 32..120; it is
+// applied to the grid and stored in the view.
 function initRowHeight() {
   var down = document.getElementById("row-decrease");
   var up = document.getElementById("row-increase");
@@ -2671,6 +2695,39 @@ function initRowHeight() {
     });
   }
   applyRowHeight();
+}
+
+/* --- grid spacing -------------------------------------------------------- */
+
+// The top-bar pair that changes the drawn width of one day for the active zoom.
+// Each press moves that zoom's own width by 2px across 2..48; the change is
+// applied to the grid and stored in the view, so it survives a reload and a
+// trip through another zoom.
+function bumpGridSpacing(delta) {
+  var zoom = root.getAttribute("data-zoom");
+  if (!isZoom(zoom)) zoom = ZOOM_DEFAULT;
+  var next = stepGridSpacing(gridSpacing[zoom], delta);
+  if (next === null) return;
+  gridSpacing[zoom] = next;
+  applyGridSpacing();
+  // A wider or narrower day changes how much room a block label has, so the
+  // labels and the Minimap's window are remeasured. Nothing about a row's own
+  // height changes, so the rows are not redrawn.
+  queueBlockLabels();
+  updateMinimapWindow();
+  persistView();
+}
+
+function initGridSpacing() {
+  var down = document.getElementById("spacing-decrease");
+  var up = document.getElementById("spacing-increase");
+  if (down) {
+    down.addEventListener("click", function () { bumpGridSpacing(-1); });
+  }
+  if (up) {
+    up.addEventListener("click", function () { bumpGridSpacing(1); });
+  }
+  applyGridSpacing();
 }
 
 /* --- Stack rail collapse ------------------------------------------------- */
@@ -3438,6 +3495,12 @@ function currentView() {
   return {
     zoom: root.getAttribute("data-zoom"),
     rowHeight: rowHeight,
+    gridSpacing: {
+      day: gridSpacing.day,
+      week: gridSpacing.week,
+      sprint: gridSpacing.sprint,
+      month: gridSpacing.month
+    },
     weekends: highlightWeekends,
     dividers: gridDividers,
     minimap: minimapEnabled,
@@ -3457,19 +3520,30 @@ function adoptView(view) {
   root.setAttribute("data-palette", v.palette);
   root.setAttribute("data-zoom", v.zoom);
   rowHeight = v.rowHeight;
+  gridSpacing = Object.assign({}, v.gridSpacing);
   highlightWeekends = v.weekends;
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
   stackCollapsed = v.stackCollapsed;
   sortState = { projects: v.sort.projects, people: v.sort.people };
+  // Apply the stored width now, before the caller's first draw, so a spacing
+  // other than the stylesheet's default is what the first paint shows.
+  applyGridSpacing();
   return v;
 }
 
 // Store the whole view whenever the owner changes a setting, so the config
-// always holds one consistent snapshot. A failed write is reported and the
-// change simply does not survive a reload.
+// always holds one consistent snapshot. Writes are serialised in the order the
+// changes were made: the view is sent whole, so two writes that overlap on the
+// wire could otherwise land out of order and leave the config holding an
+// earlier state - which a press-and-press-again stepper makes likely. A failed
+// write is reported and the change simply does not survive a reload.
+var viewWrite = Promise.resolve();
 function persistView() {
-  api("POST", "/api/view", currentView()).catch(showError);
+  var view = currentView();
+  viewWrite = viewWrite.then(function () {
+    return api("POST", "/api/view", view).catch(showError);
+  });
 }
 
 // Reset view: every view setting back to the default the app ships with, in
@@ -4083,6 +4157,7 @@ function boot() {
     var today = data.today ? udate(data.today) : rangeStart;
     markerIndex = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
     initRowHeight();
+    initGridSpacing();
     initStackToggle();
     initMinimap();
     initSortControls();

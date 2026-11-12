@@ -68,6 +68,7 @@ test("a changed view is stored and read back", async () => {
   const sent = {
     zoom: "week",
     rowHeight: 64,
+    gridSpacing: { day: 30, week: 20, sprint: 10, month: 6 },
     weekends: true,
     dividers: false,
     minimap: true,
@@ -125,6 +126,7 @@ test("Reset view restores every default and leaves the plan path alone", async (
   await api(base, "POST", "/api/view", {
     zoom: "day",
     rowHeight: 120,
+    gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
     weekends: true,
     dividers: false,
     minimap: true,
@@ -158,6 +160,42 @@ test("switching the plan file keeps the view, and a view write keeps the path", 
   await api(base, "POST", "/api/view", { minimap: true });
   assert.equal(readConfig(configFile).config.planFile, other);
   assert.equal(readConfig(configFile).config.view.minimap, true);
+});
+
+test("each zoom keeps its own spacing across a switch", async () => {
+  const { base, configFile } = await server();
+  // Day is set to 30 while Week and the others stay at their defaults.
+  const day = await api(base, "POST", "/api/view", { gridSpacing: { day: 30 } });
+  assert.deepEqual(day.body.gridSpacing, { day: 30, week: 16, sprint: 8, month: 5 });
+  // Switching to Week returns Week's own spacing, not Day's; switching back
+  // returns 30, because a zoom's spacing is never reset on re-entry.
+  const week = await api(base, "POST", "/api/view", { zoom: "week" });
+  assert.equal(week.body.gridSpacing.week, 16);
+  assert.equal(week.body.gridSpacing.day, 30);
+  const back = await api(base, "POST", "/api/view", { zoom: "day" });
+  assert.equal(back.body.gridSpacing.day, 30);
+  assert.deepEqual(readConfig(configFile).config.view.gridSpacing,
+    { day: 30, week: 16, sprint: 8, month: 5 });
+});
+
+test("a malformed spacing falls back for that zoom alone", async () => {
+  const { base, configFile } = await server();
+  await api(base, "POST", "/api/view", { gridSpacing: { day: 30, week: 20 } });
+  const written = await api(base, "POST", "/api/view", {
+    gridSpacing: { day: "wide", week: 20, sprint: 2, month: 48 }
+  });
+  assert.equal(written.status, 200);
+  assert.deepEqual(written.body.gridSpacing, { day: 44, week: 20, sprint: 2, month: 48 });
+  assert.deepEqual(readConfig(configFile).config.view.gridSpacing, written.body.gridSpacing);
+});
+
+test("Reset view restores all four spacings", async () => {
+  const { base } = await server();
+  await api(base, "POST", "/api/view", { gridSpacing: { day: 2, week: 48, sprint: 40, month: 46 } });
+  const reset = await api(base, "POST", "/api/view", VIEW_DEFAULTS);
+  assert.deepEqual(reset.body.gridSpacing, { day: 44, week: 16, sprint: 8, month: 5 });
+  assert.deepEqual((await api(base, "GET", "/api/view")).body.gridSpacing,
+    { day: 44, week: 16, sprint: 8, month: 5 });
 });
 
 test("the view route refuses anything but GET and POST", async () => {
