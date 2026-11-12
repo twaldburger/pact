@@ -112,6 +112,7 @@ import {
   NAME_PREFIX_DEFAULT,
   NAME_NUMBER_DEFAULT
 } from "./lib/sprints.mjs";
+import { sprintDaysFigure } from "./lib/sprint-days.mjs";
 import {
   HOLIDAY_KINDS,
   HOLIDAY_KIND_DEFAULT,
@@ -2441,8 +2442,9 @@ function openSprintsPanel(trigger) {
   var cadence = cadenceFrom(data);
   var node = panelShell("Sprints",
     "The chain is derived from the cadence and the plan period; nothing about it is stored.");
-  // The derived list is three columns wide - name, start, end - so this panel
-  // takes a little more room than the others rather than squeezing the name.
+  // The derived list is four columns wide - name, start, end, and the row's
+  // days figure - so this panel takes a little more room than the others
+  // rather than squeezing the name.
   node.classList.add("panel--sprints");
   var periodStart = data.range ? data.range.start : "";
 
@@ -2551,6 +2553,14 @@ function openSprintsPanel(trigger) {
         save({ cadence: c, sprints: withAdjustment(currentAdjustments(), sp.index, { length: days }) }, renderList);
       });
       row.appendChild(end);
+
+      // The row's figures beside the editable length: the calendar length the
+      // end date states, then the working days the shared rule leaves over the
+      // sprint's own dates. A per-sprint length adjustment moves both because
+      // the count reads this row's start and end, not the cadence's default.
+      var days = el("span", "sprint-row__days");
+      days.textContent = sprintDaysFigure(sp, data.holidays);
+      row.appendChild(days);
       listWrap.appendChild(row);
     });
     clearBtn.hidden = false;
