@@ -12,7 +12,6 @@ import {
   isPalette
 } from "./palette.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
-import { MONTHS_SHORT } from "./label.mjs";
 
 export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays) {
   return [
@@ -124,12 +123,12 @@ export function paletteControl(active) {
   };
 }
 
-// One stored range date as the menu states it: the day, the short month and
-// the year, as in "1 Jan 2026". Anything that is not a full ISO date reads
-// empty rather than as a fragment.
+// One stored range date as the menu states it: two-digit day, month and year,
+// separated by dots, as in "01.01.26". Anything that is not a full ISO date
+// reads empty rather than as a fragment.
 function shortDate(iso) {
   if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
-  return +iso.slice(8, 10) + " " + MONTHS_SHORT[+iso.slice(5, 7) - 1] + " " + iso.slice(0, 4);
+  return iso.slice(8, 10) + "." + iso.slice(5, 7) + "." + iso.slice(2, 4);
 }
 
 /*

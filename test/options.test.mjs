@@ -116,7 +116,7 @@ test("the period control reads back the stored period", () => {
   const item = rangeControl({ start: "2026-09-01", end: "2027-10-31" });
   assert.equal(item.key, "range");
   assert.equal(item.label, "Plan period");
-  assert.equal(item.detail, "1 Sep 2026 - 31 Oct 2027");
+  assert.equal(item.detail, "01.09.26 - 31.10.27");
   assert.equal(item.start, "2026-09-01");
   assert.equal(item.end, "2027-10-31");
   // With no plan loaded the fields are simply empty, and the row says so
