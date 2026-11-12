@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "../public/lib/options.mjs";
+import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
 test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Grid dividers and Minimap", () => {
@@ -173,4 +173,36 @@ test("the palette, period and step are each one collapsed row, not a group", () 
   assert.equal(paletteControl("set3").label, "Colour palette");
   assert.equal(rangeControl(null).label, "Plan period");
   assert.equal(stepControl(10).label, "Percentage step");
+});
+
+test("the menu reads as three groups in order: the view, the plan and the app", () => {
+  const items = optionsItems(false, false, true, false, false);
+  assert.deepEqual(optionGroups(items), [
+    ["archived", "weekends", "holidays", "dividers", "minimap", "palette", "reset-view"],
+    ["range", "step", "sprints", "holidays"],
+    ["plan-file"]
+  ]);
+  // A future toggle joins the view group by being in optionsItems alone.
+  const added = items.concat([{ key: "noise", label: "X" }]);
+  assert.deepEqual(optionGroups(added)[0], ["archived", "weekends", "holidays", "dividers", "minimap", "noise", "palette", "reset-view"]);
+});
+
+test("two dividers are drawn, each on a group boundary", () => {
+  const items = optionsItems(false, false, true, false, false);
+  const dividers = optionDividerKeys(items);
+  assert.deepEqual(dividers, ["range", "plan-file"]);
+  assert.equal(dividers.length, 2);
+  // Each divider sits on the first row of a group after the menu's first.
+  const groups = optionGroups(items);
+  dividers.forEach((key) => assert.equal(groups.slice(1).some((group) => group[0] === key), true));
+});
+
+test("no row is divided because it is an action", () => {
+  const dividers = optionDividerKeys(optionsItems(false, false, true, false, false));
+  // The four actions: Reset view, Sprints, Holidays and Plan file. Only the
+  // one that opens a group carries a line.
+  assert.equal(dividers.includes("reset-view"), false);
+  assert.equal(dividers.includes("sprints"), false);
+  assert.equal(dividers.includes("holidays"), false);
+  assert.equal(dividers.includes("plan-file"), true);
 });
