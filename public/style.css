@@ -711,9 +711,10 @@ h1, h2, h3, p { margin: 0; }
   border-color: var(--ink);
 }
 
-/* The Sprints entry is an action, not a checked toggle: no tick, its detail
-   on the right, set off from the groups above it. */
-.options__item--action {
+/* A group boundary: the first row of each group after the menu's own first
+   carries this, so a line always means where one group ends and the next
+   begins. Which rows those are is options.mjs' rule, not a row's type. */
+.options__item--group {
   margin-top: var(--sp-2);
   border-top: 1px solid var(--rule);
 }

@@ -25,6 +25,32 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
 }
 
 /*
+ * The Options menu, group by group, top to bottom: the view, the plan and the
+ * app. `items` is optionsItems' own list, so a future toggle joins the view
+ * group without a second edit; the palette and Reset view follow them. The
+ * plan group's "holidays" is the action that opens the Holidays panel, not the
+ * highlight toggle of the same key above. This is the one place the menu's
+ * shape is stated; public/app.js appends its rows in this order.
+ */
+export function optionGroups(items) {
+  return [
+    items.map(function (item) { return item.key; }).concat(["palette", "reset-view"]),
+    ["range", "step", "sprints", "holidays"],
+    ["plan-file"]
+  ];
+}
+
+/*
+ * The rows a divider sits above: the first row of every group but the menu's
+ * own first. A line therefore always means a boundary between groups, never
+ * that a row happens to be an action. Derived from optionGroups so the two
+ * cannot drift apart.
+ */
+export function optionDividerKeys(items) {
+  return optionGroups(items).slice(1).map(function (group) { return group[0]; });
+}
+
+/*
  * The granularity of the Grid dividers: the finest time unit the active zoom
  * can show, as a name the drawing side turns into cells. It is one toggle, so
  * this is the whole rule. An unknown zoom falls back to the coarsest - month -

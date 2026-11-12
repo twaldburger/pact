@@ -26,7 +26,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "./lib/options.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -3767,6 +3767,15 @@ var holidaysOptionDetail = null;
 var planFileState = null;
 var planFileOptionDetail = null;
 
+// The rows a divider sits above, set from options.mjs' grouping rule as the
+// menu is built; every row builder asks it through optionRowClass, so no row
+// is set off merely because it is an action.
+var optionGroupDividers = [];
+
+function optionRowClass(key) {
+  return optionGroupDividers.indexOf(key) === -1 ? "options__item" : "options__item options__item--group";
+}
+
 // Every popover in the bar is fixed to the viewport and placed against its
 // trigger. The bar can scroll on its own when the window is narrow, so this
 // keeps a popover out of that scroller - it is never clipped by it and never
@@ -3882,8 +3891,10 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays).forEach(function (item) {
-    var btn = el("button", "options__item");
+  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays);
+  optionGroupDividers = optionDividerKeys(items);
+  items.forEach(function (item) {
+    var btn = el("button", optionRowClass(item.key));
     btn.type = "button";
     btn.id = "option-" + item.key;
     btn.setAttribute("role", "menuitemcheckbox");
@@ -3912,7 +3923,7 @@ function buildOptionsMenu() {
  * control in place rather than in a popup. One row is open at a time, and the
  * value line stays visible on the open row so it keeps its meaning. */
 function buildDisclosureRow(item, panel) {
-  var btn = el("button", "options__item options__item--disclosure");
+  var btn = el("button", optionRowClass(item.key) + " options__item--disclosure");
   btn.type = "button";
   btn.id = "option-" + item.key;
   btn.setAttribute("role", "menuitem");
@@ -3961,7 +3972,7 @@ function setDisclosureDetail(key, text) {
  * setting to its default in one press and leaves the plan path, the Filter and
  * the Marker alone. */
 function buildResetViewItem() {
-  var btn = el("button", "options__item options__item--action");
+  var btn = el("button", optionRowClass("reset-view") + " options__item--action");
   btn.type = "button";
   btn.id = "option-reset-view";
   btn.setAttribute("role", "menuitem");
@@ -3974,7 +3985,7 @@ function buildResetViewItem() {
  * its detail states whether a cadence exists yet. */
 function buildSprintsItem() {
   var item = sprintsItem(!!sprintCadence);
-  var btn = el("button", "options__item options__item--action");
+  var btn = el("button", optionRowClass(item.key) + " options__item--action");
   btn.type = "button";
   btn.id = "option-sprints";
   btn.setAttribute("role", "menuitem");
@@ -3998,7 +4009,7 @@ function updateSprintsItem() {
  * its detail counts the dates already configured. */
 function buildHolidaysItem() {
   var item = holidaysItem(data && data.holidays);
-  var btn = el("button", "options__item options__item--action");
+  var btn = el("button", optionRowClass(item.key) + " options__item--action");
   btn.type = "button";
   btn.id = "option-holidays";
   btn.setAttribute("role", "menuitem");
@@ -4022,7 +4033,7 @@ function updateHolidaysItem() {
  * and its detail names the active file, or says PACT_DATA fixes it. */
 function buildPlanFileItem() {
   var item = planFileItem(planFileState);
-  var btn = el("button", "options__item options__item--action");
+  var btn = el("button", optionRowClass(item.key) + " options__item--action");
   btn.type = "button";
   btn.id = "option-plan-file";
   btn.setAttribute("role", "menuitem");
