@@ -81,9 +81,6 @@ grid, the filter, the panels, sorting and the view state.
 - [`docs/scope.md`](docs/scope.md) - what the first version covers.
 - [`docs/adr/`](docs/adr) - the decisions behind it.
 
-Contributions are welcome as issues and pull requests; read the glossary and the
-ADRs first, and run the tests before you send one.
-
 ## Licence
 
 MIT, 2026 twaldburger - see [LICENSE](LICENSE).
