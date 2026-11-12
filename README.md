@@ -16,8 +16,7 @@ on a small seeded plan so the screen is not empty. The plan is one JSON file,
 `data/default.pact.json`, created on first run from that seed and written as it
 changes. That seed is convenience data for the design, and so is the plan behind
 the screenshots in this repository's issues and pull requests: neither uses
-anyone's real colleagues, clients or engagements. `PORT` serves elsewhere, and
-`PACT_DATA` keeps the plan file elsewhere.
+anyone's real colleagues, clients or engagements.
 
 ## What it does
 
