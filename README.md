@@ -14,7 +14,10 @@ That is the whole of the setup: no install, no build, no dependency. The server
 prints the URL it is serving on, by default <http://localhost:4173>, and opens
 on a small seeded plan so the screen is not empty. The plan is one JSON file,
 `data/default.pact.json`, created on first run from that seed and written as it
-changes. `PORT` serves elsewhere, and `PACT_DATA` keeps the plan file elsewhere.
+changes. That seed is convenience data for the design, and so is the plan behind
+the screenshots in this repository's issues and pull requests: neither uses
+anyone's real colleagues, clients or engagements. `PORT` serves elsewhere, and
+`PACT_DATA` keeps the plan file elsewhere.
 
 ## What it does
 
