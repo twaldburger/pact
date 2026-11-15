@@ -875,6 +875,10 @@ test("a malformed tag-colour entry is refused by name", () => {
   assert.deepEqual(validatePlan(plan), ["tagColours.colours must be an object"]);
   plan.tagColours = "api";
   assert.deepEqual(validatePlan(plan), ["tagColours must be an object"]);
+  // A tag colour is a slot, not a legacy project ink name; there is no earlier
+  // shape to migrate here.
+  plan.tagColours = { colours: { "api:Stellar": "steel" } };
+  assert.deepEqual(validatePlan(plan), ["tagColours.colours['api:Stellar'] must be a slot 0..9"]);
 });
 
 test("the store sets the tag colours and they round-trip through the plan file", () => {
