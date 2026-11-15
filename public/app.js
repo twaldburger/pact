@@ -29,7 +29,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
@@ -41,6 +41,19 @@ import {
   labelInkFor,
   leastUsedSlot
 } from "./lib/palette.mjs";
+import {
+  TAG_LEVELS,
+  TAG_LEVEL_LABELS,
+  isTypedTag,
+  tagKind,
+  tagKeys,
+  tagColourSlots,
+  assignmentSlot,
+  personSlot,
+  planTypedTags,
+  tagKindGroups,
+  cleanTagColours
+} from "./lib/tags.mjs";
 import {
   defaultScopes,
   filterPlan,
@@ -173,6 +186,11 @@ var DAYS = 1;
 var startDow = 0;
 var projectById = {};
 var personById = {};
+// The typed tags' colour-by-key choices and value colours, resolved from the
+// loaded plan. Empty without a stored mapping, so nothing is coloured by a kind
+// until one is chosen.
+var tagKeyMap = {};
+var tagSlotMap = {};
 var assignments = [];
 var markerIndex = 0;
 var marker = null;
@@ -282,6 +300,15 @@ function activeColour(slot) {
   return Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT ? palette[slot] : palette[0];
 }
 
+// The slot an Assignment's block draws in, from the typed tags resolved at
+// index time, or its Project's own palette colour when no key colours it. The
+// rule is public/lib/tags.mjs': its own tag under the assignments key, then its
+// Project's under the projects key, then the Project colour.
+function blockColourSlot(a) {
+  var slot = assignmentSlot(a.raw && a.raw.tags, a.project && a.project.tags, tagKeyMap, tagSlotMap);
+  return slot !== null ? slot : a.project.colour;
+}
+
 /* --- data index ---------------------------------------------------------- */
 
 function indexData() {
@@ -300,6 +327,11 @@ function indexData() {
   data.projects.forEach(function (p) { projectById[p.id] = p; });
   personById = {};
   data.people.forEach(function (p) { personById[p.id] = p; });
+
+  // The typed tags' colours, resolved from the plan so a draw reads two plain
+  // maps rather than the stored shape.
+  tagKeyMap = tagKeys(data.tagColours);
+  tagSlotMap = tagColourSlots(data.tagColours);
 
   assignments = data.assignments.map(function (a) {
     var s = udate(a.start), e = udate(a.end);
@@ -626,6 +658,16 @@ function drawRows() {
     var name = el("span", "rowhead__name");
     name.textContent = person.name;
     head.appendChild(name);
+    // A Person's key colour as a mark beside their name, from their own tag
+    // under the people key; a Person with no such tag keeps the row as it was,
+    // since People have no palette colour of their own.
+    var markSlot = personSlot(person.tags, tagKeyMap, tagSlotMap);
+    if (markSlot !== null) {
+      var mark = el("span", "rowhead__mark");
+      mark.style.setProperty("--mark", "var(--proj-" + markSlot + ")");
+      mark.setAttribute("aria-hidden", "true");
+      name.appendChild(mark);
+    }
     if (!person.archived) {
       var fig = el("span", "rowhead__fig");
       fig.setAttribute("data-fig", person.id);
@@ -706,10 +748,10 @@ function blockFor(group, s) {
     (absence ? ", absence" : "") +
     (archived ? ", archived" : "") +
     ". Enter for details.");
-  b.style.setProperty("--block-ink", "var(--proj-" + a.project.colour + ")");
+  b.style.setProperty("--block-ink", "var(--proj-" + blockColourSlot(a) + ")");
   // The label ink is chosen per fill, so a pastel takes the deep ink and a dark
   // member takes white. It is a property of the drawn fill, not of the slot.
-  b.style.setProperty("--block-label", labelInkFor(activeColour(a.project.colour)));
+  b.style.setProperty("--block-label", labelInkFor(activeColour(blockColourSlot(a))));
   set(b, s.start, s.end - s.start + 1);
   b.style.setProperty("--blk-bottom", yPx(s.offset) + "px");
   b.style.setProperty("--blk-height", (yPx(s.offset + group.h) - yPx(s.offset)) + "px");
@@ -2824,6 +2866,165 @@ function openHolidaysPanel(trigger) {
   openPanel(node, trigger);
 }
 
+/* --- Tags panel ---------------------------------------------------------- */
+
+// The colour-by-key choices and the value colours, beside the Sprints and
+// Holidays panels. Every write is one PATCH /api/plan with the whole mapping,
+// so the store sets it in one atomic commit and one undo step, and it travels
+// with the plan. The panel stays open across the save so a run of values can be
+// coloured in one sitting.
+function openTagsPanel(trigger) {
+  var node = panelShell("Tags",
+    "Pick a key per level to colour by, and a palette slot for each typed value. The mapping travels with the plan.");
+  node.classList.add("panel--tags");
+
+  // The mapping as it is being edited, cloned from the plan so a cancelled
+  // panel leaves it alone.
+  var working = {
+    keys: Object.assign({}, tagKeys(data.tagColours)),
+    colours: Object.assign({}, tagColourSlots(data.tagColours))
+  };
+
+  var error = errorLine(node);
+
+  // Every typed tag the plan carries, plus any the stored mapping still
+  // colours, so a value whose tag was removed can still be cleared.
+  function allTypedTags() {
+    var tags = planTypedTags(data);
+    Object.keys(working.colours).forEach(function (tag) {
+      if (tags.indexOf(tag) === -1 && isTypedTag(tag)) tags.push(tag);
+    });
+    return tags;
+  }
+
+  function kindsInUse() {
+    var kinds = {};
+    allTypedTags().forEach(function (tag) { kinds[tagKind(tag)] = true; });
+    TAG_LEVELS.forEach(function (level) {
+      if (working.keys[level]) kinds[working.keys[level]] = true;
+    });
+    return Object.keys(kinds).filter(function (kind) { return kind !== ""; })
+      .sort(function (a, b) {
+        var x = a.toLowerCase(), y = b.toLowerCase();
+        return x < y ? -1 : x > y ? 1 : a < b ? -1 : 1;
+      });
+  }
+
+  var keyRows = el("div", "tag-keys");
+  node.appendChild(keyRows);
+
+  var listWrap = el("div", "tag-list");
+  node.appendChild(listWrap);
+
+  function renderKeys() {
+    keyRows.innerHTML = "";
+    var kinds = kindsInUse();
+    TAG_LEVELS.forEach(function (level) {
+      var select = document.createElement("select");
+      select.setAttribute("aria-label", "Colour " + TAG_LEVEL_LABELS[level] + " by key");
+      var none = document.createElement("option");
+      none.value = "";
+      none.textContent = "No key";
+      select.appendChild(none);
+      kinds.forEach(function (kind) {
+        var option = document.createElement("option");
+        option.value = kind;
+        option.textContent = kind;
+        select.appendChild(option);
+      });
+      select.value = working.keys[level] || "";
+      select.addEventListener("change", function () {
+        if (select.value === "") delete working.keys[level];
+        else working.keys[level] = select.value;
+      });
+      keyRows.appendChild(formRow(TAG_LEVEL_LABELS[level], select));
+    });
+  }
+
+  function renderList() {
+    listWrap.innerHTML = "";
+    var groups = tagKindGroups(allTypedTags());
+    if (!groups.length) {
+      var empty = el("p", "tag-list__empty");
+      empty.textContent = "No typed tags yet. A tag like api:Stellar reads as the kind api and the value Stellar.";
+      listWrap.appendChild(empty);
+      return;
+    }
+    groups.forEach(function (group) {
+      var card = el("div", "tag-group");
+      var heading = el("p", "tag-group__kind");
+      heading.textContent = group.kind;
+      card.appendChild(heading);
+      group.values.forEach(function (entry) {
+        var row = el("div", "tag-row");
+        var name = el("span", "tag-row__value");
+        name.textContent = entry.value;
+        row.appendChild(name);
+
+        var swatches = el("span", "swatches");
+        var buttons = [];
+        for (var i = 0; i < SLOT_COUNT; i += 1) {
+          var sw = el("button", "swatch");
+          sw.type = "button";
+          sw.style.setProperty("--pick", "var(--proj-" + i + ")");
+          sw.setAttribute("aria-label", entry.value + " colour " + (i + 1));
+          sw.setAttribute("aria-pressed", working.colours[entry.tag] === i ? "true" : "false");
+          sw.dataset.slot = String(i);
+          sw.dataset.tag = entry.tag;
+          sw.addEventListener("click", function () {
+            var tag = this.dataset.tag;
+            working.colours[tag] = Number(this.dataset.slot);
+            buttons.forEach(function (b) {
+              b.setAttribute("aria-pressed", b.dataset.tag === tag &&
+                working.colours[tag] === Number(b.dataset.slot) ? "true" : "false");
+            });
+          });
+          swatches.appendChild(sw);
+          buttons.push(sw);
+        }
+        row.appendChild(swatches);
+
+        var clear = button("tag-row__clear", "Clear", function () {
+          delete working.colours[entry.tag];
+          renderList();
+        });
+        row.appendChild(clear);
+        card.appendChild(row);
+      });
+      listWrap.appendChild(card);
+    });
+  }
+
+  var foot = el("div", "panel__foot");
+  foot.appendChild(el("span", "panel__spacer"));
+  var save = saveButton("Save tags", function () {
+    var cleaned = cleanTagColours(working);
+    error.clear();
+    save.disabled = true;
+    api("PATCH", "/api/plan", { tagColours: cleaned })
+      .then(function () { return refresh({ keepPanel: true }); })
+      .then(function () {
+        updateTagsItem();
+        working = {
+          keys: Object.assign({}, tagKeys(data.tagColours)),
+          colours: Object.assign({}, tagColourSlots(data.tagColours))
+        };
+        renderKeys();
+        renderList();
+      })
+      .catch(function (err) {
+        error.set(err && err.message ? err.message : "Could not save the tags.");
+      })
+      .then(function () { save.disabled = false; });
+  });
+  foot.appendChild(save);
+  node.appendChild(foot);
+
+  renderKeys();
+  renderList();
+  openPanel(node, trigger);
+}
+
 /* --- zoom ---------------------------------------------------------------- */
 
 // Bring today into the middle of the day area, leaving the sticky row-header
@@ -3912,6 +4113,7 @@ var stepInput = null;
 var stepError = null;
 var sprintsOptionDetail = null;
 var holidaysOptionDetail = null;
+var tagsOptionDetail = null;
 var planFileState = null;
 var planFileOptionDetail = null;
 
@@ -4064,6 +4266,7 @@ function buildOptionsMenu() {
   buildDisclosureRow(stepControl(data && data.step), buildStepControl());
   optionsMenu.appendChild(buildSprintsItem());
   optionsMenu.appendChild(buildHolidaysItem());
+  optionsMenu.appendChild(buildTagsItem());
   optionsMenu.appendChild(buildPlanFileItem());
 }
 
@@ -4175,6 +4378,31 @@ function buildHolidaysItem() {
 function updateHolidaysItem() {
   if (!holidaysOptionDetail) return;
   holidaysOptionDetail.textContent = holidaysItem(data && data.holidays).detail;
+}
+
+/* The Tags entry: an action, not a toggle. It opens the Tags panel, where the
+ * colour-by-key choices and the value colours are set, and its detail states
+ * what the panel holds. */
+function buildTagsItem() {
+  var item = tagsItem(data && data.tagColours);
+  var btn = el("button", optionRowClass(item.key) + " options__item--action");
+  btn.type = "button";
+  btn.id = "option-tags";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  tagsOptionDetail = el("span", "options__item-detail");
+  tagsOptionDetail.textContent = item.detail;
+  btn.appendChild(tagsOptionDetail);
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openTagsPanel(btn);
+  });
+  return btn;
+}
+
+function updateTagsItem() {
+  if (!tagsOptionDetail) return;
+  tagsOptionDetail.textContent = tagsItem(data && data.tagColours).detail;
 }
 
 /* The Plan file entry: an action, not a toggle. It opens the Plan file panel
@@ -4542,6 +4770,7 @@ function openOptions(open) {
     updateStepControl();
     updateSprintsItem();
     updateHolidaysItem();
+    updateTagsItem();
     loadPlanFileState();
   } else {
     closeDisclosure();

@@ -1542,6 +1542,19 @@ h1, h2, h3, p { margin: 0; }
   line-height: 1.2;
 }
 
+/* A Person's colour-by-key mark: a small dot beside the name, in the tag's
+   palette colour. It sits inside the name so it flows with the text and never
+   becomes a line of its own. */
+.rowhead__mark {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-left: var(--sp-2);
+  border-radius: 50%;
+  background: var(--mark);
+  vertical-align: baseline;
+}
+
 /* On its own line, left-aligned under the name so the two read as one column,
    and never against a right edge. The heavier weight lets the twenty figures
    read as one comparable column. */
@@ -2400,6 +2413,73 @@ down to the last row and no further. */
 .holiday__remove:hover { color: var(--signal); border-color: var(--rule-strong); }
 
 .holiday__add { margin-top: var(--sp-2); }
+
+/* The Tags panel: three colour-by-key choices, then one card per kind holding
+   its values, each with the ten palette slots and a Clear. The swatches are the
+   Project panel's own, so a tag colour is picked the same way a Project's is. */
+.panel--tags { width: 26rem; }
+
+.tag-keys { margin-top: var(--sp-3); }
+
+.tag-keys select {
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.tag-list { margin-top: var(--sp-4); }
+
+.tag-list__empty {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.tag-group {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.tag-group__kind {
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  color: var(--ink);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.tag-row__value {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-data);
+  color: var(--ink);
+}
+
+.tag-row__clear {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-axis);
+  cursor: pointer;
+}
+
+.tag-row__clear:hover { color: var(--signal); border-color: var(--rule-strong); }
 
 .noscript {
   margin: var(--sp-6);

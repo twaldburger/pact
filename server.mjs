@@ -78,6 +78,10 @@ function planForClient(store, includeArchived) {
     // Absent until holidays are configured, so a plan without them reaches the
     // client exactly as it always has.
     holidays: plan.holidays,
+    // The typed tags' colour-by-key choices and value colours, passed through
+    // as stored. Absent until configured, so a plan without them reaches the
+    // client exactly as it always has.
+    tagColours: plan.tagColours,
     people: visible.people,
     projects: visible.projects,
     assignments: visible.assignments,
@@ -250,6 +254,9 @@ export function createServer(store, options) {
               }
               if (body && Object.prototype.hasOwnProperty.call(body, "holidays")) {
                 return sendJSON(res, 200, store.setHolidays(body));
+              }
+              if (body && Object.prototype.hasOwnProperty.call(body, "tagColours")) {
+                return sendJSON(res, 200, store.setTagColours(body));
               }
               return sendJSON(res, 200, store.setRange(body));
             });

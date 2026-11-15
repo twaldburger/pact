@@ -135,6 +135,28 @@ test("the holidays can be set, read back and refused over the plan route", async
   assert.equal(store.get().holidays, undefined);
 });
 
+test("the tag colours can be set, read back and refused over the plan route", async () => {
+  const { base, store } = await server();
+  const tagColours = { keys: { projects: "api", people: "skill" }, colours: { "api:Stellar": 3 } };
+  const set = await api(base, "PATCH", "/api/plan", { tagColours: tagColours });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.body, { tagColours: tagColours });
+  assert.deepEqual(store.get().tagColours, tagColours);
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.deepEqual(read.body.tagColours, tagColours);
+
+  const bad = await api(base, "PATCH", "/api/plan", { tagColours: { colours: { "api:Stellar": 42 } } });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /tagColours\.colours/);
+  // The refusal left the stored mapping alone.
+  assert.deepEqual(store.get().tagColours, tagColours);
+
+  const cleared = await api(base, "PATCH", "/api/plan", { tagColours: null });
+  assert.equal(cleared.status, 200);
+  assert.equal(store.get().tagColours, undefined);
+});
+
 test("the server accepts an off-step whole value over the API", async () => {
   const { base } = await server();
   const created = await api(base, "POST", "/api/assignments", {
