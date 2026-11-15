@@ -3,14 +3,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { topbarMarkup } from "../public/lib/topbar.mjs";
 
 // The zoom control's two visible contracts: the order its levels read in, and
 // the fact that the Sprint level looks disabled while no cadence exists. Both
-// live in the markup and stylesheet, so they are read here rather than in a
-// browser; the rendered opacity and hover tint are checked by hand.
+// live in the shared bar markup and the stylesheet, so they are read here
+// rather than in a browser; the rendered opacity and hover tint are checked by
+// hand.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(HERE, "..", "public");
-const HTML = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
+const HTML = topbarMarkup("plan");
 const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
 
 const GROUP = HTML.match(/<div class="zoom"[^>]*>([\s\S]*?)<\/div>/);

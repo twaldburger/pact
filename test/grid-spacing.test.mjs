@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { topbarMarkup } from "../public/lib/topbar.mjs";
 
 // The Grid spacing control's markup and styling, read from the files rather
 // than a browser: where the pair sits in the bar, that it is drawn with
@@ -11,10 +12,10 @@ import { fileURLToPath } from "node:url";
 // width and the clamp itself are checked by the geometry and API tests.
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(HERE, "..", "public");
-const HTML = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
+const HTML = topbarMarkup("plan");
 const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
 
-const INSTRUMENTS = HTML.match(/<div class="topbar__instruments">([\s\S]*?)<main\b/);
+const INSTRUMENTS = HTML.match(/<div class="topbar__instruments">([\s\S]*)/);
 const SPACING_GROUP = HTML.match(/<div class="spacing"[^>]*>([\s\S]*?)<\/div>/);
 const ROWHEIGHT_GROUP = HTML.match(/<div class="rowheight"[^>]*>([\s\S]*?)<\/div>/);
 

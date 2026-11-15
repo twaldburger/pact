@@ -202,6 +202,42 @@ h1, h2, h3, p { margin: 0; }
   letter-spacing: -0.01em;
 }
 
+/* The Plan/Report switch: one segmented control beside the wordmark, in the
+   bar's shared control language. It is a pair of real links, so the move to a
+   view is a navigation to that view's own page, and the page showing marks
+   itself with aria-current. */
+.viewswitch {
+  display: flex;
+  align-items: stretch;
+  height: var(--control-h);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.viewswitch__btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  border-right: 1px solid var(--rule);
+  color: var(--ink-soft);
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+  line-height: 1;
+  text-decoration: none;
+}
+
+.viewswitch__btn:last-child { border-right: 0; }
+
+.viewswitch__btn:hover:not([aria-current="page"]) {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+.viewswitch__btn[aria-current="page"] {
+  background: var(--ink);
+  color: var(--canvas);
+}
+
 .topbar__context {
   font-size: var(--fs-data);
   color: var(--ink-soft);
@@ -694,8 +730,15 @@ h1, h2, h3, p { margin: 0; }
   cursor: pointer;
 }
 
-.options__item:hover {
+.options__item:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+/* An entry a report cannot act on: visibly unavailable and not focusable, but
+   keeping its place in the menu. */
+.options__item:disabled {
+  opacity: var(--op-disabled);
+  cursor: default;
 }
 
 .options__tick {
@@ -836,6 +879,49 @@ h1, h2, h3, p { margin: 0; }
 
 .filter-empty__line { font-size: var(--fs-body); }
 .filter-empty__hint { font-size: var(--fs-data); color: var(--ink-soft); }
+
+/* The report's shell: the same board and rail as the plan, with a placeholder
+   where the report's own content will go. It is one column of the timeline
+   grid, so it fills the scroller without the grid's day columns. */
+.tl.is-report {
+  width: 100%;
+  min-height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.report-placeholder {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  text-align: center;
+}
+
+.report-placeholder__title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
+  color: var(--ink);
+}
+
+.report-placeholder__lead {
+  max-width: 34rem;
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+
+.report-placeholder__line {
+  margin: 0;
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
 
 /* Board --------------------------------------------------------------------- */
 

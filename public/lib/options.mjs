@@ -50,6 +50,18 @@ export function optionDividerKeys(items) {
 }
 
 /*
+ * The menu entries a report cannot act on, by key: the grid's own display
+ * toggles (the weekend band, the holiday band, the Grid dividers and the
+ * Minimap) and Reset view. A report draws no grid and makes no plan writes, so
+ * these are disabled rather than moved or hidden; the plan-facing entries and
+ * the Set of archived records stay live. Expressed here, beside the menu's own
+ * items, so the menu and the report cannot disagree about which rows act.
+ */
+export function reportDisabledOptionKeys() {
+  return ["weekends", "holidays", "dividers", "minimap", "reset-view"];
+}
+
+/*
  * The granularity of the Grid dividers: the finest time unit the active zoom
  * can show, as a name the drawing side turns into cells. It is one toggle, so
  * this is the whole rule. An unknown zoom falls back to the coarsest - month -
