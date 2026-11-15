@@ -87,6 +87,63 @@ test("both pages carry the empty bar host and load the one script", () => {
   assert.match(report, /<html lang="en"[^>]*data-view="report"/);
 });
 
+/* --- the report mounts no rail -------------------------------------------- */
+
+// Everything the Projects rail is made of, including the control that folds it
+// and the add control in its head. A report has no timeline to drop a Project
+// onto, so it mounts none of these and its content takes the whole board.
+const RAIL_MARKUP = [
+  '<aside class="stack"',
+  'id="stack-list"',
+  'id="stack-hint"',
+  'id="add-project"',
+  'class="rail-toggle"',
+  'id="rail-toggle-count"'
+];
+
+test("the report page mounts no Projects rail, and the plan keeps its own", () => {
+  const index = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
+  const report = fs.readFileSync(path.join(PUBLIC, "report.html"), "utf8");
+  RAIL_MARKUP.forEach((part) => {
+    assert.equal(report.includes(part), false, "the report still mounts " + part);
+    assert.equal(index.includes(part), true, "the plan lost " + part);
+  });
+});
+
+test("the report's board is one column and the plan's stays two", () => {
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const reportBoard = STYLE.match(/html\[data-view="report"\] \.board\s*\{([^}]*)\}/);
+  const reportScroller = STYLE.match(/html\[data-view="report"\] \.scroller\s*\{([^}]*)\}/);
+  assert.ok(reportBoard, "the report's board rule is missing");
+  assert.ok(reportScroller, "the report's scroller rule is missing");
+  // One track, so the content takes the whole board rather than the second
+  // track beside an empty rail column.
+  assert.match(reportBoard[1], /grid-template-columns:\s*minmax\(0, 1fr\);/);
+  assert.match(reportScroller[1], /grid-column:\s*1;/);
+  // The plan's own rules are untouched: two tracks, the scroller in the second.
+  const planBoard = STYLE.match(/^\.board\s*\{([^}]*)\}/m);
+  const planScroller = STYLE.match(/^\.scroller\s*\{([^}]*)\}/m);
+  assert.ok(planBoard, "the plan's board rule is missing");
+  assert.ok(planScroller, "the plan's scroller rule is missing");
+  assert.match(planBoard[1], /grid-template-columns:\s*minmax\(0, var\(--rail-w\)\) minmax\(0, 1fr\);/);
+  assert.match(planScroller[1], /grid-column:\s*2;/);
+  // And the collapsed track the rail's toggle drives is still there.
+  assert.match(STYLE, /\.board\.is-collapsed\s*\{[^}]*grid-template-columns:/);
+});
+
+test("the report draws no rail and holds no rail's state", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const reportRender = APP.slice(APP.indexOf("function renderReport() {"),
+    APP.indexOf("\nfunction render(opts) {"));
+  assert.ok(reportRender.length > 0, "renderReport is missing");
+  // No rail to draw, no toggle to synchronise and no hint about dropping a
+  // Project on a row - a report has no rows to drop onto.
+  assert.doesNotMatch(reportRender, /drawStack|syncStackToggle|stackHint/);
+  // The shared draw is still wired for the plan, which is what owns them.
+  assert.match(APP, /\n  drawStack\(\);\n/);
+  assert.match(APP, /\n  syncStackToggle\(\);\n/);
+});
+
 /* --- what a report withdraws ---------------------------------------------- */
 
 test("a report withdraws exactly the grid's own controls", () => {
