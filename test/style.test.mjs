@@ -305,6 +305,56 @@ test("an absence block is hatched all over, not with the over-allocation band", 
   assert.match(APP, /is-absence/);
 });
 
+/* --- the hollow untagged block ------------------------------------------- */
+
+// The hollow treatment: once a block key is chosen, a block with no colour
+// from it draws as an unfilled cell. The border is a 1px inset shadow on the
+// block itself, so it is drawn inside the box and the block's width (the
+// zoom's day width) and height (the row height) are untouched - an ordinary
+// border would add to both. The shadow's ink is the mid --ink-soft, darker
+// than the pale --rule of the grid dividers, so the two cannot be mistaken.
+const HOLLOW = STYLE.match(/\.blk\.is-hollow\s*\{([^}]*)\}/);
+const HOLLOW_HOVER = STYLE.match(/\.blk\.is-hollow:hover,\s*\.blk\.is-hollow:focus-visible\s*\{([^}]*)\}/);
+
+test("a hollow block is unfilled and bordered inside its own box", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  assert.ok(HOLLOW, "the .blk.is-hollow rule is missing");
+  const rule = HOLLOW[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.equal(declaration(HOLLOW[1], "background"), "transparent");
+  // The only edge is an inset shadow: drawn inside the box, and named as such.
+  const shadow = declaration(HOLLOW[1], "box-shadow");
+  assert.match(shadow, /inset/);
+  assert.match(shadow, /0 0 0 1px/);
+  // Nothing here adds to the block's size: no border, width or height.
+  assert.doesNotMatch(rule, /(^|[;\s])border\s*:/);
+  assert.doesNotMatch(rule, /(^|[;\s])border-width\s*:/);
+  assert.doesNotMatch(rule, /(^|[;\s])width\s*:/);
+  assert.doesNotMatch(rule, /(^|[;\s])height\s*:/);
+  // The edge reads apart from the grid's own dividers.
+  assert.doesNotMatch(shadow, /var\(--rule\)/);
+  assert.doesNotMatch(shadow, /var\(--rule-strong\)/);
+  assert.match(shadow, /var\(--ink-soft\)/);
+  assert.match(STYLE, /--ink-soft:\s*#[0-9a-fA-F]{6};/);
+  // The hover, which fills a coloured block, cannot fill a hollow one; it
+  // lifts with a faint tint that leaves the border standing.
+  assert.ok(HOLLOW_HOVER, "the hollow hover rule is missing");
+  assert.match(declaration(HOLLOW_HOVER[1], "background"), /transparent/);
+  // The state comes from the shared rule and the label takes the deep ink.
+  assert.match(APP, /blockIsHollow\(/);
+  assert.match(APP, /hollow \? " is-hollow" : ""/);
+  assert.match(APP, /hollow \? DEEP_INK : labelInkFor\(/);
+});
+
+// An untagged absence must read as both: the hatch paints over the hollow
+// block and takes the same --block-label, so neither replaces the other.
+test("a hollow absence keeps its hatch", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  assert.ok(ABSENCE_HATCH, "the .blk.is-absence::before rule is missing");
+  assert.match(ABSENCE_HATCH[1], /var\(--block-label\)/);
+  // Both classes land on the one block, so the two treatments compose.
+  assert.match(APP, /is-absence" : ""\) \+ \(hollow \? " is-hollow"/);
+});
+
 /* --- the absence and holiday check marks --------------------------------- */
 
 // The Absence checkbox and the holiday radios were on the browser's own blue

@@ -13,6 +13,7 @@ import {
   tagColourSlots,
   assignmentSlot,
   personSlot,
+  blockIsHollow,
   planTypedTags,
   tagKindGroups,
   tagsUnderKeys,
@@ -85,6 +86,39 @@ test("a Person draws from their own tag under the people key, or nothing", () =>
   assert.equal(personSlot(["skill:Ops"], keys, colours), null);
   assert.equal(personSlot([], keys, colours), null);
   assert.equal(personSlot(["skill:DevOps"], {}, colours), null);
+});
+
+/*
+ * The two states of an untagged block. With no block key chosen the resolution
+ * being null changes nothing - the block keeps its Project colour - and only
+ * once a block key is chosen does a block no chosen key colours draw hollow.
+ */
+test("an untagged block draws hollow only once a key colours blocks by", () => {
+  const keys = { projects: "api", people: "skill", assignments: "work" };
+  const colours = { "api:Stellar": 1, "work:Release": 5, "skill:DevOps": 7 };
+  // A chosen key colours the block either way, so it is not hollow.
+  assert.equal(blockIsHollow(["work:Release"], ["api:Stellar"], keys, colours), false);
+  assert.equal(blockIsHollow([], ["api:Stellar"], keys, colours), false);
+  // No chosen key colours this block, so it would fall back to its Project
+  // colour and instead draws hollow.
+  assert.equal(blockIsHollow([], [], keys, colours), true);
+  // With no block key chosen at all nothing changes, even though the skill
+  // mapping would not colour the block either.
+  assert.equal(blockIsHollow([], [], {}, colours), false);
+  assert.equal(blockIsHollow([], [], { people: "skill" }, colours), false);
+  // Choosing only the assignments key hollows a block with no own tag, since
+  // the projects key is not there to colour it.
+  assert.equal(blockIsHollow([], ["api:Stellar"], { assignments: "work" }, colours), true);
+});
+
+// A Person has no palette colour to fall back to, so an untagged Person shows
+// no mark once the people key is chosen rather than a colour mark.
+test("an untagged Person shows no mark under the people key", () => {
+  const keys = { people: "skill" };
+  const colours = { "skill:DevOps": 6, "skill": 2 };
+  assert.equal(personSlot(["skill:Ops"], keys, colours), null);
+  assert.equal(personSlot([], keys, colours), null);
+  assert.equal(personSlot(["lead"], keys, colours), null);
 });
 
 test("the levels are the three a key can be chosen for", () => {
