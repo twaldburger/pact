@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "../public/lib/options.mjs";
+import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 
 test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Grid dividers and Minimap", () => {
@@ -112,6 +112,21 @@ test("the Holidays entry counts the configured dates", () => {
   ]).detail, "2 dates");
 });
 
+test("the Tags entry states what the panel holds", () => {
+  assert.equal(tagsItem(undefined).key, "tags");
+  assert.equal(tagsItem(undefined).label, "Tags...");
+  assert.equal(tagsItem(undefined).detail, "None yet");
+  assert.equal(tagsItem({}).detail, "None yet");
+  assert.equal(tagsItem({ keys: { projects: "api" } }).detail, "1 key");
+  assert.equal(tagsItem({ keys: { projects: "api", people: "skill" } }).detail, "2 keys");
+  assert.equal(tagsItem({ colours: { "api:Stellar": 2 } }).detail, "1 colour");
+  assert.equal(tagsItem({ colours: { "api:Stellar": 2, "skill:DevOps": 1 } }).detail, "2 colours");
+  assert.equal(tagsItem({ keys: { projects: "api" }, colours: { "api:Stellar": 2 } }).detail, "1 key, 1 colour");
+  // A malformed mapping counts for nothing rather than reporting a value it
+  // could never colour.
+  assert.equal(tagsItem({ keys: { bogus: "api" }, colours: { nottyped: 1 } }).detail, "None yet");
+});
+
 test("the period control reads back the stored period", () => {
   const item = rangeControl({ start: "2026-09-01", end: "2027-10-31" });
   assert.equal(item.key, "range");
@@ -179,7 +194,7 @@ test("the menu reads as three groups in order: the view, the plan and the app", 
   const items = optionsItems(false, false, true, false, false);
   assert.deepEqual(optionGroups(items), [
     ["archived", "weekends", "holidays", "dividers", "minimap", "palette", "reset-view"],
-    ["range", "step", "sprints", "holidays"],
+    ["range", "step", "sprints", "holidays", "tags"],
     ["plan-file"]
   ]);
   // A future toggle joins the view group by being in optionsItems alone.

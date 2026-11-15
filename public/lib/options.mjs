@@ -12,6 +12,7 @@ import {
   isPalette
 } from "./palette.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
+import { tagKeys, tagColourSlots } from "./tags.mjs";
 
 export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays) {
   return [
@@ -34,7 +35,7 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
 export function optionGroups(items) {
   return [
     items.map(function (item) { return item.key; }).concat(["palette", "reset-view"]),
-    ["range", "step", "sprints", "holidays"],
+    ["range", "step", "sprints", "holidays", "tags"],
     ["plan-file"]
   ];
 }
@@ -119,6 +120,24 @@ export function holidaysItem(holidays) {
     label: "Holidays...",
     detail: count === 0 ? "None yet" : count + (count === 1 ? " date" : " dates")
   };
+}
+
+/*
+ * The Tags entry in the Options menu. Like the Sprints and Holidays entries it
+ * is an action, not a checked state: opening it opens the Tags panel. The
+ * detail states what the panel holds - the colour-by-key choices and the values
+ * given a colour - so the menu says what opening it will find.
+ */
+export function tagsItem(tagColours) {
+  const keyCount = Object.keys(tagKeys(tagColours)).length;
+  const colourCount = Object.keys(tagColourSlots(tagColours)).length;
+  if (keyCount === 0 && colourCount === 0) {
+    return { key: "tags", label: "Tags...", detail: "None yet" };
+  }
+  const parts = [];
+  if (keyCount) parts.push(keyCount + (keyCount === 1 ? " key" : " keys"));
+  if (colourCount) parts.push(colourCount + (colourCount === 1 ? " colour" : " colours"));
+  return { key: "tags", label: "Tags...", detail: parts.join(", ") };
 }
 
 /*

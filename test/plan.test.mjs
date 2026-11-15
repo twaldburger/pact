@@ -840,6 +840,84 @@ test("setting the holidays is one undo step, like any other change", () => {
   assert.equal(store.get().holidays[0].dates[0].kind, "full");
 });
 
+/* --- typed tags' colours ------------------------------------------------ */
+
+test("the seed leaves tag colours out, so an existing plan is unchanged", () => {
+  assert.equal(seedPlan().tagColours, undefined);
+});
+
+test("a plan with colour-by-key choices and value colours validates", () => {
+  const plan = seedPlan();
+  plan.tagColours = {
+    keys: { projects: "api", people: "skill", assignments: "skill" },
+    colours: { "api:Stellar": 3, "skill:DevOps": 0 }
+  };
+  assert.deepEqual(validatePlan(plan), []);
+  // Either half is valid on its own.
+  plan.tagColours = { keys: { projects: "api" } };
+  assert.deepEqual(validatePlan(plan), []);
+  plan.tagColours = { colours: { "api:Stellar": 9 } };
+  assert.deepEqual(validatePlan(plan), []);
+});
+
+test("a malformed tag-colour entry is refused by name", () => {
+  const plan = seedPlan();
+  plan.tagColours = { keys: { bogus: "api", people: "" }, colours: { nottyped: 1, "api:Stellar": 42 } };
+  const errors = validatePlan(plan);
+  assert.ok(errors.some((e) => e.includes("tagColours.keys has an unknown level 'bogus'")), "unknown level");
+  assert.ok(errors.some((e) => e.includes("tagColours.keys.people")), "empty kind");
+  assert.ok(errors.some((e) => e.includes("not a typed tag")), "untyped key");
+  assert.ok(errors.some((e) => e.includes("api:Stellar")), "bad slot");
+
+  plan.tagColours = { keys: "api" };
+  assert.deepEqual(validatePlan(plan), ["tagColours.keys must be an object"]);
+  plan.tagColours = { colours: "api" };
+  assert.deepEqual(validatePlan(plan), ["tagColours.colours must be an object"]);
+  plan.tagColours = "api";
+  assert.deepEqual(validatePlan(plan), ["tagColours must be an object"]);
+});
+
+test("the store sets the tag colours and they round-trip through the plan file", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const tagColours = { keys: { projects: "api" }, colours: { "api:Stellar": 2 } };
+  const set = store.setTagColours({ tagColours: tagColours });
+  assert.deepEqual(set.tagColours, tagColours);
+  assert.deepEqual(store.get().tagColours, tagColours);
+  const reloaded = createStore(file);
+  assert.deepEqual(reloaded.get().tagColours, tagColours);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).tagColours, tagColours);
+});
+
+test("clearing or emptying the tag colours removes the key and a refusal writes nothing", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  store.setTagColours({ tagColours: { colours: { "api:Stellar": 1 } } });
+  // A mapping with nothing in it is no mapping at all, the way an empty
+  // holidays list is.
+  store.setTagColours({ tagColours: { keys: {}, colours: {} } });
+  assert.equal(store.get().tagColours, undefined);
+  store.setTagColours({ tagColours: { colours: { "api:Stellar": 1 } } });
+  store.setTagColours({ tagColours: null });
+  assert.equal(store.get().tagColours, undefined);
+
+  const before = fs.readFileSync(file, "utf8");
+  assert.throws(() => store.setTagColours({ tagColours: { colours: { "api:Stellar": 99 } } }), /slot 0..9/);
+  assert.throws(() => store.setTagColours({ tagColours: { keys: { bogus: "api" } } }), /unknown level/);
+  assert.throws(() => store.setTagColours({ tagColours: {}, extra: 1 }), ValidationError);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  assert.equal(store.get().tagColours, undefined);
+});
+
+test("setting the tag colours is one undo step, like any other change", () => {
+  const store = createStore(tempFile());
+  store.setTagColours({ tagColours: { keys: { projects: "api" }, colours: { "api:Stellar": 1 } } });
+  store.setTagColours({ tagColours: { keys: { projects: "api" }, colours: { "api:Stellar": 5 } } });
+  assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
+  store.undo();
+  assert.deepEqual(store.get().tagColours.colours, { "api:Stellar": 1 });
+});
+
 /* --- choosing the plan file ----------------------------------------------- */
 
 test("an empty plan is valid, has no content, and keeps a period", () => {
