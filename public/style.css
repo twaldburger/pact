@@ -880,9 +880,9 @@ h1, h2, h3, p { margin: 0; }
 .filter-empty__line { font-size: var(--fs-body); }
 .filter-empty__hint { font-size: var(--fs-data); color: var(--ink-soft); }
 
-/* The report's content: the same board and rail as the plan, with the three
-   pivots and the two charts where the grid would be. It is one column of the
-   timeline grid, so it fills the scroller without the grid's day columns. */
+/* The report's content: the three pivots and the two charts where the grid
+   would be, on a board with no rail. It is one column of the timeline grid, so
+   it fills the scroller without the grid's day columns. */
 .tl.is-report {
   width: 100%;
   min-height: 100%;
@@ -1154,6 +1154,18 @@ h1, h2, h3, p { margin: 0; }
    timeline and does not move or change width. */
 .board.is-collapsed {
   grid-template-columns: minmax(0, 0px) minmax(0, 1fr);
+}
+
+/* A report page mounts no rail, so its own board is one column and its content
+   takes the whole width. Without this the scroller would still sit in the
+   second track and leave the rail's width blank beside it. The plan's two
+   tracks - and its collapsed state - are left exactly as they are. */
+html[data-view="report"] .board {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html[data-view="report"] .scroller {
+  grid-column: 1;
 }
 
 /* The Rail toggle: the control that folds the Stack away. It wears the shared

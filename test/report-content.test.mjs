@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { seedPlan } from "../lib/plan.mjs";
-import { projectMeasures } from "../public/lib/sort.mjs";
+import { projectMeasures, sortProjects } from "../public/lib/sort.mjs";
 import { reportBuckets, reportContent } from "../public/lib/report-content.mjs";
 
 /*
@@ -144,6 +144,22 @@ test("the pivots keep the order they are handed", () => {
   const reversed = { projects: plan.projects.slice().reverse(), people: plan.people.slice().reverse(), assignments: plan.assignments };
   const g = reportContent(reversed, plan, { zoom: "month" });
   assert.deepEqual(g.byPerson.rows.map((r) => r.id), ["ben", "anna"]);
+});
+
+test("the pivots follow the sort the rail stores", () => {
+  const plan = seedPlan();
+  const stored = { key: "name", direction: "desc" };
+  const ordered = sortProjects(plan.projects, stored, plan);
+  const view = {
+    projects: ordered,
+    people: plan.people,
+    assignments: plan.assignments
+  };
+  const f = reportContent(view, plan, { zoom: "month" });
+  assert.deepEqual(f.byProject.rows.map((r) => r.id), ordered.map((p) => p.id));
+  // The report has no sort control of its own, so this order is the only one
+  // it can show - and it is not the plan's own order by accident.
+  assert.notDeepEqual(ordered.map((p) => p.id), plan.projects.map((p) => p.id));
 });
 
 /* --- the Filter narrows the report ---------------------------------------- */

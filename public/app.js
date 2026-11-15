@@ -156,7 +156,6 @@ mountTopbar(document.getElementById("topbar"), isReport ? VIEW_REPORT : VIEW_PLA
 var tl = document.getElementById("tl");
 var scroller = document.getElementById("scroller");
 var stackList = document.getElementById("stack-list");
-var stackHint = document.getElementById("stack-hint");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
 var saveStatusEl = document.getElementById("save-status");
@@ -3707,8 +3706,6 @@ function renderReport() {
   if (filterQuery.trim() !== "" && filterIsEmpty(view)) {
     tl.classList.add("is-empty");
     tl.appendChild(buildEmptyState());
-    drawStack();
-    syncStackToggle();
     return;
   }
   tl.classList.remove("is-empty");
@@ -3847,11 +3844,6 @@ function renderReport() {
   box.appendChild(chartsSection);
 
   tl.appendChild(box);
-  // The rail is the same rail, but a report has no grid rows to drop onto, so
-  // its hint names the one action a Project has here: opening its panel.
-  if (stackHint) stackHint.textContent = "Open a project to edit it.";
-  drawStack();
-  syncStackToggle();
 }
 
 function render(opts) {
@@ -3862,7 +3854,8 @@ function render(opts) {
   // follows each edit.
   if (!(opts && opts.keepPanel)) closePanel(false);
   tl.innerHTML = "";
-  stackList.innerHTML = "";
+  // The report page mounts no rail, so there is no list to empty there.
+  if (stackList) stackList.innerHTML = "";
   indexData();
   contextEl.textContent = rangeLabel(data.range.start, data.range.end);
   syncSaveStatus();
@@ -3950,9 +3943,13 @@ function render(opts) {
 /* --- wiring -------------------------------------------------------------- */
 
 function bindChrome() {
-  document.getElementById("add-project").addEventListener("click", function (e) {
-    openProjectPanel(null, e.currentTarget);
-  });
+  // The add control is the rail's own, so the report has none to bind.
+  var addBtn = document.getElementById("add-project");
+  if (addBtn) {
+    addBtn.addEventListener("click", function (e) {
+      openProjectPanel(null, e.currentTarget);
+    });
+  }
   // The Today control returns the owner to now: it brings today back into the
   // middle of the view and puts the Marker back on today. When the set period
   // excludes today it is inert, and updateTodayControl announces that.
