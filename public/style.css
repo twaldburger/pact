@@ -880,9 +880,9 @@ h1, h2, h3, p { margin: 0; }
 .filter-empty__line { font-size: var(--fs-body); }
 .filter-empty__hint { font-size: var(--fs-data); color: var(--ink-soft); }
 
-/* The report's shell: the same board and rail as the plan, with a placeholder
-   where the report's own content will go. It is one column of the timeline
-   grid, so it fills the scroller without the grid's day columns. */
+/* The report's content: the same board and rail as the plan, with the three
+   pivots and the two charts where the grid would be. It is one column of the
+   timeline grid, so it fills the scroller without the grid's day columns. */
 .tl.is-report {
   width: 100%;
   min-height: 100%;
@@ -890,37 +890,251 @@ h1, h2, h3, p { margin: 0; }
   grid-template-rows: 1fr;
 }
 
-.report-placeholder {
+.report {
   grid-column: 1;
   grid-row: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-3);
-  padding: var(--sp-6);
-  text-align: center;
+  gap: var(--sp-6);
+  padding: var(--sp-5) var(--sp-6) var(--sp-6);
+  color: var(--ink);
 }
 
-.report-placeholder__title {
+.report__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.report__title {
   margin: 0;
   font-size: var(--fs-title);
   font-weight: var(--fw-title);
   font-stretch: var(--wd-title);
-  color: var(--ink);
 }
 
-.report-placeholder__lead {
-  max-width: 34rem;
+.report__lead {
+  max-width: 46rem;
   margin: 0;
   font-size: var(--fs-body);
-  color: var(--ink);
+  color: var(--ink-soft);
 }
 
-.report-placeholder__line {
+.report__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.report__heading {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
+}
+
+.report__sub {
   margin: 0;
   font-size: var(--fs-data);
   color: var(--ink-soft);
+}
+
+/* The pivots: one table per pivot, the name column pinned while the matrix
+   scrolls under it. */
+.report-tablewrap {
+  overflow-x: auto;
+  border: var(--base) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.report-table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: var(--fs-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-table th,
+.report-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--base) solid var(--rule);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  font-size: var(--fs-axis);
+  font-weight: var(--fw-ui);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.report-table__num { text-align: right; }
+
+.report-table__name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--canvas);
+}
+
+.report-table thead .report-table__name {
+  z-index: 3;
+  background: var(--panel);
+}
+
+.report-table tbody tr:hover td { background: var(--off); }
+
+.report-row--total td {
+  font-weight: var(--fw-title);
+  border-top: var(--base) solid var(--rule-strong);
+}
+
+.report-table__tags { color: var(--ink-soft); }
+
+.report-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.report-name__swatch {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--radius-chip);
+  flex: none;
+}
+
+.report-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.report-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: var(--base) solid var(--rule);
+  border-radius: var(--radius-chip);
+  background: var(--panel);
+  font-size: var(--fs-axis);
+}
+
+.report-tag--none {
+  border-color: transparent;
+  background: none;
+  color: var(--ink-soft);
+}
+
+.report-tag__swatch {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-chip);
+  flex: none;
+}
+
+/* The two charts: hand-drawn SVG in the app's own tokens, side by side while
+   the window is wide enough and stacked under it. */
+.report__charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: var(--sp-5);
+}
+
+.report-chartcard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  border: var(--base) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.report-chartcard__title {
+  margin: 0;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-title);
+}
+
+.report-chart {
+  width: 100%;
+  height: auto;
+}
+
+.report-chart__grid { stroke: var(--rule); stroke-width: 1; }
+.report-chart__axis { stroke: var(--rule-strong); stroke-width: 1; }
+
+.report-chart__tick {
+  fill: var(--ink-soft);
+  font-family: var(--font);
+  font-size: 10px;
+}
+
+.report-chart__alloc {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.report-chart__cap {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  stroke-linejoin: round;
+}
+
+.report-chart__dot-alloc { fill: var(--ink); }
+.report-chart__dot-cap { fill: var(--signal); }
+
+/* A tag the plan gives no colour slot draws in the neutral rule colour, so the
+   chart's structure stays in the app's tokens even without a colour key. */
+.report-chart__bar--neutral { fill: var(--rule-strong); }
+
+.report-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+}
+
+.report-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.report-legend__swatch {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--radius-chip);
+  flex: none;
+}
+
+.report-legend__swatch--neutral { background: var(--rule-strong); }
+.report-legend__swatch--ink { background: var(--ink); }
+
+.report-legend__swatch--dashed {
+  width: 0.875rem;
+  height: 0;
+  border-radius: 0;
+  background: none !important;
+  border-top: 2px dashed var(--signal);
 }
 
 /* Board --------------------------------------------------------------------- */

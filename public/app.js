@@ -32,6 +32,7 @@ import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
+import { reportContent } from "./lib/report-content.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -3430,40 +3431,412 @@ function buildEmptyState() {
   return box;
 }
 
-/* The report page's own content: the shell's placeholder, naming that the
- * report's tables, totals and charts are still to come (they are #134's own
- * work). It writes nothing to the plan; it only reads the period, the report's
- * own zoom level as its time buckets, and the session's Filter, so the report
- * reflects the Filter the way the grid does. The rail is drawn beside it, and
- * its items open the same panels they do from the grid. */
+/* --- the report's own content ------------------------------------------- */
+
+// A report figure, one decimal, with a middot for a value too small to read -
+// the convention the mockup's tables drew.
+function reportFigure(value) {
+  if (!isFinite(value)) return "-";
+  if (Math.abs(value) < 0.05) return "\u00b7";
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
+function reportPercent(fraction) {
+  return Math.round((Number(fraction) || 0) * 100) + "%";
+}
+
+// A named thing's cell: the palette swatch its colour slot names, then the
+// name. No slot means no swatch rather than a wrong one.
+function reportNameCell(name, slot) {
+  var span = el("span", "report-name");
+  if (Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT) {
+    var swatch = el("span", "report-name__swatch");
+    swatch.style.background = activeColour(slot);
+    span.appendChild(swatch);
+  }
+  span.appendChild(document.createTextNode(name));
+  return span;
+}
+
+// One tag, drawn as a chip in the project's tag list. Its own colour slot is
+// the colour-by-key feature's, and a tag without one is left plain.
+function reportTagChip(tag, slot) {
+  var chip = el("span", "report-tag");
+  if (Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT) {
+    var swatch = el("span", "report-tag__swatch");
+    swatch.style.background = activeColour(slot);
+    chip.appendChild(swatch);
+  }
+  chip.appendChild(document.createTextNode(tag));
+  return chip;
+}
+
+function reportTagList(tags) {
+  if (!tags || tags.length === 0) {
+    var none = el("span", "report-tag report-tag--none");
+    none.textContent = "none";
+    return none;
+  }
+  var wrap = el("span", "report-tags");
+  tags.forEach(function (tag) {
+    var slot = Object.prototype.hasOwnProperty.call(tagSlotMap, tag) ? tagSlotMap[tag] : null;
+    wrap.appendChild(reportTagChip(tag, slot));
+  });
+  return wrap;
+}
+
+function reportNumCell(value) {
+  return { text: reportFigure(value), cls: "report-table__num" };
+}
+
+// One table. The first column is sticky so a wide matrix keeps its names, and
+// every numeric column is right-aligned to its own figures.
+function reportTable(headers, rows) {
+  var wrap = el("div", "report-tablewrap");
+  var table = el("table", "report-table");
+  var thead = el("thead");
+  var hrow = el("tr");
+  headers.forEach(function (h) {
+    var th = el("th", h.cls || "");
+    th.textContent = h.text;
+    if (h.title) th.title = h.title;
+    hrow.appendChild(th);
+  });
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+  var tbody = el("tbody");
+  rows.forEach(function (row) {
+    var tr = el("tr", row.cls || "");
+    row.cells.forEach(function (cell) {
+      var td = el("td", cell.cls || "");
+      if (cell.node) td.appendChild(cell.node);
+      else td.textContent = cell.text == null ? "" : cell.text;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function reportSection(title, sub) {
+  var sec = el("section", "report__section");
+  var heading = el("h3", "report__heading");
+  heading.textContent = title;
+  sec.appendChild(heading);
+  if (sub) {
+    var note = el("p", "report__sub");
+    note.textContent = sub;
+    sec.appendChild(note);
+  }
+  return sec;
+}
+
+/* --- the two charts, hand-drawn SVG in the app's own tokens ------------- */
+
+function svgNode(tag, attrs, text) {
+  var node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.keys(attrs || {}).forEach(function (key) {
+    if (attrs[key] != null) node.setAttribute(key, attrs[key]);
+  });
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+// A whole-number ceiling a chart can divide cleanly: the smallest of the
+// friendly steps above the largest value.
+function niceMax(value) {
+  if (!isFinite(value) || value <= 0) return 1;
+  var magnitude = Math.pow(10, Math.floor(Math.log10(value)));
+  var steps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  var scaled = value / magnitude;
+  for (var i = 0; i < steps.length; i++) {
+    if (scaled <= steps[i]) return steps[i] * magnitude;
+  }
+  return 10 * magnitude;
+}
+
+function reportChartGeometry(width, height, pad, count, max) {
+  var plotW = width - pad.l - pad.r;
+  var plotH = height - pad.t - pad.b;
+  return { plotW: plotW, plotH: plotH, bw: plotW / Math.max(1, count), max: max };
+}
+
+function reportChartAxis(svg, width, height, pad, geom) {
+  [0, geom.max / 2, geom.max].forEach(function (v) {
+    var y = pad.t + geom.plotH - (v / geom.max) * geom.plotH;
+    svg.appendChild(svgNode("line", {
+      x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: "report-chart__grid"
+    }));
+    svg.appendChild(svgNode("text", {
+      x: pad.l - 6, y: y + 3, "text-anchor": "end", class: "report-chart__tick"
+    }, String(Math.round(v))));
+  });
+  svg.appendChild(svgNode("line", {
+    x1: pad.l, x2: width - pad.r, y1: pad.t + geom.plotH, y2: pad.t + geom.plotH, class: "report-chart__axis"
+  }));
+}
+
+function reportChartLabels(svg, height, pad, geom, labels) {
+  var every = Math.max(1, Math.ceil(labels.length / 16));
+  labels.forEach(function (label, i) {
+    if (i % every !== 0 && i !== labels.length - 1) return;
+    svg.appendChild(svgNode("text", {
+      x: pad.l + i * geom.bw + geom.bw / 2, y: height - 10, "text-anchor": "middle", class: "report-chart__tick"
+    }, label));
+  });
+}
+
+function buildStackedChart(model) {
+  var width = 780;
+  var height = 260;
+  var pad = { l: 46, r: 8, t: 12, b: 34 };
+  var stacked = model.charts.stacked;
+  var max = niceMax(stacked.reduce(function (m, b) {
+    return Math.max(m, b.segments.reduce(function (t, g) { return t + g.value; }, 0));
+  }, 0));
+  var geom = reportChartGeometry(width, height, pad, stacked.length, max);
+  var svg = svgNode("svg", {
+    viewBox: "0 0 " + width + " " + height,
+    class: "report-chart",
+    role: "img",
+    "aria-label": "Stacked bar per " + reportBucketLabel(reportZoom) + ", split by tag"
+  });
+  reportChartAxis(svg, width, height, pad, geom);
+  stacked.forEach(function (bucket, i) {
+    var yBase = pad.t + geom.plotH;
+    bucket.segments.forEach(function (seg) {
+      if (seg.value <= 0) return;
+      var h = (seg.value / geom.max) * geom.plotH;
+      // A tag the plan colours takes its palette fill; one it does not takes
+      // the app's neutral rule colour, so the chart never invents a colour.
+      var coloured = Number.isInteger(seg.slot) && seg.slot >= 0 && seg.slot < SLOT_COUNT;
+      var rect = svgNode("rect", {
+        x: pad.l + i * geom.bw + 1, y: yBase - h, width: Math.max(1, geom.bw - 2), height: h,
+        fill: coloured ? activeColour(seg.slot) : null,
+        class: coloured ? null : "report-chart__bar--neutral"
+      });
+      rect.appendChild(svgNode("title", {}, seg.label + ": " + reportFigure(seg.value) + " FTE-days"));
+      svg.appendChild(rect);
+      yBase -= h;
+    });
+  });
+  reportChartLabels(svg, height, pad, geom, stacked.map(function (b) { return b.label; }));
+  return svg;
+}
+
+function buildLineChart(model) {
+  var width = 780;
+  var height = 240;
+  var pad = { l: 46, r: 8, t: 12, b: 34 };
+  var line = model.charts.line;
+  var max = niceMax(line.reduce(function (m, b) { return Math.max(m, b.capacity); }, 0));
+  var geom = reportChartGeometry(width, height, pad, line.length, max);
+  var svg = svgNode("svg", {
+    viewBox: "0 0 " + width + " " + height,
+    class: "report-chart",
+    role: "img",
+    "aria-label": "Allocation against capacity over " + reportBucketLabel(reportZoom).toLowerCase()
+  });
+  reportChartAxis(svg, width, height, pad, geom);
+  function pathOf(key) {
+    return line.map(function (b, i) {
+      var x = pad.l + i * geom.bw + geom.bw / 2;
+      var y = pad.t + geom.plotH - (b[key] / geom.max) * geom.plotH;
+      return (i === 0 ? "M" : "L") + x + " " + y;
+    }).join(" ");
+  }
+  svg.appendChild(svgNode("path", { d: pathOf("capacity"), class: "report-chart__cap" }));
+  svg.appendChild(svgNode("path", { d: pathOf("alloc"), class: "report-chart__alloc" }));
+  line.forEach(function (b, i) {
+    var x = pad.l + i * geom.bw + geom.bw / 2;
+    svg.appendChild(svgNode("circle", {
+      cx: x, cy: pad.t + geom.plotH - (b.alloc / geom.max) * geom.plotH, r: 2.4, class: "report-chart__dot-alloc"
+    }));
+    svg.appendChild(svgNode("circle", {
+      cx: x, cy: pad.t + geom.plotH - (b.capacity / geom.max) * geom.plotH, r: 2.4, class: "report-chart__dot-cap"
+    }));
+  });
+  reportChartLabels(svg, height, pad, geom, line.map(function (b) { return b.label; }));
+  return svg;
+}
+
+function reportLegend(items) {
+  var legend = el("div", "report-legend");
+  items.forEach(function (item) {
+    var entry = el("span", "report-legend__item");
+    if (item.colour || item.swatchClass) {
+      var swatch = el("span", "report-legend__swatch" + (item.swatchClass ? " " + item.swatchClass : ""));
+      if (item.colour) swatch.style.background = item.colour;
+      entry.appendChild(swatch);
+    }
+    entry.appendChild(document.createTextNode(item.label));
+    legend.appendChild(entry);
+  });
+  return legend;
+}
+
+/* --- the report page ----------------------------------------------------- */
+
+/* The report's own content: the three pivots and the two charts, from the plan
+ * the Filter and the rail's sort leave. It writes nothing to the plan; the
+ * figures come from public/lib/report-content.mjs, which reads the app's own
+ * working-day rule, so the report and the grid agree by construction. The rail
+ * is drawn beside it, and its items open the same panels they do from the grid. */
 function renderReport() {
-  tl.classList.remove("is-empty");
   tl.classList.add("is-report");
-  var box = el("div", "report-placeholder");
+  // The grid maps its assignments to Dates and clamped indices; the report's
+  // rule reads the raw ISO records, so it is handed the plan's own shape.
+  var view = {
+    projects: gridProjects,
+    people: gridPeople,
+    assignments: gridAssignments.map(function (a) { return a.raw; })
+  };
 
-  var title = el("h2", "report-placeholder__title");
+  // The Filter reaches the report too: an empty result is the grid's own empty
+  // state rather than three empty tables.
+  if (filterQuery.trim() !== "" && filterIsEmpty(view)) {
+    tl.classList.add("is-empty");
+    tl.appendChild(buildEmptyState());
+    drawStack();
+    syncStackToggle();
+    return;
+  }
+  tl.classList.remove("is-empty");
+
+  var model = reportContent(view, data, {
+    zoom: reportZoom,
+    sprints: sprintList,
+    tagSlots: tagSlotMap
+  });
+
+  var box = el("div", "report");
+  var head = el("header", "report__head");
+  var title = el("h2", "report__title");
   title.textContent = "Report";
-  box.appendChild(title);
+  head.appendChild(title);
+  var lead = el("p", "report__lead");
+  lead.textContent = "Over the plan period, " + rangeLabel(data.range.start, data.range.end) +
+    ", by " + reportBucketLabel(reportZoom).toLowerCase() + ". " +
+    (filterQuery.trim() === ""
+      ? "Showing the whole plan."
+      : 'Filtered by "' + filterQuery.trim() + '" in ' + searchedAreas(filterScopes) + ".");
+  head.appendChild(lead);
+  box.appendChild(head);
 
-  var lead = el("p", "report-placeholder__lead");
-  lead.textContent = "The report's tables, totals and charts are still to come. " +
-    "This is its shell: the bar, the rail and the Filter already work here.";
-  box.appendChild(lead);
+  // --- by project ---------------------------------------------------------
+  var projectHeaders = [{ text: "Project", cls: "report-table__name" }]
+    .concat(model.buckets.map(function (b) {
+      return { text: b.label, cls: "report-table__num", title: b.start === b.end ? b.start : b.start + " to " + b.end };
+    }))
+    .concat([
+      { text: "Total", cls: "report-table__num" },
+      { text: "Share of plan", cls: "report-table__num" },
+      { text: "Tags", cls: "report-table__tags" }
+    ]);
+  var projectRows = model.byProject.rows.map(function (r) {
+    var cells = [{ node: reportNameCell(r.name, r.colour), cls: "report-table__name" }];
+    r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
+    cells.push(reportNumCell(r.total));
+    cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
+    cells.push({ node: reportTagList(r.tags), cls: "report-table__tags" });
+    return { cells: cells };
+  });
+  var projectTotalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.byProject.total.cells.forEach(function (v) { projectTotalCells.push(reportNumCell(v)); });
+  projectTotalCells.push(reportNumCell(model.byProject.total.total));
+  projectTotalCells.push({ text: "100%", cls: "report-table__num" });
+  projectTotalCells.push({ text: "", cls: "report-table__tags" });
+  projectRows.push({ cells: projectTotalCells, cls: "report-row--total" });
+  var projectSection = reportSection("By project", "Each project's FTE-days in every " +
+    reportBucketLabel(reportZoom).toLowerCase() + ", with the tags an even split divides them over.");
+  projectSection.appendChild(reportTable(projectHeaders, projectRows));
+  box.appendChild(projectSection);
 
-  var buckets = el("p", "report-placeholder__line");
-  buckets.textContent = "Time buckets: " + reportBucketLabel(reportZoom) + ".";
-  box.appendChild(buckets);
+  // --- by person ----------------------------------------------------------
+  var personHeaders = [{ text: "Person", cls: "report-table__name" }]
+    .concat(model.buckets.map(function (b) {
+      return { text: b.label, cls: "report-table__num", title: b.start === b.end ? b.start : b.start + " to " + b.end };
+    }))
+    .concat([
+      { text: "FTE-days", cls: "report-table__num" },
+      { text: "Share of plan", cls: "report-table__num" },
+      { text: "% of offer", cls: "report-table__num", title: "The person's FTE-days as a share of the FTE-days they offer over the period" }
+    ]);
+  var personRows = model.byPerson.rows.map(function (r) {
+    var cells = [{ node: reportNameCell(r.name, null), cls: "report-table__name" }];
+    r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
+    cells.push(reportNumCell(r.total));
+    cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
+    cells.push({ text: reportPercent(r.pct), cls: "report-table__num" });
+    return { cells: cells };
+  });
+  var personTotalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.byPerson.total.cells.forEach(function (v) { personTotalCells.push(reportNumCell(v)); });
+  personTotalCells.push(reportNumCell(model.byPerson.total.total));
+  personTotalCells.push({ text: "100%", cls: "report-table__num" });
+  personTotalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
+  personRows.push({ cells: personTotalCells, cls: "report-row--total" });
+  var personSection = reportSection("By person", "Each person's FTE-days in every " +
+    reportBucketLabel(reportZoom).toLowerCase() + ", against what they offer over the period.");
+  personSection.appendChild(reportTable(personHeaders, personRows));
+  box.appendChild(personSection);
 
-  var period = el("p", "report-placeholder__line");
-  period.textContent = "Over the plan period, " +
-    rangeLabel(data.range.start, data.range.end) + ".";
-  box.appendChild(period);
+  // --- by tag -------------------------------------------------------------
+  var tagHeaders = [{ text: "Tag", cls: "report-table__name" }]
+    .concat(model.buckets.map(function (b) {
+      return { text: b.label, cls: "report-table__num", title: b.start === b.end ? b.start : b.start + " to " + b.end };
+    }))
+    .concat([
+      { text: "Total", cls: "report-table__num" },
+      { text: "Share of plan", cls: "report-table__num" }
+    ]);
+  var tagRows = model.byTag.rows.map(function (r) {
+    var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
+    r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
+    cells.push(reportNumCell(r.total));
+    cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
+    return { cells: cells };
+  });
+  var tagTotalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.byTag.total.cells.forEach(function (v) { tagTotalCells.push(reportNumCell(v)); });
+  tagTotalCells.push(reportNumCell(model.byTag.total.total));
+  tagTotalCells.push({ text: "100%", cls: "report-table__num" });
+  tagRows.push({ cells: tagTotalCells, cls: "report-row--total" });
+  var tagSection = reportSection("By tag", "A project's FTE-days split evenly over its tags, so the tag totals reconcile with the plan. Colours follow the plan's colour keys.");
+  tagSection.appendChild(reportTable(tagHeaders, tagRows));
+  box.appendChild(tagSection);
 
-  var filter = el("p", "report-placeholder__line");
-  filter.textContent = filterQuery.trim() === ""
-    ? "Showing the whole plan."
-    : 'Filtered by "' + filterQuery.trim() + '" in ' + searchedAreas(filterScopes) + ".";
-  box.appendChild(filter);
+  // --- the two charts -----------------------------------------------------
+  var chartsSection = reportSection("Charts", null);
+  var charts = el("div", "report__charts");
+  var stackedCard = el("div", "report-chartcard");
+  var stackedHeading = el("h4", "report-chartcard__title");
+  stackedHeading.textContent = "Per " + reportBucketLabel(reportZoom).toLowerCase() + ", split by tag";
+  stackedCard.appendChild(stackedHeading);
+  stackedCard.appendChild(buildStackedChart(model));
+  stackedCard.appendChild(reportLegend(model.byTag.rows.map(function (r) {
+    var coloured = Number.isInteger(r.slot) && r.slot >= 0 && r.slot < SLOT_COUNT;
+    return {
+      label: r.label,
+      colour: coloured ? activeColour(r.slot) : null,
+      swatchClass: coloured ? null : "report-legend__swatch--neutral"
+    };
+  })));
+  charts.appendChild(stackedCard);
+  var lineCard = el("div", "report-chartcard");
+  var lineHeading = el("h4", "report-chartcard__title");
+  lineHeading.textContent = "Allocation against capacity over time";
+  lineCard.appendChild(lineHeading);
+  lineCard.appendChild(buildLineChart(model));
+  lineCard.appendChild(reportLegend([
+    { label: "Allocation", swatchClass: "report-legend__swatch--ink" },
+    { label: "Capacity", swatchClass: "report-legend__swatch--dashed" }
+  ]));
+  charts.appendChild(lineCard);
+  chartsSection.appendChild(charts);
+  box.appendChild(chartsSection);
 
   tl.appendChild(box);
   // The rail is the same rail, but a report has no grid rows to drop onto, so
