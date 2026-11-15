@@ -41,6 +41,23 @@ test("the plan and the report mount the same bar from one source", () => {
   assert.match(report, /class="viewswitch__btn" href="\/report.html" data-view-link="report" aria-current="page"/);
 });
 
+test("the switch opens the instruments, before the Filter, in both views", () => {
+  // One bar from one source: read the identity and instruments zones of each
+  // view's markup and check the switch sits in the instruments, first, ahead
+  // of the Filter, with the view's own link still marked current.
+  [VIEW_PLAN, VIEW_REPORT].forEach((view) => {
+    const markup = topbarMarkup(view);
+    const identity = markup.match(/<div class="topbar__identity">([\s\S]*?)<\/div>/)[1];
+    const instruments = markup.match(/<div class="topbar__instruments">([\s\S]*)/)[1];
+    assert.doesNotMatch(identity, /viewswitch/, "the switch is still in the identity zone");
+    const switchAt = instruments.search(/class="viewswitch"/);
+    const filterAt = instruments.search(/class="filter"/);
+    assert.notEqual(switchAt, -1, "the switch is not in the instruments zone");
+    assert.ok(switchAt < filterAt, "the switch does not precede the Filter");
+    assert.match(instruments, new RegExp(`data-view-link="${view}" aria-current="page"`));
+  });
+});
+
 test("the switch moves between the report's own path and the plan's", () => {
   assert.equal(PLAN_PATH, "/");
   assert.equal(REPORT_PATH, "/report.html");
