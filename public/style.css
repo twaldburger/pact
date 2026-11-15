@@ -2415,8 +2415,10 @@ down to the last row and no further. */
 .holiday__add { margin-top: var(--sp-2); }
 
 /* The Tags panel: three colour-by-key choices, then one card per kind holding
-   its values, each with the ten palette slots and a Clear. The swatches are the
-   Project panel's own, so a tag colour is picked the same way a Project's is. */
+   its values, each with the ten palette slots. PACT gives each value a slot and
+   the chosen one is pressed; pressing it again clears the value. The swatches
+   are the Project panel's own, so a tag colour is picked the same way a
+   Project's is. */
 .panel--tags { width: 26rem; }
 
 .tag-keys { margin-top: var(--sp-3); }
@@ -2467,19 +2469,6 @@ down to the last row and no further. */
   font-size: var(--fs-data);
   color: var(--ink);
 }
-
-.tag-row__clear {
-  padding: var(--sp-1) var(--sp-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: var(--fs-axis);
-  cursor: pointer;
-}
-
-.tag-row__clear:hover { color: var(--signal); border-color: var(--rule-strong); }
 
 .noscript {
   margin: var(--sp-6);

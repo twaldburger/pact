@@ -52,6 +52,8 @@ import {
   personSlot,
   planTypedTags,
   tagKindGroups,
+  assignTagSlots,
+  chooseTagSlot,
   cleanTagColours
 } from "./lib/tags.mjs";
 import {
@@ -2936,6 +2938,10 @@ function openTagsPanel(trigger) {
       select.addEventListener("change", function () {
         if (select.value === "") delete working.keys[level];
         else working.keys[level] = select.value;
+        // Choosing a key is the deliberate moment PACT colours by: every value
+        // under a chosen key takes a slot, and one set by hand keeps its own.
+        working.colours = assignTagSlots(working.keys, allTypedTags(), working.colours);
+        renderList();
       });
       keyRows.appendChild(formRow(TAG_LEVEL_LABELS[level], select));
     });
@@ -2973,7 +2979,9 @@ function openTagsPanel(trigger) {
           sw.dataset.tag = entry.tag;
           sw.addEventListener("click", function () {
             var tag = this.dataset.tag;
-            working.colours[tag] = Number(this.dataset.slot);
+            // The chosen slot is the clear control too: pressing it again
+            // clears the value, pressing any other chooses that one.
+            working.colours = chooseTagSlot(working.colours, tag, Number(this.dataset.slot));
             buttons.forEach(function (b) {
               b.setAttribute("aria-pressed", b.dataset.tag === tag &&
                 working.colours[tag] === Number(b.dataset.slot) ? "true" : "false");
@@ -2983,12 +2991,6 @@ function openTagsPanel(trigger) {
           buttons.push(sw);
         }
         row.appendChild(swatches);
-
-        var clear = button("tag-row__clear", "Clear", function () {
-          delete working.colours[entry.tag];
-          renderList();
-        });
-        row.appendChild(clear);
         card.appendChild(row);
       });
       listWrap.appendChild(card);
@@ -3021,6 +3023,10 @@ function openTagsPanel(trigger) {
   node.appendChild(foot);
 
   renderKeys();
+  // A value that appeared since the key was chosen takes its slot when the
+  // panel next shows it. With no key chosen this assigns nothing, so opening
+  // an untouched plan writes nothing.
+  working.colours = assignTagSlots(working.keys, allTypedTags(), working.colours);
   renderList();
   openPanel(node, trigger);
 }
