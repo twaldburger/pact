@@ -81,6 +81,78 @@ export function slotForTags(tags, key, colours) {
   return Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT ? slot : null;
 }
 
+/*
+ * The typed tags a chosen key selects: every tag whose kind is the key chosen
+ * for any of the three levels, in the order given. A kind chosen for two
+ * levels still selects its values once. This is what PACT colours when a key
+ * is chosen, and nothing at all while every level is unchosen.
+ */
+export function tagsUnderKeys(keys, tags) {
+  const chosen = new Set();
+  TAG_LEVELS.forEach(function (level) {
+    const kind = keys && keys[level];
+    if (typeof kind === "string" && kind !== "") chosen.add(kind);
+  });
+  if (chosen.size === 0) return [];
+  return (Array.isArray(tags) ? tags : []).filter(function (tag) {
+    return isTypedTag(tag) && chosen.has(tagKind(tag));
+  }).map(String);
+}
+
+/*
+ * The slot PACT gives a value: the lowest-numbered slot no colour uses yet, so
+ * ten values spread across the ten palettes in slot order before any repeats,
+ * and the least-used one after that. The counts are of a mapping's own slots.
+ */
+function nextFreeSlot(counts) {
+  let best = 0;
+  for (let i = 1; i < SLOT_COUNT; i += 1) {
+    if (counts[i] < counts[best]) best = i;
+  }
+  return best;
+}
+
+function slotCounts(colours) {
+  const counts = new Array(SLOT_COUNT).fill(0);
+  Object.keys(colours).forEach(function (tag) {
+    const slot = colours[tag];
+    if (Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT) counts[slot] += 1;
+  });
+  return counts;
+}
+
+/*
+ * A mapping with a slot given to every value under a chosen key that has none,
+ * and every slot already set - by PACT earlier or by hand - kept exactly as it
+ * was. A value the user set is never reassigned, and a value that carries no
+ * colour under a chosen key takes the next free slot. With no key chosen there
+ * is nothing to assign, so the mapping comes back unchanged: opening the panel
+ * writes nothing.
+ */
+export function assignTagSlots(keys, tags, colours) {
+  const out = Object.assign({}, colours);
+  const counts = slotCounts(out);
+  tagsUnderKeys(keys, tags).forEach(function (tag) {
+    if (Object.prototype.hasOwnProperty.call(out, tag)) return;
+    const slot = nextFreeSlot(counts);
+    out[tag] = slot;
+    counts[slot] += 1;
+  });
+  return out;
+}
+
+/*
+ * A mapping after one swatch press: pressing the slot the value already draws
+ * in clears the value, so the same control that chooses also clears; pressing
+ * any other chooses that slot. The mapping given is never changed.
+ */
+export function chooseTagSlot(colours, tag, slot) {
+  const out = Object.assign({}, colours);
+  if (out[tag] === slot) delete out[tag];
+  else out[tag] = slot;
+  return out;
+}
+
 // The keys a stored mapping chooses, each a kind, with unchosen and malformed
 // ones dropped. Never the stored object itself, so a caller cannot mutate it.
 export function tagKeys(tagColours) {

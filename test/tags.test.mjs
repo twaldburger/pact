@@ -15,6 +15,9 @@ import {
   personSlot,
   planTypedTags,
   tagKindGroups,
+  tagsUnderKeys,
+  assignTagSlots,
+  chooseTagSlot,
   cleanTagColours
 } from "../public/lib/tags.mjs";
 
@@ -162,4 +165,61 @@ test("choosing a key colours the items that carry one and leaves the rest", () =
   const projects = [{ id: "atlas", colour: 1, tags: ["api:Stellar"] }, { id: "ops", colour: 2, tags: [] }];
   assert.equal(assignmentSlot([], projects[0].tags, keys, colours), 3);
   assert.equal(assignmentSlot([], projects[1].tags, keys, colours), null);
+});
+
+test("a chosen key selects its typed values, and no key selects nothing", () => {
+  const tags = ["api:Stellar", "api:Ops", "skill:DevOps", "DevOps"];
+  assert.deepEqual(tagsUnderKeys({ projects: "api" }, tags), ["api:Stellar", "api:Ops"]);
+  // Any of the three levels can choose the kind, and the same kind twice still
+  // selects its values once.
+  assert.deepEqual(tagsUnderKeys({ people: "skill" }, tags), ["skill:DevOps"]);
+  assert.deepEqual(tagsUnderKeys({ projects: "api", people: "api" }, tags), ["api:Stellar", "api:Ops"]);
+  assert.deepEqual(tagsUnderKeys({}, tags), []);
+  assert.deepEqual(tagsUnderKeys({ projects: "" }, tags), []);
+  assert.deepEqual(tagsUnderKeys(undefined, tags), []);
+});
+
+test("PACT gives each value under a chosen key the next free slot", () => {
+  const keys = { projects: "api" };
+  const tags = ["api:A", "api:B", "api:C"];
+  // Ten values spread across the ten palettes in slot order before any repeat.
+  const ten = Array.from({ length: 10 }, (_, i) => "api:v" + i);
+  const filled = assignTagSlots(keys, ten, {});
+  assert.deepEqual(ten.map((t) => filled[t]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  // The eleventh repeats, and the least-used slot is the one it takes.
+  const eleven = assignTagSlots(keys, ten.concat(["api:v10"]), filled);
+  assert.equal(eleven["api:v10"], 0);
+  // A run of three starts at the first free slot.
+  assert.deepEqual(assignTagSlots(keys, tags, {}), { "api:A": 0, "api:B": 1, "api:C": 2 });
+  // A value set by hand is never reassigned; the free slots step around it.
+  assert.deepEqual(assignTagSlots(keys, tags, { "api:B": 5 }), { "api:B": 5, "api:A": 0, "api:C": 1 });
+  // Slots already given are kept exactly, even where another would be free.
+  const set = { "api:A": 7, "api:B": 8, "api:C": 9 };
+  assert.deepEqual(assignTagSlots(keys, tags, set), set);
+});
+
+test("PACT assigns nothing outside a chosen key, and nothing with no key chosen", () => {
+  const tags = ["api:Stellar", "skill:DevOps"];
+  // Only the values under the chosen key are assigned.
+  assert.deepEqual(assignTagSlots({ projects: "api" }, tags, {}), { "api:Stellar": 0 });
+  // No key chosen at all is no write: the mapping comes back unchanged.
+  assert.deepEqual(assignTagSlots({}, tags, {}), {});
+  assert.deepEqual(assignTagSlots({}, tags, { "api:Stellar": 4 }), { "api:Stellar": 4 });
+  assert.deepEqual(assignTagSlots(undefined, tags, {}), {});
+});
+
+test("pressing a value's chosen slot clears it, pressing another chooses it", () => {
+  // Pressing the slot already chosen clears the value - the same control that
+  // chooses is the one that clears.
+  assert.deepEqual(chooseTagSlot({ "api:A": 3 }, "api:A", 3), {});
+  // Pressing any other slot chooses that one instead.
+  assert.deepEqual(chooseTagSlot({ "api:A": 3 }, "api:A", 6), { "api:A": 6 });
+  // Pressing a slot on an uncoloured value chooses it.
+  assert.deepEqual(chooseTagSlot({}, "api:A", 0), { "api:A": 0 });
+  // Values other than the pressed one keep their slots.
+  assert.deepEqual(chooseTagSlot({ "api:A": 3, "api:B": 1 }, "api:A", 6), { "api:A": 6, "api:B": 1 });
+  // The mapping given is not changed.
+  const colours = { "api:A": 3 };
+  chooseTagSlot(colours, "api:A", 6);
+  assert.deepEqual(colours, { "api:A": 3 });
 });
