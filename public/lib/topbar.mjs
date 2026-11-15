@@ -55,14 +55,14 @@ export function topbarMarkup(view) {
   return `
     <div class="topbar__identity">
       <span class="wordmark">PACT</span>
-      <nav class="viewswitch" aria-label="Plan or report">
-        <a class="viewswitch__btn" href="${PLAN_PATH}" data-view-link="${VIEW_PLAN}"${planCurrent}>Plan</a>
-        <a class="viewswitch__btn" href="${REPORT_PATH}" data-view-link="${VIEW_REPORT}"${reportCurrent}>Report</a>
-      </nav>
       <span class="topbar__context" id="context"></span>
       <span class="topbar__save" id="save-status">Saved</span>
     </div>
     <div class="topbar__instruments">
+      <nav class="viewswitch" aria-label="Plan or report">
+        <a class="viewswitch__btn" href="${PLAN_PATH}" data-view-link="${VIEW_PLAN}"${planCurrent}>Plan</a>
+        <a class="viewswitch__btn" href="${REPORT_PATH}" data-view-link="${VIEW_REPORT}"${reportCurrent}>Report</a>
+      </nav>
       <div class="filter" id="filter">
         <input type="text" class="filter__input" id="filter-input" placeholder="Filter"
           aria-label="Filter the plan" autocomplete="off" role="combobox"

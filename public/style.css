@@ -185,8 +185,8 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* The instruments sit at the end of the bar when there is room, and run off
-   the end in this order when there is not: Filter, Zoom, Row height, Today,
-   then the Options control. */
+   the end in this order when there is not: the Plan/Report switch, Filter,
+   Zoom, Row height, Today, then the Options control. */
 .topbar__instruments {
   display: flex;
   align-items: center;
@@ -202,10 +202,10 @@ h1, h2, h3, p { margin: 0; }
   letter-spacing: -0.01em;
 }
 
-/* The Plan/Report switch: one segmented control beside the wordmark, in the
-   bar's shared control language. It is a pair of real links, so the move to a
-   view is a navigation to that view's own page, and the page showing marks
-   itself with aria-current. */
+/* The Plan/Report switch: one segmented control opening the instruments,
+   immediately before the Filter, in the bar's shared control language. It is a
+   pair of real links, so the move to a view is a navigation to that view's own
+   page, and the page showing marks itself with aria-current. */
 .viewswitch {
   display: flex;
   align-items: stretch;

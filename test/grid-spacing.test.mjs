@@ -19,10 +19,11 @@ const INSTRUMENTS = HTML.match(/<div class="topbar__instruments">([\s\S]*)/);
 const SPACING_GROUP = HTML.match(/<div class="spacing"[^>]*>([\s\S]*?)<\/div>/);
 const ROWHEIGHT_GROUP = HTML.match(/<div class="rowheight"[^>]*>([\s\S]*?)<\/div>/);
 
-test("the bar reads Filter, Today, Zoom, Row height, Grid spacing, Undo/Redo, Options", () => {
+test("the bar reads the switch, Filter, Today, Zoom, Row height, Grid spacing, Undo/Redo, Options", () => {
   assert.ok(INSTRUMENTS, "the topbar instruments are missing");
   const bar = INSTRUMENTS[1];
   const order = [
+    /class="viewswitch"/,
     /class="filter"/,
     /id="today"/,
     /class="zoom"/,
