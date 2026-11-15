@@ -1,10 +1,13 @@
-/* PACT - the plan, drawn from the server's JSON file.
- * Plain JavaScript as an ES module, no framework, no build step. The plan
- * lives in the active plan file behind /api; the active file is chosen in the
- * Plan file panel and remembered in data/config.json. Every change the screen
- * makes is sent to /api as it happens, and the screen is redrawn from what the
- * server returns. The panel rules that are not about the DOM live in
- * ./lib/panels.mjs, so `node --test` can pin them. */
+/* PACT - the plan drawn from the server's JSON file, and the report on its own
+ * page, both from this one script. Plain JavaScript as an ES module, no
+ * framework, no build step. The page's <html data-view> says which view is
+ * showing; the bar is mounted from ./lib/topbar.mjs, and the report draws its
+ * own content where the grid would go. The plan lives in the active plan file
+ * behind /api; the active file is chosen in the Plan file panel and remembered
+ * in data/config.json. Every change the screen makes is sent to /api as it
+ * happens, and the screen is redrawn from what the server returns. The panel
+ * rules that are not about the DOM live in ./lib/panels.mjs, so `node --test`
+ * can pin them. */
 import {
   DEFAULT_STEP,
   STEP_MAX,
@@ -26,7 +29,9 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem } from "./lib/options.mjs";
+import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
+import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -124,9 +129,16 @@ import {
 } from "./lib/holidays.mjs";
 
 var root = document.documentElement;
+// Which view this page is: the grid, or the report on its own page. Read from
+// the page's own attribute, so one script serves both and the two cannot drift.
+var isReport = isReportView(root.getAttribute("data-view"));
+// The bar is mounted before anything below reads it by id, so one source
+// (public/lib/topbar.mjs) fills both pages with exactly the same bar.
+mountTopbar(document.getElementById("topbar"), isReport ? VIEW_REPORT : VIEW_PLAN);
 var tl = document.getElementById("tl");
 var scroller = document.getElementById("scroller");
 var stackList = document.getElementById("stack-list");
+var stackHint = document.getElementById("stack-hint");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
 var saveStatusEl = document.getElementById("save-status");
@@ -175,6 +187,10 @@ var sprintList = [];
 // The zoom buttons, kept so a cadence change can enable or disable the Sprint
 // button and step the view away from a zoom it can no longer show.
 var zoomButtons = [];
+// The report's own zoom level, kept in the view like the grid's and restored
+// on load. Separate, so moving the grid to Day never turns the report into
+// 365 columns; the four levels are the report's time buckets.
+var reportZoom = ZOOM_DEFAULT;
 // The row height and the geometry derived from it. One of the view settings
 // kept in the config and restored on load; never written to the plan.
 var rowHeight = ROW_HEIGHT_DEFAULT;
@@ -366,6 +382,9 @@ function applyRowHeight() {
   if (down) down.disabled = rowHeight <= ROW_HEIGHT_MIN;
   if (up) up.disabled = rowHeight >= ROW_HEIGHT_MAX;
   root.classList.toggle("is-tight-rows", isRowHeaderTight(rowHeight, textScale()));
+  // A report withdraws the pair regardless of where the row height sits, and
+  // this runs again on every resize, so the sweep is repeated here.
+  syncReportControls();
 }
 
 // Apply the active zoom's Grid spacing to the grid: one inline --day-w, which
@@ -381,6 +400,7 @@ function applyGridSpacing() {
   var up = document.getElementById("spacing-increase");
   if (down) down.disabled = value <= GRID_SPACING_MIN;
   if (up) up.disabled = value >= GRID_SPACING_MAX;
+  syncReportControls();
 }
 
 /* --- the shape of the calendar ------------------------------------------ */
@@ -1680,8 +1700,10 @@ function syncSaveStatus() {
 // stack greys its button out, exactly as the row-height stepper does at its
 // ends. A page reload keeps the history, because the server keeps running.
 function syncHistoryControls() {
-  if (undoBtn) undoBtn.disabled = !(data && data.canUndo);
-  if (redoBtn) redoBtn.disabled = !(data && data.canRedo);
+  // A report makes no plan writes, so its history controls are always
+  // disabled; on the grid they mirror what the server says is available.
+  if (undoBtn) undoBtn.disabled = isReport || !(data && data.canUndo);
+  if (redoBtn) redoBtn.disabled = isReport || !(data && data.canRedo);
 }
 
 function planUrl() {
@@ -2818,9 +2840,20 @@ function todayInRange() {
 function updateTodayControl() {
   var todayBtn = document.getElementById("today");
   if (!todayBtn) return;
+  // In a report the Today slot has nothing to act on, and it is where a Report
+  // reset will go once the report's own state is worth resetting. It is
+  // disabled - visibly unavailable and not focusable - and keeps its position.
+  if (isReport) {
+    todayBtn.disabled = true;
+    todayBtn.setAttribute("aria-disabled", "true");
+    todayBtn.classList.add("is-disabled");
+    todayBtn.title = "Today applies to the grid";
+    return;
+  }
   var available = todayInRange();
   // Kept focusable and labelled; only its action is withdrawn, so a reader
   // still reaches it and hears that it is unavailable.
+  todayBtn.disabled = false;
   todayBtn.setAttribute("aria-disabled", available ? "false" : "true");
   todayBtn.classList.toggle("is-disabled", !available);
   todayBtn.title = available ? "" : "Today is outside the plan's period";
@@ -2852,19 +2885,32 @@ function applyZoom(zoom) {
   // cadence is cleared while the view is on Sprint, step back to Week rather
   // than leaving a zoom the plan can no longer name.
   if (zoom === "sprint" && !sprintCadence) zoom = "week";
+  // The report has no grid to redraw: its level is still the same zoom
+  // control, but it sets the report's own remembered level and touches
+  // nothing about the grid's geometry.
+  if (isReport) {
+    reportZoom = zoom;
+    syncZoomButtons(zoom);
+    return;
+  }
   // Hold the Marker where it sits on screen while the scale changes.
   var sRect = scroller.getBoundingClientRect();
   var before = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
   root.setAttribute("data-zoom", zoom);
   applyGridSpacing();
   updateDividerRules();
-  zoomButtons.forEach(function (b) {
-    b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
-  });
+  syncZoomButtons(zoom);
   var after = marker ? marker.getBoundingClientRect().left - sRect.left : 0;
   scroller.scrollLeft += after - before;
   queueBlockLabels();
   updateMinimapWindow();
+}
+
+// Which of the four buttons reads as pressed, in either view.
+function syncZoomButtons(zoom) {
+  zoomButtons.forEach(function (b) {
+    b.setAttribute("aria-pressed", b.getAttribute("data-zoom") === zoom ? "true" : "false");
+  });
 }
 
 // The Sprint button never appears and disappears: it is always in the group and
@@ -2876,7 +2922,10 @@ function syncZoomControls() {
   sprintBtn.disabled = !available;
   sprintBtn.setAttribute("aria-disabled", available ? "false" : "true");
   sprintBtn.title = available ? "" : "Define sprints in Options";
-  if (!available && root.getAttribute("data-zoom") === "sprint") {
+  // The active level is the grid's on the plan and the report's own on the
+  // report, so clearing the cadence steps the right one back to Week.
+  var active = isReport ? reportZoom : root.getAttribute("data-zoom");
+  if (!available && active === "sprint") {
     applyZoom("week");
     persistView();
   }
@@ -2889,9 +2938,12 @@ function initZoom() {
       if (b.disabled) return;
       applyZoom(b.getAttribute("data-zoom"));
       persistView();
+      // The grid redraws itself from the zoom geometry, but a report names its
+      // own bucket in its content, so it redraws to show the new level.
+      if (isReport) render();
     });
   });
-  var initial = root.getAttribute("data-zoom");
+  var initial = isReport ? reportZoom : root.getAttribute("data-zoom");
   applyZoom(isZoom(initial) ? initial : ZOOM_DEFAULT);
 }
 
@@ -3171,6 +3223,49 @@ function buildEmptyState() {
   return box;
 }
 
+/* The report page's own content: the shell's placeholder, naming that the
+ * report's tables, totals and charts are still to come (they are #134's own
+ * work). It writes nothing to the plan; it only reads the period, the report's
+ * own zoom level as its time buckets, and the session's Filter, so the report
+ * reflects the Filter the way the grid does. The rail is drawn beside it, and
+ * its items open the same panels they do from the grid. */
+function renderReport() {
+  tl.classList.remove("is-empty");
+  tl.classList.add("is-report");
+  var box = el("div", "report-placeholder");
+
+  var title = el("h2", "report-placeholder__title");
+  title.textContent = "Report";
+  box.appendChild(title);
+
+  var lead = el("p", "report-placeholder__lead");
+  lead.textContent = "The report's tables, totals and charts are still to come. " +
+    "This is its shell: the bar, the rail and the Filter already work here.";
+  box.appendChild(lead);
+
+  var buckets = el("p", "report-placeholder__line");
+  buckets.textContent = "Time buckets: " + reportBucketLabel(reportZoom) + ".";
+  box.appendChild(buckets);
+
+  var period = el("p", "report-placeholder__line");
+  period.textContent = "Over the plan period, " +
+    rangeLabel(data.range.start, data.range.end) + ".";
+  box.appendChild(period);
+
+  var filter = el("p", "report-placeholder__line");
+  filter.textContent = filterQuery.trim() === ""
+    ? "Showing the whole plan."
+    : 'Filtered by "' + filterQuery.trim() + '" in ' + searchedAreas(filterScopes) + ".";
+  box.appendChild(filter);
+
+  tl.appendChild(box);
+  // The rail is the same rail, but a report has no grid rows to drop onto, so
+  // its hint names the one action a Project has here: opening its panel.
+  if (stackHint) stackHint.textContent = "Open a project to edit it.";
+  drawStack();
+  syncStackToggle();
+}
+
 function render(opts) {
   if (!data) return;
   var scrollLeft = scroller.scrollLeft;
@@ -3186,6 +3281,11 @@ function render(opts) {
   syncHistoryControls();
   syncZoomControls();
   updateTodayControl();
+
+  // The report shares everything above - the period line, the save status, the
+  // disabled grid controls, the zoom - and then draws its own content instead
+  // of the grid.
+  if (isReport) { renderReport(); return; }
 
   if (filterQuery.trim() !== "" && filterIsEmpty({
     people: gridPeople,
@@ -3470,6 +3570,8 @@ function initFilter() {
   filterSuggestEl = document.getElementById("filter-suggest");
   if (!filterEl || !filterInput) return;
 
+  // The carried-in Filter, if any, is already in filterQuery; show it.
+  filterInput.value = filterQuery;
   filterInput.addEventListener("input", function () {
     filterQuery = filterInput.value;
     updateFilterChrome();
@@ -3719,6 +3821,7 @@ function initSortControls() {
 function currentView() {
   return {
     zoom: root.getAttribute("data-zoom"),
+    reportZoom: reportZoom,
     rowHeight: rowHeight,
     gridSpacing: {
       day: gridSpacing.day,
@@ -3745,6 +3848,9 @@ function adoptView(view) {
   activePalette = v.palette;
   root.setAttribute("data-palette", v.palette);
   root.setAttribute("data-zoom", v.zoom);
+  // The run's own zoom level, kept beside the grid's. A report page draws it
+  // as its buckets; the grid page only stores it back unchanged.
+  reportZoom = v.reportZoom;
   rowHeight = v.rowHeight;
   gridSpacing = Object.assign({}, v.gridSpacing);
   highlightWeekends = v.weekends;
@@ -4451,6 +4557,18 @@ function initOptions() {
   optionsMenu = document.getElementById("options-menu");
   if (!optionsEl || !optionsBtn || !optionsMenu) return;
   buildOptionsMenu();
+  // In a report the grid-only entries cannot act, so they are disabled rather
+  // than moved or hidden; the plan-facing entries stay live. Which rows those
+  // are is public/lib/options.mjs' rule, not a second list here.
+  if (isReport) {
+    reportDisabledOptionKeys().forEach(function (key) {
+      // The toggle rows are held by key; Reset view is its own button. A
+      // duplicate key (the Holidays action shares the toggle's key) resolves
+      // to the toggle, which is the row this rule names.
+      var btn = optionButtons[key] || document.getElementById("option-" + key);
+      if (btn) btn.disabled = true;
+    });
+  }
   optionsBtn.addEventListener("click", function () { openOptions(optionsMenu.hidden); });
   optionsBtn.addEventListener("keydown", function (e) {
     if (e.key === "ArrowDown") { openOptions(true); e.preventDefault(); }
@@ -4469,6 +4587,55 @@ function initOptions() {
   });
 }
 
+/* --- the view switch, the report's controls and the carried Filter ------ */
+
+// The controls a report withdraws keep their place but not their action. The
+// two stepper pairs have no dynamic state, so they are set once; Today and
+// Undo/Redo are updated on every draw beside their own rules.
+function syncReportControls() {
+  if (!isReport) return;
+  reportDisabledControlIds().forEach(function (id) {
+    var btn = document.getElementById(id);
+    if (btn) btn.disabled = true;
+  });
+}
+
+// The Filter stays session-only, but it must reach the report across the
+// switch's navigation. On a switch the current text and Look in scope are left
+// in the browser's session storage, and the page that loads consumes and
+// removes them - so a plain reload still drops the Filter exactly as it does
+// today, while moving between the two views carries it. The shape of that
+// record is public/lib/report.mjs' rule.
+function carryFilter() {
+  try {
+    sessionStorage.setItem(FILTER_HANDOFF_KEY,
+      serializeFilterHandoff(filterQuery, filterScopes));
+  } catch (err) { /* a browser refusing session storage just does not carry */ }
+}
+
+function takeFilterHandoff() {
+  try {
+    var raw = sessionStorage.getItem(FILTER_HANDOFF_KEY);
+    if (raw === null) return null;
+    sessionStorage.removeItem(FILTER_HANDOFF_KEY);
+    return parseFilterHandoff(raw);
+  } catch (err) {
+    return null;
+  }
+}
+
+function initViewSwitch() {
+  var links = Array.prototype.slice.call(document.querySelectorAll("[data-view-link]"));
+  links.forEach(function (link) {
+    link.addEventListener("click", function (e) {
+      // A modified click opens a new tab or window; the Filter is that tab's
+      // own session, so nothing is carried.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      carryFilter();
+    });
+  });
+}
+
 function boot() {
   // The stored view first, so the first draw opens on it; a failure to read it
   // is not fatal - the defaults are simply used.
@@ -4478,6 +4645,13 @@ function boot() {
   }).then(function (plan) {
     data = plan;
     indexData();
+    // The Filter the previous view sent over, applied before the first draw so
+    // the report reflects it the moment it opens.
+    var carried = takeFilterHandoff();
+    if (carried) {
+      filterQuery = carried.query;
+      filterScopes = carried.scopes;
+    }
     var today = data.today ? udate(data.today) : rangeStart;
     markerIndex = clamp(dayDiff(rangeStart, today), 0, DAYS - 1);
     initRowHeight();
@@ -4491,6 +4665,8 @@ function boot() {
     bindChrome();
     initFilter();
     initOptions();
+    initViewSwitch();
+    syncReportControls();
     loadPlanFileState();
     window.requestAnimationFrame(function () {
       var tlRect = tl.getBoundingClientRect();

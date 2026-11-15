@@ -19,6 +19,7 @@ import { ASCENDING, DESCENDING } from "../public/lib/sort.mjs";
 test("the defaults are exactly what the app shipped with", () => {
   assert.deepEqual(VIEW_DEFAULTS, {
     zoom: "month",
+    reportZoom: "month",
     rowHeight: 48,
     gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
     weekends: false,
@@ -41,6 +42,7 @@ test("an absent view, or any non-object, reads as every default", () => {
   [undefined, null, {}, 42, "view", [], true].forEach((raw) => {
     assert.deepEqual(normalizeView(raw), {
       zoom: "month",
+      reportZoom: "month",
       rowHeight: 48,
       gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
       weekends: false,
@@ -63,6 +65,7 @@ test("the keys the view owns are the keys it normalises", () => {
 test("every key survives a normalise at a non-default value", () => {
   const stored = {
     zoom: "day",
+    reportZoom: "week",
     rowHeight: 120,
     gridSpacing: { day: 48, week: 30, sprint: 2, month: 7 },
     weekends: true,
@@ -106,6 +109,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
   };
   assert.deepEqual(normalizeView(stored), {
     zoom: "month",
+    reportZoom: "month",
     rowHeight: 48,
     gridSpacing: { day: 44, week: 30, sprint: 8, month: 7 },
     weekends: false,

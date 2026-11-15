@@ -67,6 +67,7 @@ test("a changed view is stored and read back", async () => {
   const { base, configFile } = await server();
   const sent = {
     zoom: "week",
+    reportZoom: "week",
     rowHeight: 64,
     gridSpacing: { day: 30, week: 20, sprint: 10, month: 6 },
     weekends: true,
