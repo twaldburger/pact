@@ -197,6 +197,29 @@ export function personSlot(personTags, keys, colours) {
   return slotForTags(personTags, keys && keys.people, colours);
 }
 
+// Whether a key that can colour an Assignment's block is chosen, at either of
+// the two levels a block reads: its own assignments key or its Project's
+// projects key. The people key colours only the People column, so choosing it
+// alone leaves every block on its Project colour.
+function blockKeysChosen(keys) {
+  return ["assignments", "projects"].some(function (level) {
+    const kind = keys && keys[level];
+    return typeof kind === "string" && kind !== "";
+  });
+}
+
+/*
+ * Whether an Assignment's block draws hollow instead of falling back to its
+ * Project's palette colour. The two states are distinct: with no block key
+ * chosen the block keeps its Project colour, and only once one is chosen does
+ * a block no chosen key colours - the resolution is null, so it would fall
+ * back to the Project's own colour - draw as an unfilled cell.
+ */
+export function blockIsHollow(assignmentTags, projectTags, keys, colours) {
+  if (!blockKeysChosen(keys)) return false;
+  return assignmentSlot(assignmentTags, projectTags, keys, colours) === null;
+}
+
 /*
  * Every typed tag the plan carries, deduplicated, across People, Projects and
  * Assignments alike. The Tags panel reads this to list the kinds and values in

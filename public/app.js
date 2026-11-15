@@ -39,7 +39,8 @@ import {
   SLOT_COUNT,
   isPalette,
   labelInkFor,
-  leastUsedSlot
+  leastUsedSlot,
+  DEEP_INK
 } from "./lib/palette.mjs";
 import {
   TAG_LEVELS,
@@ -50,6 +51,7 @@ import {
   tagColourSlots,
   assignmentSlot,
   personSlot,
+  blockIsHollow,
   planTypedTags,
   tagKindGroups,
   assignTagSlots,
@@ -736,7 +738,11 @@ function blockFor(group, s) {
   var a = group.a;
   var archived = !!(a.raw && a.raw.archived);
   var absence = aIsAbsence(a);
-  var b = el("div", "blk" + (archived ? " is-archived" : "") + (absence ? " is-absence" : ""));
+  // Once a key that colours blocks is chosen, a block no chosen key colours
+  // draws hollow instead of falling back to its Project's palette colour. With
+  // no such key chosen it keeps that colour, so an untouched plan is unchanged.
+  var hollow = blockIsHollow(a.raw && a.raw.tags, a.project && a.project.tags, tagKeyMap, tagSlotMap);
+  var b = el("div", "blk" + (archived ? " is-archived" : "") + (absence ? " is-absence" : "") + (hollow ? " is-hollow" : ""));
   b.setAttribute("role", "button");
   b.setAttribute("tabindex", "0");
   b.setAttribute("data-assignment", a.id);
@@ -752,8 +758,10 @@ function blockFor(group, s) {
     ". Enter for details.");
   b.style.setProperty("--block-ink", "var(--proj-" + blockColourSlot(a) + ")");
   // The label ink is chosen per fill, so a pastel takes the deep ink and a dark
-  // member takes white. It is a property of the drawn fill, not of the slot.
-  b.style.setProperty("--block-label", labelInkFor(activeColour(blockColourSlot(a))));
+  // member takes white. It is a property of the drawn fill, not of the slot. A
+  // hollow block has no fill, so its label sits on the canvas and takes the
+  // deep ink the pastel fills already use.
+  b.style.setProperty("--block-label", hollow ? DEEP_INK : labelInkFor(activeColour(blockColourSlot(a))));
   set(b, s.start, s.end - s.start + 1);
   b.style.setProperty("--blk-bottom", yPx(s.offset) + "px");
   b.style.setProperty("--blk-height", (yPx(s.offset + group.h) - yPx(s.offset)) + "px");
