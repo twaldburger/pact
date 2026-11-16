@@ -273,6 +273,34 @@ test("no view still carries the machinery the new lines replaced", () => {
   });
 });
 
+test("all three tables mark the column their row totals land in", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const column = APP.match(/var REPORT_TOTAL_COL = "([^"]+)";/);
+  assert.ok(column, "the marked column's class is missing");
+  assert.match(column[1], /\breport-table__total\b/);
+  // The header over the marked column is marked too: a heading over a marked
+  // column is not a plain one singled out by a stray line.
+  const heads = {
+    reportProjectSection: ["Total", "byProject"],
+    reportPersonSection: ["FTE-days", "byPerson"],
+    reportTagSection: ["Total", "byTag"]
+  };
+  Object.keys(heads).forEach((name) => {
+    const pivot = functionSource(APP, name);
+    assert.ok(pivot.length > 0, name + " is missing");
+    assert.match(pivot, new RegExp('\\{ text: "' + heads[name][0] + '", cls: REPORT_TOTAL_COL \\}'),
+      name + " leaves its column's header unmarked");
+    // Each row's figure and the Total row's own figure both take it.
+    assert.equal((pivot.match(/reportTotalCell\(r\.total\)/g) || []).length, 1,
+      name + " does not mark its rows' totals");
+    assert.match(pivot, new RegExp("reportTotalCell\\(model\\." + heads[name][1] + "\\.total\\.total\\)"),
+      name + " does not mark the Total row's own cell");
+    // Nothing else in the column is marked through a second class or a rule of
+    // its own: the one class is the whole mark.
+    assert.doesNotMatch(pivot, /report-row--total[^\n]*report-table__total/);
+  });
+});
+
 test("the panel's fold is the grid's one collapsed setting", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   // One stored key, one setter and one board class for both pages: a report
