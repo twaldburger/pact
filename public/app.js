@@ -3552,6 +3552,15 @@ function reportSection(title, sub) {
   return sec;
 }
 
+/* The one line under every view's content: the fact about the figures that
+ * neither the heading nor the column heads say. Only one view shows at a time,
+ * so it is on screen once. */
+function reportAbsencesNote() {
+  var note = el("p", "report__note");
+  note.textContent = "Absences are left out.";
+  return note;
+}
+
 /* --- the two charts, hand-drawn SVG in the app's own tokens ------------- */
 
 function svgNode(tag, attrs, text) {
@@ -3826,7 +3835,7 @@ function reportBucketHeaders(model) {
   });
 }
 
-// FTE-days by project: the matrix with the tags an even split divides them over.
+// FTE-days by project: one row per project, its FTE-days under each bucket.
 function reportProjectSection(model) {
   var headers = [{ text: "Project", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
@@ -3850,13 +3859,13 @@ function reportProjectSection(model) {
   totalCells.push({ text: "", cls: "report-table__tags" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-project"),
-    "Each project's FTE-days in every " + reportBucketWord() +
-    ", with the tags an even split divides them over.");
+    "A project with two tags has its FTE-days split between them.");
   section.appendChild(reportTable(headers, rows));
+  section.appendChild(reportAbsencesNote());
   return section;
 }
 
-// FTE-days by person: the matrix with each person's own offer beside it.
+// FTE-days by person: one row per person, their FTE-days against their offer.
 function reportPersonSection(model) {
   var headers = [{ text: "Person", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
@@ -3880,13 +3889,13 @@ function reportPersonSection(model) {
   totalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-person"),
-    "Each person's FTE-days in every " + reportBucketWord() +
-    ", against what they offer over the period.");
+    "The percentage is of what that person offers, not of a full week.");
   section.appendChild(reportTable(headers, rows));
+  section.appendChild(reportAbsencesNote());
   return section;
 }
 
-// FTE-days by tag: each project's FTE-days split evenly over its tags.
+// FTE-days by tag: one row per tag, each project's days shared over its tags.
 function reportTagSection(model) {
   var headers = [{ text: "Tag", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
@@ -3907,9 +3916,9 @@ function reportTagSection(model) {
   totalCells.push({ text: "100%", cls: "report-table__num" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-tag"),
-    "A project's FTE-days split evenly over its tags, so the tag totals reconcile " +
-    "with the plan. Colours follow the plan's colour keys.");
+    "Each project's days are split between its tags, so the totals fit the plan.");
   section.appendChild(reportTable(headers, rows));
+  section.appendChild(reportAbsencesNote());
   return section;
 }
 
@@ -3920,14 +3929,14 @@ function reportChartSection(key, sub, chart, legend) {
   card.appendChild(chart);
   card.appendChild(legend);
   section.appendChild(card);
+  section.appendChild(reportAbsencesNote());
   return section;
 }
 
 // FTE-days by tag over time: the stacked bar, one bar per bucket.
 function reportTagTimeSection(model) {
   return reportChartSection("by-tag-over-time",
-    "Each " + reportBucketWord() + "'s FTE-days split by tag, so the tag totals " +
-    "reconcile with the plan. Colours follow the plan's colour keys.",
+    "Colours follow the plan's colour keys.",
     buildStackedChart(model),
     reportLegend(model.byTag.rows.map(function (r) {
       var coloured = Number.isInteger(r.slot) && r.slot >= 0 && r.slot < SLOT_COUNT;
@@ -3942,7 +3951,7 @@ function reportTagTimeSection(model) {
 // Allocation against capacity: the line, per bucket.
 function reportAllocationSection(model) {
   return reportChartSection("allocation",
-    "Each " + reportBucketWord() + "'s allocation against the capacity the plan offers.",
+    "What the plan offers each " + reportBucketWord() + ", against what is allocated.",
     buildLineChart(model),
     reportLegend([
       { label: "Allocation", swatchClass: "report-legend__swatch--ink" },

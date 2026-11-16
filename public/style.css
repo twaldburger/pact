@@ -937,7 +937,10 @@ h1, h2, h3, p { margin: 0; }
   font-stretch: var(--wd-title);
 }
 
-.report__sub {
+/* The line under a view's heading and the one under its content wear one
+   treatment: both are a quiet note beside the figures. */
+.report__sub,
+.report__note {
   margin: 0;
   font-size: var(--fs-data);
   color: var(--ink-soft);

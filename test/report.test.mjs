@@ -186,6 +186,93 @@ test("one view is drawn at a time, and the selection decides which", () => {
   assert.match(chooser, /return reportProjectSection\(model\);/);
 });
 
+/* --- the line under each view, and the one under its content --------------- */
+
+// One function's source, from its own line to the next closing brace at column
+// zero, so an assertion can be made of that builder alone.
+function functionSource(APP, name) {
+  const start = APP.indexOf("function " + name + "(");
+  const end = start < 0 ? -1 : APP.indexOf("\n}\n", start);
+  return end > start ? APP.slice(start, end + 3) : "";
+}
+
+// Whitespace collapsed, so a sentence split over two source lines still matches
+// as the one sentence it renders as.
+function flatSource(text) {
+  return text.replace(/\s+/g, " ");
+}
+
+// The owner's own sentences, decided with him in #153. Each names only what its
+// view's heading and column heads cannot say.
+test("each view's heading carries its own sentence, in the owner's words", () => {
+  const APP = flatSource(fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8"));
+  const calls = {
+    byProject: 'reportSection(reportViewLabel("by-project"), ' +
+      '"A project with two tags has its FTE-days split between them.")',
+    byPerson: 'reportSection(reportViewLabel("by-person"), ' +
+      '"The percentage is of what that person offers, not of a full week.")',
+    byTag: 'reportSection(reportViewLabel("by-tag"), ' +
+      '"Each project\'s days are split between its tags, so the totals fit the plan.")',
+    byTagOverTime: 'reportChartSection("by-tag-over-time", ' +
+      '"Colours follow the plan\'s colour keys.",',
+    // The bucket stays the report's own zoom word, not a fixed "month".
+    allocation: 'reportChartSection("allocation", "What the plan offers each " + ' +
+      'reportBucketWord() + ", against what is allocated.",'
+  };
+  Object.keys(calls).forEach((view) => {
+    assert.ok(APP.includes(calls[view]), view + " does not carry its own sentence");
+  });
+  // The dynamic bucket word is still the zoom's own label, in the sentence's case.
+  assert.match(APP, /function reportBucketWord\(\) \{ return reportBucketLabel\(reportZoom\)\.toLowerCase\(\); \}/);
+});
+
+test("the line under the content says absences are left out, in every view", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // One line, defined once, so the five views cannot drift apart on it.
+  assert.equal((APP.match(/"Absences are left out\."/g) || []).length, 1,
+    "the absences line is defined more than once or not at all");
+  // Appended where each view builds its body: the three tables, and the chart
+  // card both chart views share. Below that body, never between it and the
+  // heading.
+  const body = {
+    reportProjectSection: "reportTable(headers, rows)",
+    reportPersonSection: "reportTable(headers, rows)",
+    reportTagSection: "reportTable(headers, rows)",
+    reportChartSection: "appendChild(card)"
+  };
+  Object.keys(body).forEach((name) => {
+    const source = functionSource(APP, name);
+    assert.ok(source.length > 0, name + " is missing");
+    assert.match(source, /section\.appendChild\(reportAbsencesNote\(\)\);/, name);
+    assert.ok(source.lastIndexOf("reportAbsencesNote()") > source.indexOf(body[name]),
+      name + " puts the absences line above its content");
+  });
+  assert.equal((APP.match(/section\.appendChild\(reportAbsencesNote\(\)\);/g) || []).length, 4,
+    "a view appends the absences line twice, or one does not append it");
+  // The line wears the sub line's quiet treatment rather than the browser's
+  // default paragraph, and the sub keeps its own class for its own place.
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const note = STYLE.match(/\.report__sub,\s*\.report__note\s*\{([^}]*)\}/);
+  assert.ok(note, "the absences line has no style of its own");
+  assert.match(note[1], /font-size: var\(--fs-data\);/);
+  assert.match(note[1], /color: var\(--ink-soft\);/);
+});
+
+test("no view still carries the machinery the new lines replaced", () => {
+  const APP = flatSource(fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8"));
+  [
+    "with the tags an even split divides them over",
+    "so the tag totals reconcile with the plan",
+    "so the totals reconcile with the plan",
+    "against what they offer over the period",
+    "'s allocation against the capacity the plan offers",
+    "Each project's FTE-days in every",
+    "Each person's FTE-days in every"
+  ].forEach((old) => {
+    assert.equal(APP.includes(old), false, "the old wording is still there: " + old);
+  });
+});
+
 test("the panel's fold is the grid's one collapsed setting", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   // One stored key, one setter and one board class for both pages: a report
