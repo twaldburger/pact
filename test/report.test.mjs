@@ -171,9 +171,11 @@ test("one view is drawn at a time, and the selection decides which", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const reportRender = reportRenderSource();
   assert.ok(reportRender.length > 0, "renderReport is missing");
-  // Every pivot and chart goes into the one section the selection names.
+  // Every pivot and chart goes into the one section the selection names, and
+  // the report's head carries no title or lead above it.
   const appends = reportRender.match(/box\.appendChild\(/g) || [];
-  assert.equal(appends.length, 2, "renderReport appends more than its head and its view");
+  assert.equal(appends.length, 1, "renderReport appends more than its view");
+  assert.doesNotMatch(reportRender, /report__head|report__title|report__lead/);
   assert.match(reportRender, /box\.appendChild\(reportViewSection\(model\)\);/);
   assert.doesNotMatch(reportRender, /reportProjectSection|reportPersonSection|reportTagSection/);
   // The switch hands back exactly one section, chosen by the stored selection.
@@ -321,6 +323,21 @@ test("all three tables call the share column Share", () => {
   });
   // Three tables, so three short heads and no fourth table that missed it.
   assert.equal((APP.match(/\{ text: "Share", cls: "report-table__num" \}/g) || []).length, 3);
+});
+
+test("the report's outline closes up: the rail's h1, then the view's h2", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const section = APP.slice(APP.indexOf("function reportSection(title, sub) {"),
+    APP.indexOf("/* --- the two charts"));
+  assert.ok(section.length > 0, "reportSection is missing");
+  // The only heading the content draws is the section's own, one level under
+  // the rail's h1: no h3 hangs beneath a title that is no longer there.
+  assert.match(section, /el\("h2", "report__heading"\)/);
+  assert.doesNotMatch(APP, /el\("h3"/);
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  ["report__head", "report__title", "report__lead"].forEach((name) => {
+    assert.doesNotMatch(STYLE, new RegExp("\\." + name + "\\b"), name + " rule is still styled");
+  });
 });
 
 test("the panel's fold is the grid's one collapsed setting", () => {

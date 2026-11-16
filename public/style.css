@@ -898,29 +898,8 @@ h1, h2, h3, p { margin: 0; }
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-6);
   padding: var(--sp-5) var(--sp-6) var(--sp-6);
   color: var(--ink);
-}
-
-.report__head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.report__title {
-  margin: 0;
-  font-size: var(--fs-title);
-  font-weight: var(--fw-title);
-  font-stretch: var(--wd-title);
-}
-
-.report__lead {
-  max-width: 46rem;
-  margin: 0;
-  font-size: var(--fs-body);
-  color: var(--ink-soft);
 }
 
 .report__section {
@@ -1235,9 +1214,9 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* A report has no Person header, so the same room is made for the reopen
-   control in its own title block: only the head is inset, exactly as the corner
-   label is above, and the content below keeps its own padding. */
-.board.is-collapsed .report__head {
+   control in its own first section: the heading and the table beneath it are
+   inset together, so they stay aligned with each other. */
+.board.is-collapsed .report > .report__section:first-child {
   padding-left: calc(var(--add-size) + var(--sp-3));
 }
 
