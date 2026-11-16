@@ -22,7 +22,9 @@
  *   - The buckets are the report's own zoom level: a month report has months,
  *     a sprint report has sprints.
  * The pivots keep the order they are handed (the rail's own sort for projects
- * and people); the by-tag pivot is ordered by its own FTE-days.
+ * and people); the by-tag pivot is ordered by its own FTE-days, and a row's
+ * own tag list is read alphabetically, so a column of tags can be scanned
+ * down rather than hunted through.
  */
 import { absencesFor, absenceProjectIds, workingDays } from "./workdays.mjs";
 
@@ -184,6 +186,19 @@ function projectTags(project) {
   return out;
 }
 
+// The order a row's tag list is shown in: alphabetical and case-insensitive,
+// so `api:Solar` sits among the `a`s whatever its capitalisation or the order
+// the project stores its tags in. Two tags differing only in case keep a
+// stable order between themselves. A copy, so the plan's own order is not
+// touched, and display only, so no figure depends on it.
+function sortedTags(tags) {
+  return tags.slice().sort(function (a, b) {
+    const x = a.toLowerCase();
+    const y = b.toLowerCase();
+    return x < y ? -1 : x > y ? 1 : a < b ? -1 : a > b ? 1 : 0;
+  });
+}
+
 /*
  * The whole report: the buckets, the three pivots and the two charts, from a
  * filtered view and the plan it was filtered from.
@@ -275,7 +290,7 @@ export function reportContent(view, plan, options) {
       id: p.id,
       name: p.name,
       colour: p.colour,
-      tags: projectTags(p),
+      tags: sortedTags(projectTags(p)),
       cells: cells,
       total: sum(cells)
     };
@@ -288,7 +303,7 @@ export function reportContent(view, plan, options) {
     return {
       id: p.id,
       name: p.name,
-      tags: Array.isArray(p.tags) ? p.tags.slice() : [],
+      tags: sortedTags(Array.isArray(p.tags) ? p.tags : []),
       cells: cells,
       total: sum(cells),
       offeredCells: offeredCells,

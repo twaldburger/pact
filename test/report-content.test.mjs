@@ -207,3 +207,74 @@ test("an untagged project still reconciles, under its own row", () => {
   near(f.planTotal, 22);
   near(f.byTag.total.total, 22);
 });
+
+/* --- a row's tag list is shown alphabetically ----------------------------- */
+
+test("a project's row shows its tags alphabetically, not in the plan's order", () => {
+  const plan = fixture();
+  plan.projects[0].tags = ["Zebra", "api:Solar", "Testing"];
+  const stored = plan.projects[0].tags.slice();
+  const f = report(plan);
+  const solar = f.byProject.rows.find((r) => r.id === "solar");
+  assert.deepEqual(solar.tags, ["api:Solar", "Testing", "Zebra"]);
+  // Display only: the plan keeps the order the user typed.
+  assert.deepEqual(plan.projects[0].tags, stored);
+});
+
+test("the sort is case-insensitive, so a capital does not jump the queue", () => {
+  const plan = fixture();
+  plan.projects[0].tags = ["testing", "Architect", "api:Solar", "Zebra", "beta"];
+  const f = report(plan);
+  assert.deepEqual(f.byProject.rows.find((r) => r.id === "solar").tags,
+    ["api:Solar", "Architect", "beta", "testing", "Zebra"]);
+});
+
+test("a repeated tag still collapses, however it is ordered", () => {
+  const plan = fixture();
+  plan.projects[0].tags = ["Testing", "api:Solar", "Testing"];
+  const f = report(plan);
+  assert.deepEqual(f.byProject.rows.find((r) => r.id === "solar").tags, ["api:Solar", "Testing"]);
+  assert.equal(f.byTag.rows.length, 2);
+});
+
+test("a person's row reads its tags the same way", () => {
+  const plan = fixture();
+  plan.people[0].tags = ["Zebra", "Architect"];
+  const f = report(plan);
+  assert.deepEqual(f.byPerson.rows.find((r) => r.id === "anna").tags, ["Architect", "Zebra"]);
+});
+
+test("sorting a row's tags changes no figure", () => {
+  const plan = fixture();
+  const reversed = fixture();
+  reversed.projects[0].tags = plan.projects[0].tags.slice().reverse();
+  const f = report(plan);
+  const g = report(reversed);
+  near(g.planTotal, f.planTotal);
+  near(g.byProject.rows.find((r) => r.id === "solar").total, 17);
+  assert.deepEqual(g.byProject.rows.find((r) => r.id === "solar").cells,
+    f.byProject.rows.find((r) => r.id === "solar").cells);
+  f.byTag.rows.forEach((row) => {
+    const other = g.byTag.rows.find((r) => r.tag === row.tag);
+    assert.ok(other, row.tag);
+    near(other.total, row.total);
+    near(other.share, row.share);
+    assert.deepEqual(other.cells, row.cells);
+  });
+  // The even split still divides the same FTE-days the same way.
+  near(g.byTag.rows.find((r) => r.tag === "api:Solar").total, 8.5);
+  near(g.byTag.rows.find((r) => r.tag === "Testing").total, 8.5);
+  near(g.byTag.total.total, f.byTag.total.total);
+});
+
+test("the by-tag rows keep their own order: the most FTE-days first", () => {
+  const plan = fixture();
+  plan.projects[0].tags = ["Zebra", "api:Solar", "Testing"];
+  plan.projects.push({ id: "ops", name: "Ops", colour: 2, tags: ["Zebra"] });
+  plan.assignments.push({ id: "a3", projectId: "ops", personId: "ben", start: "2026-01-05", end: "2026-01-09", share: 100, tags: [] });
+  const f = report(plan);
+  // Two tags share the Solar row's 17 FTE-days at 8.5, and Zebra carries that
+  // plus the Ops row's 5: the figure order, not the alphabetical one. A tie
+  // between the split's two halves breaks by label, untouched by this sort.
+  assert.deepEqual(f.byTag.rows.map((r) => r.tag), ["Zebra", "Testing", "api:Solar"]);
+});
