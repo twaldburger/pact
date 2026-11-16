@@ -212,7 +212,7 @@ test("each view's heading carries its own sentence, in the owner's words", () =>
     byProject: 'reportSection(reportViewLabel("by-project"), ' +
       '"A project with two tags has its FTE-days split between them.")',
     byPerson: 'reportSection(reportViewLabel("by-person"), ' +
-      '"The percentage is of what that person offers, not of a full week.")',
+      '"Of offer is against each person\'s own availability, so someone at 80% can reach 100%.")',
     byTag: 'reportSection(reportViewLabel("by-tag"), ' +
       '"Each project\'s days are split between its tags, so the totals fit the plan.")',
     byTagOverTime: 'reportChartSection("by-tag-over-time", ' +
@@ -269,7 +269,10 @@ test("no view still carries the machinery the new lines replaced", () => {
     "against what they offer over the period",
     "'s allocation against the capacity the plan offers",
     "Each project's FTE-days in every",
-    "Each person's FTE-days in every"
+    "Each person's FTE-days in every",
+    // The caption's old claim: it named a week the report never counts, and a
+    // year-long zoom disproves it.
+    "not of a full week"
   ].forEach((old) => {
     assert.equal(APP.includes(old), false, "the old wording is still there: " + old);
   });
@@ -303,12 +306,13 @@ test("all three tables mark the column their row totals land in", () => {
   });
 });
 
-test("all three tables call the share column Share", () => {
+test("all three tables head their share column Of plan", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
-  // The owner shortened the head because the long one widened the column past
-  // what its figures need, so no copy of the old head may survive anywhere in
-  // the app.
-  assert.equal(APP.includes("Share of plan"), false, "the long head is still there");
+  // The owner renamed the head so both denominators are named rather than one,
+  // so no copy of either old head may survive anywhere in the app.
+  ["Share of plan", "% of offer", '{ text: "Share"'].forEach((old) => {
+    assert.equal(APP.includes(old), false, "the old head is still there: " + old);
+  });
   const heads = {
     reportProjectSection: "byProject",
     reportPersonSection: "byPerson",
@@ -317,12 +321,18 @@ test("all three tables call the share column Share", () => {
   Object.keys(heads).forEach((name) => {
     const pivot = functionSource(APP, name);
     assert.ok(pivot.length > 0, name + " is missing");
-    // The short head keeps the figures' class, so the column stays right-aligned.
-    assert.equal((pivot.match(/\{ text: "Share", cls: "report-table__num" \}/g) || []).length, 1,
-      name + " does not head its share column Share");
+    // The head keeps the figures' class, so the column stays right-aligned.
+    assert.equal((pivot.match(/\{ text: "Of plan", cls: "report-table__num" \}/g) || []).length, 1,
+      name + " does not head its share column Of plan");
   });
-  // Three tables, so three short heads and no fourth table that missed it.
-  assert.equal((APP.match(/\{ text: "Share", cls: "report-table__num" \}/g) || []).length, 3);
+  // Three tables, so three heads of plan and no fourth table that missed it.
+  assert.equal((APP.match(/\{ text: "Of plan", cls: "report-table__num" \}/g) || []).length, 3);
+  // Only the by-person table carries the second denominator, and it names it the
+  // same way, so the pair reads as the two fractions it is.
+  const person = functionSource(APP, "reportPersonSection");
+  assert.equal((person.match(/\{ text: "Of offer", cls: "report-table__num"/g) || []).length, 1,
+    "the by-person table does not head its second percentage Of offer");
+  assert.equal((APP.match(/"Of offer"/g) || []).length, 1, "Of offer appears outside the one head");
 });
 
 test("the report's outline closes up: the rail's h1, then the view's h2", () => {
