@@ -3838,7 +3838,7 @@ function reportProjectSection(model) {
     .concat(reportBucketHeaders(model))
     .concat([
       { text: "Total", cls: REPORT_TOTAL_COL },
-      { text: "Share", cls: "report-table__num" },
+      { text: "Of plan", cls: "report-table__num" },
       { text: "Tags", cls: "report-table__tags" }
     ]);
   var rows = model.byProject.rows.map(function (r) {
@@ -3868,8 +3868,8 @@ function reportPersonSection(model) {
     .concat(reportBucketHeaders(model))
     .concat([
       { text: "FTE-days", cls: REPORT_TOTAL_COL },
-      { text: "Share", cls: "report-table__num" },
-      { text: "% of offer", cls: "report-table__num", title: "The person's FTE-days as a share of the FTE-days they offer over the period" }
+      { text: "Of plan", cls: "report-table__num" },
+      { text: "Of offer", cls: "report-table__num", title: "The person's FTE-days against the FTE-days they offer over the period" }
     ]);
   var rows = model.byPerson.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.name, null), cls: "report-table__name" }];
@@ -3886,7 +3886,7 @@ function reportPersonSection(model) {
   totalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-person"),
-    "The percentage is of what that person offers, not of a full week.");
+    "Of offer is against each person's own availability, so someone at 80% can reach 100%.");
   section.appendChild(reportTable(headers, rows));
   section.appendChild(reportAbsencesNote());
   return section;
@@ -3898,7 +3898,7 @@ function reportTagSection(model) {
     .concat(reportBucketHeaders(model))
     .concat([
       { text: "Total", cls: REPORT_TOTAL_COL },
-      { text: "Share", cls: "report-table__num" }
+      { text: "Of plan", cls: "report-table__num" }
     ]);
   var rows = model.byTag.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];

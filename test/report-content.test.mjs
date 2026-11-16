@@ -88,7 +88,7 @@ test("each pivot's totals reconcile with the plan total", () => {
   near(f.byTag.rows.reduce((s, r) => s + r.total, 0), f.byTag.total.total);
 });
 
-test("the Share of Plan column sums to 100%", () => {
+test("the Of plan column sums to 100%", () => {
   const plan = fixture();
   const f = report(plan);
   near(f.byProject.rows.reduce((s, r) => s + r.share, 0), 1);
@@ -131,6 +131,23 @@ test("a person's offer is read net of their time off", () => {
   near(f.offeredTotal, 28);
   near(anna.pct, 17 / 17);
   near(f.byPerson.total.pct, 17 / 28);
+});
+
+test("a part-time person reaches 100% of their own offer at their ceiling", () => {
+  const plan = fixture();
+  // Ben offers half of full time, so a 50% Assignment fills the offer he makes
+  // and no more: the report reads that as the whole of his offer while his
+  // of-plan fraction stays his part of the plan.
+  plan.assignments.push({
+    id: "a3", projectId: "solar", personId: "ben",
+    start: "2026-01-01", end: "2026-01-31", share: 50, tags: []
+  });
+  const f = report(plan);
+  const ben = f.byPerson.rows.find((r) => r.id === "ben");
+  near(ben.offered, 11);
+  near(ben.total, 11);
+  near(ben.pct, 1);
+  near(ben.share, 11 / 28);
 });
 
 /* --- the rail's sort is the report's order -------------------------------- */
