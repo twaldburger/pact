@@ -12,6 +12,7 @@ import {
 import { PALETTE_DEFAULT } from "../public/lib/palette.mjs";
 import { STACK_COLLAPSED_DEFAULT } from "../public/lib/stack.mjs";
 import { MINIMAP_DEFAULT } from "../public/lib/minimap.mjs";
+import { REPORT_VIEW_DEFAULT, REPORT_VIEWS } from "../public/lib/report-views.mjs";
 import { ASCENDING, DESCENDING } from "../public/lib/sort.mjs";
 
 /* --- the defaults --------------------------------------------------------- */
@@ -20,6 +21,7 @@ test("the defaults are exactly what the app shipped with", () => {
   assert.deepEqual(VIEW_DEFAULTS, {
     zoom: "month",
     reportZoom: "month",
+    reportView: "by-project",
     rowHeight: 48,
     gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
     weekends: false,
@@ -36,6 +38,9 @@ test("the defaults are exactly what the app shipped with", () => {
   assert.equal(VIEW_DEFAULTS.palette, PALETTE_DEFAULT);
   assert.equal(VIEW_DEFAULTS.minimap, MINIMAP_DEFAULT);
   assert.equal(VIEW_DEFAULTS.stackCollapsed, STACK_COLLAPSED_DEFAULT);
+  assert.equal(VIEW_DEFAULTS.reportView, REPORT_VIEW_DEFAULT);
+  // A report opens on its first view.
+  assert.equal(REPORT_VIEW_DEFAULT, REPORT_VIEWS[0].key);
 });
 
 test("an absent view, or any non-object, reads as every default", () => {
@@ -43,6 +48,7 @@ test("an absent view, or any non-object, reads as every default", () => {
     assert.deepEqual(normalizeView(raw), {
       zoom: "month",
       reportZoom: "month",
+      reportView: "by-project",
       rowHeight: 48,
       gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
       weekends: false,
@@ -66,6 +72,7 @@ test("every key survives a normalise at a non-default value", () => {
   const stored = {
     zoom: "day",
     reportZoom: "week",
+    reportView: "by-tag-over-time",
     rowHeight: 120,
     gridSpacing: { day: 48, week: 30, sprint: 2, month: 7 },
     weekends: true,
@@ -97,6 +104,7 @@ test("the two sort lists carry their own key and direction", () => {
 test("a malformed value falls back for that key and leaves the rest", () => {
   const stored = {
     zoom: "year",
+    reportView: "by-chart-type",
     rowHeight: "tall",
     gridSpacing: { day: "wide", week: 30, sprint: null, month: 7 },
     weekends: "yes",
@@ -110,6 +118,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
   assert.deepEqual(normalizeView(stored), {
     zoom: "month",
     reportZoom: "month",
+    reportView: "by-project",
     rowHeight: 48,
     gridSpacing: { day: 44, week: 30, sprint: 8, month: 7 },
     weekends: false,

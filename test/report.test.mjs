@@ -87,61 +87,140 @@ test("both pages carry the empty bar host and load the one script", () => {
   assert.match(report, /<html lang="en"[^>]*data-view="report"/);
 });
 
-/* --- the report mounts no rail -------------------------------------------- */
+/* --- the report's own rail ------------------------------------------------ */
 
-// Everything the Projects rail is made of, including the control that folds it
-// and the add control in its head. A report has no timeline to drop a Project
-// onto, so it mounts none of these and its content takes the whole board.
-const RAIL_MARKUP = [
+// The panel the report mounts: the plan's rail, at the same width and folded by
+// the same control, with the report's own list in place of Projects.
+const REPORT_RAIL = [
   '<aside class="stack"',
-  'id="stack-list"',
-  'id="stack-hint"',
-  'id="add-project"',
+  'id="report-views"',
   'class="rail-toggle"',
-  'id="rail-toggle-count"'
+  'id="rail-toggle"'
 ];
 
-test("the report page mounts no Projects rail, and the plan keeps its own", () => {
+// Everything that makes the plan's rail a list of Projects to drag onto the
+// timeline. A report has no timeline to drop one onto, so it mounts none of it.
+const PLAN_ONLY_RAIL = [
+  'id="stack-list"',
+  'id="stack-hint"',
+  'id="add-project"'
+];
+
+test("the report mounts the same rail as the plan, holding views instead of Projects", () => {
   const index = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8");
   const report = fs.readFileSync(path.join(PUBLIC, "report.html"), "utf8");
-  RAIL_MARKUP.forEach((part) => {
+  REPORT_RAIL.forEach((part) => {
+    assert.equal(report.includes(part), true, "the report does not mount " + part);
+  });
+  PLAN_ONLY_RAIL.forEach((part) => {
     assert.equal(report.includes(part), false, "the report still mounts " + part);
+  });
+  // And the plan keeps its own list, hint and add control.
+  PLAN_ONLY_RAIL.forEach((part) => {
     assert.equal(index.includes(part), true, "the plan lost " + part);
   });
+  // One panel, so its own label says which list it holds.
+  assert.match(report, /<aside class="stack" id="stack" aria-label="Report views">/);
+  assert.match(index, /<aside class="stack" id="stack" aria-label="Projects">/);
 });
 
-test("the report's board is one column and the plan's stays two", () => {
+test("the report's board is the plan's: two tracks, and one collapsed rule for both", () => {
   const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
-  const reportBoard = STYLE.match(/html\[data-view="report"\] \.board\s*\{([^}]*)\}/);
-  const reportScroller = STYLE.match(/html\[data-view="report"\] \.scroller\s*\{([^}]*)\}/);
-  assert.ok(reportBoard, "the report's board rule is missing");
-  assert.ok(reportScroller, "the report's scroller rule is missing");
-  // One track, so the content takes the whole board rather than the second
-  // track beside an empty rail column.
-  assert.match(reportBoard[1], /grid-template-columns:\s*minmax\(0, 1fr\);/);
-  assert.match(reportScroller[1], /grid-column:\s*1;/);
-  // The plan's own rules are untouched: two tracks, the scroller in the second.
   const planBoard = STYLE.match(/^\.board\s*\{([^}]*)\}/m);
-  const planScroller = STYLE.match(/^\.scroller\s*\{([^}]*)\}/m);
-  assert.ok(planBoard, "the plan's board rule is missing");
-  assert.ok(planScroller, "the plan's scroller rule is missing");
+  assert.ok(planBoard, "the board rule is missing");
+  // One board rule for both pages, so the report's content sits in the same
+  // second track the timeline does, at the same rail width.
   assert.match(planBoard[1], /grid-template-columns:\s*minmax\(0, var\(--rail-w\)\) minmax\(0, 1fr\);/);
-  assert.match(planScroller[1], /grid-column:\s*2;/);
-  // And the collapsed track the rail's toggle drives is still there.
-  assert.match(STYLE, /\.board\.is-collapsed\s*\{[^}]*grid-template-columns:/);
+  assert.equal(STYLE.match(/html\[data-view="report"\] \.board\s*\{/), null,
+    "the report overrides the board again");
+  // Collapsed, the panel takes no width - the same single rule for the report.
+  const collapsed = STYLE.match(/\.board\.is-collapsed\s*\{([^}]*)\}/);
+  assert.ok(collapsed, "the collapsed track is missing");
+  assert.match(collapsed[1], /grid-template-columns:\s*minmax\(0, 0px\) minmax\(0, 1fr\);/);
 });
 
-test("the report draws no rail and holds no rail's state", () => {
+// The report page's own draw, cut at the rail's section: what renderReport
+// builds and nothing of the builders beside it.
+function reportRenderSource() {
+  const app = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const start = app.indexOf("function renderReport() {");
+  const end = app.indexOf("/* --- the report's rail");
+  return start >= 0 && end > start ? app.slice(start, end) : "";
+}
+
+test("the panel lists the five views and marks the one showing", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
-  const reportRender = APP.slice(APP.indexOf("function renderReport() {"),
-    APP.indexOf("\nfunction render(opts) {"));
+  const nav = APP.slice(APP.indexOf("function drawReportNav() {"),
+    APP.indexOf("function selectReportView(key) {"));
+  assert.ok(nav.length > 0, "drawReportNav is missing");
+  // One row per view from the report's own list, so the panel and the content
+  // cannot drift, and the selected row marked the way the view switch marks the
+  // current page.
+  assert.match(nav, /REPORT_VIEWS\.forEach/);
+  assert.match(nav, /item\.setAttribute\("aria-current", "true"\)/);
+  assert.match(nav, /if \(entry\.key === reportView\)/);
+  // The current row wears the switch's own treatment.
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const current = STYLE.match(/\.report-nav__item\[aria-current\]\s*\{([^}]*)\}/);
+  assert.ok(current, "the selected row's rule is missing");
+  assert.match(current[1], /background:\s*var\(--ink\);/);
+  assert.match(current[1], /color:\s*var\(--canvas\);/);
+});
+
+test("one view is drawn at a time, and the selection decides which", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const reportRender = reportRenderSource();
   assert.ok(reportRender.length > 0, "renderReport is missing");
-  // No rail to draw, no toggle to synchronise and no hint about dropping a
-  // Project on a row - a report has no rows to drop onto.
-  assert.doesNotMatch(reportRender, /drawStack|syncStackToggle|stackHint/);
+  // Every pivot and chart goes into the one section the selection names.
+  const appends = reportRender.match(/box\.appendChild\(/g) || [];
+  assert.equal(appends.length, 2, "renderReport appends more than its head and its view");
+  assert.match(reportRender, /box\.appendChild\(reportViewSection\(model\)\);/);
+  assert.doesNotMatch(reportRender, /reportProjectSection|reportPersonSection|reportTagSection/);
+  // The switch hands back exactly one section, chosen by the stored selection.
+  const chooser = APP.slice(APP.indexOf("function reportViewSection(model) {"),
+    APP.indexOf("// The bucket headings every matrix shares"));
+  assert.ok(chooser.length > 0, "reportViewSection is missing");
+  ["by-person", "by-tag", "by-tag-over-time", "allocation"].forEach((key) => {
+    assert.match(chooser, new RegExp(`reportView === "${key}"`), key + " has no section");
+  });
+  assert.match(chooser, /return reportProjectSection\(model\);/);
+});
+
+test("the panel's fold is the grid's one collapsed setting", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // One stored key, one setter and one board class for both pages: a report
+  // adds no second collapse state that could disagree with the grid's.
+  assert.equal((APP.match(/var stackCollapsed = /g) || []).length, 1);
+  assert.equal((APP.match(/stackCollapsed = collapsed === true;/g) || []).length, 1);
+  assert.equal((APP.match(/boardEl\.classList\.toggle\("is-collapsed", collapsed\)/g) || []).length, 1);
+  // Both pages run the one init, which syncs and binds the one toggle.
+  assert.equal((APP.match(/initStackToggle\(\)/g) || []).length, 2);
+  // The sync reads the panel's own label, so the fold control says what it folds
+  // on both pages while folding the same state.
+  assert.match(APP, /stackToggleLabel\(collapsed, panel\)/);
+  assert.match(APP, /var panel = stackPanel \? stackPanel\.getAttribute\("aria-label"\) : null;/);
+});
+
+test("the report's rail holds no sort control, and the plan keeps its own", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // The rail's sort control is the grid's: it orders the Projects list and the
+  // People column, and a report's pivots read the sort the plan stored. With a
+  // rail back on the report, the control must not follow it there.
+  const sortInit = APP.slice(APP.indexOf("function initSortControls() {"),
+    APP.indexOf("/* --- view state"));
+  assert.ok(sortInit.length > 0, "initSortControls is missing");
+  assert.match(sortInit, /if \(isReport\) return;/);
+  assert.match(sortInit, /stackHead\.appendChild\(buildSortControl\("projects"\)\);/);
+});
+
+test("the report draws no Projects list, and the plan keeps it", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const reportRender = reportRenderSource();
+  // No Project list to draw, and no hint about dropping a Project on a row - a
+  // report has no rows to drop onto.
+  assert.doesNotMatch(reportRender, /drawStack\(|stackHint/);
   // The shared draw is still wired for the plan, which is what owns them.
   assert.match(APP, /\n  drawStack\(\);\n/);
-  assert.match(APP, /\n  syncStackToggle\(\);\n/);
 });
 
 /* --- what a report withdraws ---------------------------------------------- */
@@ -273,4 +352,24 @@ test("the stored view keeps the grid's zoom and the report's apart", async () =>
   const week = await post(started.base, "/api/view", { reportZoom: "week" });
   assert.equal(week.zoom, "day");
   assert.equal(week.reportZoom, "week");
+});
+
+/* --- the selected view and the fold are remembered ------------------------ */
+
+test("a report remembers which view it was on, beside the grid's fold", async () => {
+  const started = await startServer();
+  servers.push(started.server);
+  // The selection is stored like any other view setting.
+  const chosen = await post(started.base, "/api/view", { reportView: "by-tag-over-time" });
+  assert.equal(chosen.reportView, "by-tag-over-time");
+  // One collapsed key for both pages: collapsing the report's panel is the same
+  // setting the grid's rail reads.
+  const folded = await post(started.base, "/api/view", { stackCollapsed: true });
+  assert.equal(folded.reportView, "by-tag-over-time");
+  assert.equal(folded.stackCollapsed, true);
+  // A view that no longer exists falls back to the first one alone, leaving the
+  // fold as the owner left it.
+  const stale = await post(started.base, "/api/view", { reportView: "by-chart" });
+  assert.equal(stale.reportView, "by-project");
+  assert.equal(stale.stackCollapsed, true);
 });

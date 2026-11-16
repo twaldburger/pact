@@ -9,14 +9,29 @@
 </head>
 <body>
   <!-- The same top bar the plan mounts, from public/lib/topbar.mjs. The board
-       skeleton is the plan's too, less its Projects rail: a rail holds
-       Projects to drag onto a timeline, and a report has no timeline to drop
-       one on, so neither the rail nor the control that folds it is mounted
-       here and the report's content takes the whole board. public/app.js
-       draws the report's own content into #tl instead of the grid. -->
+       skeleton is the plan's too, and so is its rail: the same panel at the same
+       width, folded by the same control and remembering the same collapsed
+       state, listing the report's own views in place of Projects. public/app.js
+       draws that list and the selected view's content into #tl; the report has
+       no timeline, so it has nothing to drop a Project onto. -->
   <header class="topbar" id="topbar"></header>
 
   <main class="board" id="board">
+    <aside class="stack" id="stack" aria-label="Report views">
+      <div class="stack__head">
+        <h1 class="stack__title">Views</h1>
+      </div>
+      <ul class="stack__list" id="report-views"></ul>
+    </aside>
+
+    <button type="button" class="rail-toggle" id="rail-toggle"
+      aria-controls="stack" aria-expanded="true" aria-label="Collapse Report views" title="Collapse Report views">
+      <svg class="rail-toggle__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path class="rail-toggle__path" d="M10 3 5 8l5 5"/>
+      </svg>
+    </button>
+
     <div class="scroller" id="scroller">
       <div class="tl" id="tl">
         <!-- the report's own content is drawn from the plan -->

@@ -77,7 +77,7 @@ One Project placed on one Person for a continuous date range at an Allocation - 
 _Avoid_: booking, block, slot, shift, work
 
 **Stack**:
-The list of Projects available to drag onto the Timeline; it holds no dates of its own. The interface labels this rail Projects.
+The list of Projects available to drag onto the Timeline; it holds no dates of its own. The interface labels this rail Projects, and a report mounts the same rail - same width, same fold, same remembered collapsed state - listing the report's views instead.
 _Avoid_: backlog, pool
 
 **Timeline**:
@@ -100,7 +100,7 @@ Its absence means the default; if it exists but cannot be read, the default is u
 _Avoid_: preferences, settings, options, registry
 
 **View setting**:
-One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band and the Grid dividers, the Minimap, the Colour palette, whether the Stack is collapsed, and the two sort orders. The Filter and the Marker are deliberately not view settings - one is a query, the other a cursor into the timeline - so neither persists. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker alone. A malformed stored value falls back to that setting's default on its own.
+One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band and the Grid dividers, the Minimap, the Colour palette, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter and the Marker are deliberately not view settings - one is a query, the other a cursor into the timeline - so neither persists. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker alone. A malformed stored value falls back to that setting's default on its own.
 _Avoid_: preference, option, display state
 
 **Step**:

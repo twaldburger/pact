@@ -33,6 +33,7 @@ import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit,
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent } from "./lib/report-content.mjs";
+import { REPORT_VIEWS, REPORT_VIEW_DEFAULT, normalizeReportView, reportViewLabel } from "./lib/report-views.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -156,6 +157,10 @@ mountTopbar(document.getElementById("topbar"), isReport ? VIEW_REPORT : VIEW_PLA
 var tl = document.getElementById("tl");
 var scroller = document.getElementById("scroller");
 var stackList = document.getElementById("stack-list");
+// The report's rail: the same panel, holding a list of the report's views
+// rather than Projects. Absent on the plan, which has the list above instead.
+var reportViewsList = document.getElementById("report-views");
+var stackPanel = document.getElementById("stack");
 var panelLayer = document.getElementById("panel-layer");
 var contextEl = document.getElementById("context");
 var saveStatusEl = document.getElementById("save-status");
@@ -213,6 +218,10 @@ var zoomButtons = [];
 // on load. Separate, so moving the grid to Day never turns the report into
 // 365 columns; the four levels are the report's time buckets.
 var reportZoom = ZOOM_DEFAULT;
+// Which of the report's five views is showing, as the left panel's selection.
+// One of the view settings kept in the config and restored on load; the report
+// draws this view alone. Never written to the plan.
+var reportView = REPORT_VIEW_DEFAULT;
 // The row height and the geometry derived from it. One of the view settings
 // kept in the config and restored on load; never written to the plan.
 var rowHeight = ROW_HEIGHT_DEFAULT;
@@ -3233,9 +3242,12 @@ function syncStackToggle() {
   if (!boardEl || !stackToggle) return;
   var collapsed = stackCollapsed;
   boardEl.classList.toggle("is-collapsed", collapsed);
+  // The toggle names the panel it folds, read from the panel's own label, so
+  // the grid says Projects and a report says its views.
+  var panel = stackPanel ? stackPanel.getAttribute("aria-label") : null;
   stackToggle.setAttribute("aria-expanded", stackToggleExpanded(collapsed) ? "true" : "false");
-  stackToggle.setAttribute("aria-label", stackToggleLabel(collapsed));
-  stackToggle.setAttribute("title", stackToggleLabel(collapsed));
+  stackToggle.setAttribute("aria-label", stackToggleLabel(collapsed, panel));
+  stackToggle.setAttribute("title", stackToggleLabel(collapsed, panel));
   if (stackChevron) {
     stackChevron.setAttribute("d", collapsed ? "M6 3l5 5-5 5" : "M10 3 5 8l5 5");
   }
@@ -3686,13 +3698,18 @@ function reportLegend(items) {
 
 /* --- the report page ----------------------------------------------------- */
 
-/* The report's own content: the three pivots and the two charts, from the plan
- * the Filter and the rail's sort leave. It writes nothing to the plan; the
- * figures come from public/lib/report-content.mjs, which reads the app's own
+/* The report's own content: one of its five views at a time, from the plan the
+ * Filter and the rail's sort leave. It writes nothing to the plan; the figures
+ * come from public/lib/report-content.mjs, which reads the app's own
  * working-day rule, so the report and the grid agree by construction. The rail
- * is drawn beside it, and its items open the same panels they do from the grid. */
+ * is drawn beside it and lists those five views - the plan's own panel, folded
+ * by the same control and remembering the same collapsed state. */
 function renderReport() {
   tl.classList.add("is-report");
+  // The panel is drawn whatever the Filter leaves, so an empty result never
+  // strands the owner in a view with no way to another.
+  drawReportNav();
+
   // The grid maps its assignments to Dates and clamped indices; the report's
   // rule reads the raw ISO records, so it is handed the plan's own shape.
   var view = {
@@ -3702,7 +3719,7 @@ function renderReport() {
   };
 
   // The Filter reaches the report too: an empty result is the grid's own empty
-  // state rather than three empty tables.
+  // state rather than an empty table.
   if (filterQuery.trim() !== "" && filterIsEmpty(view)) {
     tl.classList.add("is-empty");
     tl.appendChild(buildEmptyState());
@@ -3723,24 +3740,102 @@ function renderReport() {
   head.appendChild(title);
   var lead = el("p", "report__lead");
   lead.textContent = "Over the plan period, " + rangeLabel(data.range.start, data.range.end) +
-    ", by " + reportBucketLabel(reportZoom).toLowerCase() + ". " +
+    ", by " + reportBucketWord() + ". " +
     (filterQuery.trim() === ""
       ? "Showing the whole plan."
       : 'Filtered by "' + filterQuery.trim() + '" in ' + searchedAreas(filterScopes) + ".");
   head.appendChild(lead);
   box.appendChild(head);
 
-  // --- by project ---------------------------------------------------------
-  var projectHeaders = [{ text: "Project", cls: "report-table__name" }]
-    .concat(model.buckets.map(function (b) {
-      return { text: b.label, cls: "report-table__num", title: b.start === b.end ? b.start : b.start + " to " + b.end };
-    }))
+  // One view in the main area: the panel's selection decides, and nothing is
+  // drawn beside it.
+  box.appendChild(reportViewSection(model));
+
+  tl.appendChild(box);
+}
+
+/* --- the report's rail ---------------------------------------------------- */
+
+// The report's navigation panel: one row per view, in the list's own order, the
+// row of the view showing marked current the way the Plan/Report switch marks a
+// page - the app's one treatment for "this is the one showing". The panel is
+// the plan's own; this only fills its list.
+function drawReportNav() {
+  if (!reportViewsList) return;
+  reportViewsList.innerHTML = "";
+  REPORT_VIEWS.forEach(function (entry) {
+    var row = el("li", "stack__row");
+    var item = el("button", "stack__item report-nav__item");
+    item.type = "button";
+    if (entry.key === reportView) item.setAttribute("aria-current", "true");
+    var name = el("span", "stack__name");
+    name.textContent = entry.label;
+    item.appendChild(name);
+    item.addEventListener("click", function () { selectReportView(entry.key); });
+    row.appendChild(item);
+    reportViewsList.appendChild(row);
+  });
+}
+
+// A press on a row draws that view alone and remembers the choice as a view
+// setting, like the Zoom, so a reload and a return from the plan resume here.
+function selectReportView(key) {
+  var next = normalizeReportView(key);
+  if (next === reportView) return;
+  reportView = next;
+  var pressedWithKeyboard = reportViewsList && reportViewsList.contains(document.activeElement);
+  render();
+  // The list is redrawn with the selection in its new place, so the pressed row
+  // is gone: the keyboard is put back on the row that is now current.
+  if (pressedWithKeyboard) {
+    var current = reportViewsList.querySelector("[aria-current]");
+    if (current) current.focus();
+  }
+  // A new view opens at its own top rather than at the old one's scroll.
+  scroller.scrollTop = 0;
+  persistView();
+}
+
+// The bucket the report draws, as the sentences below name it.
+function reportBucketWord() {
+  return reportBucketLabel(reportZoom).toLowerCase();
+}
+
+/* --- the five views ------------------------------------------------------- */
+
+// The view the selection names. Each builder draws one section under the panel
+// entry's own label, so the panel and the content can never say different
+// things.
+function reportViewSection(model) {
+  if (reportView === "by-person") return reportPersonSection(model);
+  if (reportView === "by-tag") return reportTagSection(model);
+  if (reportView === "by-tag-over-time") return reportTagTimeSection(model);
+  if (reportView === "allocation") return reportAllocationSection(model);
+  return reportProjectSection(model);
+}
+
+// The bucket headings every matrix shares: one column per bucket, its dates in
+// the tooltip.
+function reportBucketHeaders(model) {
+  return model.buckets.map(function (b) {
+    return {
+      text: b.label,
+      cls: "report-table__num",
+      title: b.start === b.end ? b.start : b.start + " to " + b.end
+    };
+  });
+}
+
+// FTE-days by project: the matrix with the tags an even split divides them over.
+function reportProjectSection(model) {
+  var headers = [{ text: "Project", cls: "report-table__name" }]
+    .concat(reportBucketHeaders(model))
     .concat([
       { text: "Total", cls: "report-table__num" },
       { text: "Share of plan", cls: "report-table__num" },
       { text: "Tags", cls: "report-table__tags" }
     ]);
-  var projectRows = model.byProject.rows.map(function (r) {
+  var rows = model.byProject.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.name, r.colour), cls: "report-table__name" }];
     r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
     cells.push(reportNumCell(r.total));
@@ -3748,28 +3843,29 @@ function renderReport() {
     cells.push({ node: reportTagList(r.tags), cls: "report-table__tags" });
     return { cells: cells };
   });
-  var projectTotalCells = [{ text: "Total", cls: "report-table__name" }];
-  model.byProject.total.cells.forEach(function (v) { projectTotalCells.push(reportNumCell(v)); });
-  projectTotalCells.push(reportNumCell(model.byProject.total.total));
-  projectTotalCells.push({ text: "100%", cls: "report-table__num" });
-  projectTotalCells.push({ text: "", cls: "report-table__tags" });
-  projectRows.push({ cells: projectTotalCells, cls: "report-row--total" });
-  var projectSection = reportSection("By project", "Each project's FTE-days in every " +
-    reportBucketLabel(reportZoom).toLowerCase() + ", with the tags an even split divides them over.");
-  projectSection.appendChild(reportTable(projectHeaders, projectRows));
-  box.appendChild(projectSection);
+  var totalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.byProject.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
+  totalCells.push(reportNumCell(model.byProject.total.total));
+  totalCells.push({ text: "100%", cls: "report-table__num" });
+  totalCells.push({ text: "", cls: "report-table__tags" });
+  rows.push({ cells: totalCells, cls: "report-row--total" });
+  var section = reportSection(reportViewLabel("by-project"),
+    "Each project's FTE-days in every " + reportBucketWord() +
+    ", with the tags an even split divides them over.");
+  section.appendChild(reportTable(headers, rows));
+  return section;
+}
 
-  // --- by person ----------------------------------------------------------
-  var personHeaders = [{ text: "Person", cls: "report-table__name" }]
-    .concat(model.buckets.map(function (b) {
-      return { text: b.label, cls: "report-table__num", title: b.start === b.end ? b.start : b.start + " to " + b.end };
-    }))
+// FTE-days by person: the matrix with each person's own offer beside it.
+function reportPersonSection(model) {
+  var headers = [{ text: "Person", cls: "report-table__name" }]
+    .concat(reportBucketHeaders(model))
     .concat([
       { text: "FTE-days", cls: "report-table__num" },
       { text: "Share of plan", cls: "report-table__num" },
       { text: "% of offer", cls: "report-table__num", title: "The person's FTE-days as a share of the FTE-days they offer over the period" }
     ]);
-  var personRows = model.byPerson.rows.map(function (r) {
+  var rows = model.byPerson.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.name, null), cls: "report-table__name" }];
     r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
     cells.push(reportNumCell(r.total));
@@ -3777,73 +3873,81 @@ function renderReport() {
     cells.push({ text: reportPercent(r.pct), cls: "report-table__num" });
     return { cells: cells };
   });
-  var personTotalCells = [{ text: "Total", cls: "report-table__name" }];
-  model.byPerson.total.cells.forEach(function (v) { personTotalCells.push(reportNumCell(v)); });
-  personTotalCells.push(reportNumCell(model.byPerson.total.total));
-  personTotalCells.push({ text: "100%", cls: "report-table__num" });
-  personTotalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
-  personRows.push({ cells: personTotalCells, cls: "report-row--total" });
-  var personSection = reportSection("By person", "Each person's FTE-days in every " +
-    reportBucketLabel(reportZoom).toLowerCase() + ", against what they offer over the period.");
-  personSection.appendChild(reportTable(personHeaders, personRows));
-  box.appendChild(personSection);
+  var totalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.byPerson.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
+  totalCells.push(reportNumCell(model.byPerson.total.total));
+  totalCells.push({ text: "100%", cls: "report-table__num" });
+  totalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
+  rows.push({ cells: totalCells, cls: "report-row--total" });
+  var section = reportSection(reportViewLabel("by-person"),
+    "Each person's FTE-days in every " + reportBucketWord() +
+    ", against what they offer over the period.");
+  section.appendChild(reportTable(headers, rows));
+  return section;
+}
 
-  // --- by tag -------------------------------------------------------------
-  var tagHeaders = [{ text: "Tag", cls: "report-table__name" }]
-    .concat(model.buckets.map(function (b) {
-      return { text: b.label, cls: "report-table__num", title: b.start === b.end ? b.start : b.start + " to " + b.end };
-    }))
+// FTE-days by tag: each project's FTE-days split evenly over its tags.
+function reportTagSection(model) {
+  var headers = [{ text: "Tag", cls: "report-table__name" }]
+    .concat(reportBucketHeaders(model))
     .concat([
       { text: "Total", cls: "report-table__num" },
       { text: "Share of plan", cls: "report-table__num" }
     ]);
-  var tagRows = model.byTag.rows.map(function (r) {
+  var rows = model.byTag.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
     r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
     cells.push(reportNumCell(r.total));
     cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
     return { cells: cells };
   });
-  var tagTotalCells = [{ text: "Total", cls: "report-table__name" }];
-  model.byTag.total.cells.forEach(function (v) { tagTotalCells.push(reportNumCell(v)); });
-  tagTotalCells.push(reportNumCell(model.byTag.total.total));
-  tagTotalCells.push({ text: "100%", cls: "report-table__num" });
-  tagRows.push({ cells: tagTotalCells, cls: "report-row--total" });
-  var tagSection = reportSection("By tag", "A project's FTE-days split evenly over its tags, so the tag totals reconcile with the plan. Colours follow the plan's colour keys.");
-  tagSection.appendChild(reportTable(tagHeaders, tagRows));
-  box.appendChild(tagSection);
+  var totalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.byTag.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
+  totalCells.push(reportNumCell(model.byTag.total.total));
+  totalCells.push({ text: "100%", cls: "report-table__num" });
+  rows.push({ cells: totalCells, cls: "report-row--total" });
+  var section = reportSection(reportViewLabel("by-tag"),
+    "A project's FTE-days split evenly over its tags, so the tag totals reconcile " +
+    "with the plan. Colours follow the plan's colour keys.");
+  section.appendChild(reportTable(headers, rows));
+  return section;
+}
 
-  // --- the two charts -----------------------------------------------------
-  var chartsSection = reportSection("Charts", null);
-  var charts = el("div", "report__charts");
-  var stackedCard = el("div", "report-chartcard");
-  var stackedHeading = el("h4", "report-chartcard__title");
-  stackedHeading.textContent = "Per " + reportBucketLabel(reportZoom).toLowerCase() + ", split by tag";
-  stackedCard.appendChild(stackedHeading);
-  stackedCard.appendChild(buildStackedChart(model));
-  stackedCard.appendChild(reportLegend(model.byTag.rows.map(function (r) {
-    var coloured = Number.isInteger(r.slot) && r.slot >= 0 && r.slot < SLOT_COUNT;
-    return {
-      label: r.label,
-      colour: coloured ? activeColour(r.slot) : null,
-      swatchClass: coloured ? null : "report-legend__swatch--neutral"
-    };
-  })));
-  charts.appendChild(stackedCard);
-  var lineCard = el("div", "report-chartcard");
-  var lineHeading = el("h4", "report-chartcard__title");
-  lineHeading.textContent = "Allocation against capacity over time";
-  lineCard.appendChild(lineHeading);
-  lineCard.appendChild(buildLineChart(model));
-  lineCard.appendChild(reportLegend([
-    { label: "Allocation", swatchClass: "report-legend__swatch--ink" },
-    { label: "Capacity", swatchClass: "report-legend__swatch--dashed" }
-  ]));
-  charts.appendChild(lineCard);
-  chartsSection.appendChild(charts);
-  box.appendChild(chartsSection);
+// One chart in its card, under the section the panel names.
+function reportChartSection(key, sub, chart, legend) {
+  var section = reportSection(reportViewLabel(key), sub);
+  var card = el("div", "report-chartcard");
+  card.appendChild(chart);
+  card.appendChild(legend);
+  section.appendChild(card);
+  return section;
+}
 
-  tl.appendChild(box);
+// FTE-days by tag over time: the stacked bar, one bar per bucket.
+function reportTagTimeSection(model) {
+  return reportChartSection("by-tag-over-time",
+    "Each " + reportBucketWord() + "'s FTE-days split by tag, so the tag totals " +
+    "reconcile with the plan. Colours follow the plan's colour keys.",
+    buildStackedChart(model),
+    reportLegend(model.byTag.rows.map(function (r) {
+      var coloured = Number.isInteger(r.slot) && r.slot >= 0 && r.slot < SLOT_COUNT;
+      return {
+        label: r.label,
+        colour: coloured ? activeColour(r.slot) : null,
+        swatchClass: coloured ? null : "report-legend__swatch--neutral"
+      };
+    })));
+}
+
+// Allocation against capacity: the line, per bucket.
+function reportAllocationSection(model) {
+  return reportChartSection("allocation",
+    "Each " + reportBucketWord() + "'s allocation against the capacity the plan offers.",
+    buildLineChart(model),
+    reportLegend([
+      { label: "Allocation", swatchClass: "report-legend__swatch--ink" },
+      { label: "Capacity", swatchClass: "report-legend__swatch--dashed" }
+    ]));
 }
 
 function render(opts) {
@@ -3854,7 +3958,8 @@ function render(opts) {
   // follows each edit.
   if (!(opts && opts.keepPanel)) closePanel(false);
   tl.innerHTML = "";
-  // The report page mounts no rail, so there is no list to empty there.
+  // The plan's rail holds Projects and is emptied before its list is redrawn.
+  // A report's rail holds views rather than Projects, so it has nothing here.
   if (stackList) stackList.innerHTML = "";
   indexData();
   contextEl.textContent = rangeLabel(data.range.start, data.range.end);
@@ -4385,6 +4490,10 @@ function buildSortControl(kind) {
 }
 
 function initSortControls() {
+  // The sort is the grid's: it orders the Rail's Projects and the People
+  // column. A report's rail lists views, and its pivots read the sort the plan
+  // stored, so a report mounts no sort control at all.
+  if (isReport) return;
   var stackHead = document.querySelector(".stack__head");
   if (stackHead) stackHead.appendChild(buildSortControl("projects"));
   peopleSortButton = buildSortControl("people");
@@ -4407,6 +4516,7 @@ function currentView() {
   return {
     zoom: root.getAttribute("data-zoom"),
     reportZoom: reportZoom,
+    reportView: reportView,
     rowHeight: rowHeight,
     gridSpacing: {
       day: gridSpacing.day,
@@ -4436,6 +4546,9 @@ function adoptView(view) {
   // The run's own zoom level, kept beside the grid's. A report page draws it
   // as its buckets; the grid page only stores it back unchanged.
   reportZoom = v.reportZoom;
+  // The report's selected view, kept beside its zoom; the grid page only
+  // stores it back unchanged.
+  reportView = v.reportView;
   rowHeight = v.rowHeight;
   gridSpacing = Object.assign({}, v.gridSpacing);
   highlightWeekends = v.weekends;
