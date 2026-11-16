@@ -3508,10 +3508,9 @@ function reportNumCell(value) {
   return { text: reportFigure(value), cls: "report-table__num" };
 }
 
-// The column carrying each row's total is marked the way the Total row is -
-// the same weight and the same stronger rule, on the column's leading edge - so
-// the two totals read as one cross. The header and the cells take the one class,
-// which is the class the stylesheet marks.
+// The column carrying each row's total is marked the way the Total row is: the
+// same weight, with no rule of its own. The header and the cells take the one
+// class, which is the class the stylesheet marks.
 var REPORT_TOTAL_COL = "report-table__num report-table__total";
 
 function reportTotalCell(value) {
@@ -3851,7 +3850,7 @@ function reportProjectSection(model) {
     .concat(reportBucketHeaders(model))
     .concat([
       { text: "Total", cls: REPORT_TOTAL_COL },
-      { text: "Share of plan", cls: "report-table__num" },
+      { text: "Share", cls: "report-table__num" },
       { text: "Tags", cls: "report-table__tags" }
     ]);
   var rows = model.byProject.rows.map(function (r) {
@@ -3881,7 +3880,7 @@ function reportPersonSection(model) {
     .concat(reportBucketHeaders(model))
     .concat([
       { text: "FTE-days", cls: REPORT_TOTAL_COL },
-      { text: "Share of plan", cls: "report-table__num" },
+      { text: "Share", cls: "report-table__num" },
       { text: "% of offer", cls: "report-table__num", title: "The person's FTE-days as a share of the FTE-days they offer over the period" }
     ]);
   var rows = model.byPerson.rows.map(function (r) {
@@ -3911,7 +3910,7 @@ function reportTagSection(model) {
     .concat(reportBucketHeaders(model))
     .concat([
       { text: "Total", cls: REPORT_TOTAL_COL },
-      { text: "Share of plan", cls: "report-table__num" }
+      { text: "Share", cls: "report-table__num" }
     ]);
   var rows = model.byTag.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
