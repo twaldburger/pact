@@ -3550,7 +3550,7 @@ function reportTable(headers, rows) {
 
 function reportSection(title, sub) {
   var sec = el("section", "report__section");
-  var heading = el("h3", "report__heading");
+  var heading = el("h2", "report__heading");
   heading.textContent = title;
   sec.appendChild(heading);
   if (sub) {
@@ -3752,18 +3752,6 @@ function renderReport() {
   });
 
   var box = el("div", "report");
-  var head = el("header", "report__head");
-  var title = el("h2", "report__title");
-  title.textContent = "Report";
-  head.appendChild(title);
-  var lead = el("p", "report__lead");
-  lead.textContent = "Over the plan period, " + rangeLabel(data.range.start, data.range.end) +
-    ", by " + reportBucketWord() + ". " +
-    (filterQuery.trim() === ""
-      ? "Showing the whole plan."
-      : 'Filtered by "' + filterQuery.trim() + '" in ' + searchedAreas(filterScopes) + ".");
-  head.appendChild(lead);
-  box.appendChild(head);
 
   // One view in the main area: the panel's selection decides, and nothing is
   // drawn beside it.
