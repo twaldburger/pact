@@ -301,6 +301,28 @@ test("all three tables mark the column their row totals land in", () => {
   });
 });
 
+test("all three tables call the share column Share", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // The owner shortened the head because the long one widened the column past
+  // what its figures need, so no copy of the old head may survive anywhere in
+  // the app.
+  assert.equal(APP.includes("Share of plan"), false, "the long head is still there");
+  const heads = {
+    reportProjectSection: "byProject",
+    reportPersonSection: "byPerson",
+    reportTagSection: "byTag"
+  };
+  Object.keys(heads).forEach((name) => {
+    const pivot = functionSource(APP, name);
+    assert.ok(pivot.length > 0, name + " is missing");
+    // The short head keeps the figures' class, so the column stays right-aligned.
+    assert.equal((pivot.match(/\{ text: "Share", cls: "report-table__num" \}/g) || []).length, 1,
+      name + " does not head its share column Share");
+  });
+  // Three tables, so three short heads and no fourth table that missed it.
+  assert.equal((APP.match(/\{ text: "Share", cls: "report-table__num" \}/g) || []).length, 3);
+});
+
 test("the panel's fold is the grid's one collapsed setting", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   // One stored key, one setter and one board class for both pages: a report

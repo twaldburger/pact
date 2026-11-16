@@ -380,26 +380,28 @@ test("the absence and holiday marks read the app's ink, not the signal", () => {
 /* --- the report's two totals --------------------------------------------- */
 
 // The Total row is marked with the title weight and a stronger rule above it.
-// The Total column is marked the same way a quarter turn round, on its leading
-// edge, so the two totals read as one cross where they meet. Lifted from the
-// stylesheet so the test tracks the rules rather than a copy of them.
+// The Total column carries the weight alone: the owner reads a leading rule as
+// a hard edge he does not want, so the rule is gone and the weight is the mark.
+// Lifted from the stylesheet so the test tracks the rules rather than a copy of
+// them.
 const TOTAL_ROW = STYLE.match(/\.report-row--total td\s*\{([^}]*)\}/);
 const TOTAL_COLUMN = STYLE.match(/\.report-table \.report-table__total\s*\{([^}]*)\}/);
 
-test("the Total column wears the Total row's emphasis on its leading edge", () => {
+test("the Total column keeps the Total row's weight and draws no rule of its own", () => {
   assert.ok(TOTAL_ROW, "the .report-row--total rule is missing");
   assert.ok(TOTAL_COLUMN, "the .report-table__total rule is missing");
   // The same weight, from the same token as the row.
   assert.equal(declaration(TOTAL_ROW[1], "font-weight"), "var(--fw-title)");
   assert.equal(declaration(TOTAL_COLUMN[1], "font-weight"), declaration(TOTAL_ROW[1], "font-weight"));
-  // The same stronger rule, turned a quarter turn: above the row, on the
-  // leading edge of the column.
+  // The row keeps its own stronger rule above it; the column takes no rule at
+  // all, vertical or otherwise, so nothing draws a divider before its cells.
   assert.equal(declaration(TOTAL_ROW[1], "border-top"), "var(--base) solid var(--rule-strong)");
-  assert.equal(declaration(TOTAL_COLUMN[1], "border-left"), "var(--base) solid var(--rule-strong)");
-  // Neither draws on the other's axis, so the cell where the two meet carries
-  // one rule of each and no doubled border.
-  assert.doesNotMatch(TOTAL_ROW[1], /border-(left|right)\s*:/);
-  assert.doesNotMatch(TOTAL_COLUMN[1], /border-(top|right|bottom)\s*:/);
+  assert.doesNotMatch(TOTAL_COLUMN[1], /border(-(top|right|bottom|left))?\s*:/,
+    "the Total column still draws a rule");
+  // The weight is the column's whole mark.
+  const marks = TOTAL_COLUMN[1].replace(/\/\*[\s\S]*?\*\//g, "")
+    .split(";").map((d) => d.trim()).filter(Boolean);
+  assert.deepEqual(marks, ["font-weight: var(--fw-title)"]);
 });
 
 // A collapsed border between two cells is resolved in favour of the topmost

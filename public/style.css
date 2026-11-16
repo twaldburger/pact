@@ -1014,14 +1014,11 @@ h1, h2, h3, p { margin: 0; }
   border-top: var(--base) solid var(--rule-strong);
 }
 
-/* The column carrying each row's total wears the Total row's emphasis a quarter
-   turn round: the same weight and the same stronger rule, on the leading edge,
-   so the two totals read as one cross. The cell where the two meet carries the
-   row's top rule and the column's leading rule and nothing doubled - neither
-   rule draws on the other's axis. */
+/* The column carrying each row's total wears the Total row's weight, so the two
+   totals read as one figure. No rule of its own: the owner reads a leading rule
+   as a hard edge, and the weight alone is the mark. */
 .report-table .report-table__total {
   font-weight: var(--fw-title);
-  border-left: var(--base) solid var(--rule-strong);
 }
 
 .report-table__tags { color: var(--ink-soft); }
