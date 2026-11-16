@@ -1,9 +1,9 @@
 /*
  * PACT view state: the whole of what the interface draws the plan with rather
  * than what the plan holds - the Zoom and the row height, the report's own
- * zoom, the weekend band and the Grid dividers, the Minimap, the Colour
- * palette, whether the Stack rail is folded, and the two sort keys. It lives
- * in `data/config.json` beside the
+ * zoom and which of its views is showing, the weekend band and the Grid
+ * dividers, the Minimap, the Colour palette, whether the Stack rail is folded,
+ * and the two sort keys. It lives in `data/config.json` beside the
  * active plan file, so it survives a reload; the Filter and the Marker do not,
  * being a query and a cursor rather than settings.
  *
@@ -26,6 +26,7 @@ import {
 } from "./timeline.mjs";
 import { PALETTE_DEFAULT, isPalette } from "./palette.mjs";
 import { STACK_COLLAPSED_DEFAULT } from "./stack.mjs";
+import { REPORT_VIEW_DEFAULT, normalizeReportView } from "./report-views.mjs";
 import { MINIMAP_DEFAULT } from "./minimap.mjs";
 import {
   ASCENDING,
@@ -42,6 +43,7 @@ import {
 export const VIEW_DEFAULTS = Object.freeze({
   zoom: ZOOM_DEFAULT,
   reportZoom: ZOOM_DEFAULT,
+  reportView: REPORT_VIEW_DEFAULT,
   rowHeight: ROW_HEIGHT_DEFAULT,
   gridSpacing: GRID_SPACING_DEFAULTS,
   weekends: false,
@@ -57,6 +59,7 @@ export const VIEW_DEFAULTS = Object.freeze({
 export const VIEW_KEYS = Object.freeze([
   "zoom",
   "reportZoom",
+  "reportView",
   "rowHeight",
   "gridSpacing",
   "weekends",
@@ -118,6 +121,10 @@ export function normalizeView(raw) {
     // The report's own level, so the grid moving to Day never turns the report
     // into 365 columns. A separate key, falling back on its own like the rest.
     reportZoom: isZoom(source.reportZoom) ? source.reportZoom : VIEW_DEFAULTS.reportZoom,
+    // Which of the report's five views is showing. Its own key, falling back
+    // on its own to the first view, so a renamed view opens a report rather
+    // than a blank panel.
+    reportView: normalizeReportView(source.reportView),
     rowHeight: typeof source.rowHeight === "number" && Number.isFinite(source.rowHeight)
       ? clampRowHeight(source.rowHeight)
       : VIEW_DEFAULTS.rowHeight,

@@ -28,9 +28,17 @@ test("the rail is drawn when open and gone when collapsed", () => {
   assert.equal(stackRailVisible(true), false);
 });
 
-test("the toggle names the action each state would take", () => {
+test("the toggle names the action it would take on the panel it folds", () => {
   assert.equal(stackToggleLabel(false), "Collapse Projects");
   assert.equal(stackToggleLabel(true), "Expand Projects");
+  // The report's rail lists the report's views, and the toggle names that panel
+  // instead, read from the panel's own label.
+  assert.equal(stackToggleLabel(false, "Report views"), "Collapse Report views");
+  assert.equal(stackToggleLabel(true, "Report views"), "Expand Report views");
+  // A panel without a usable label says what the grid's rail says.
+  [undefined, null, "", "   ", 42].forEach((panel) => {
+    assert.equal(stackToggleLabel(true, panel), "Expand Projects", String(panel));
+  });
 });
 
 test("the toggle's aria-expanded is true exactly while the Stack is open", () => {

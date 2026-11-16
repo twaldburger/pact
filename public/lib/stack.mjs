@@ -28,9 +28,12 @@ export function stackRailVisible(collapsed) {
 }
 
 // The toggle's accessible name states the action the press will take, never
-// the state it is in.
-export function stackToggleLabel(collapsed) {
-  return isStackCollapsed(collapsed) ? "Expand Projects" : "Collapse Projects";
+// the state it is in. The panel names itself in its own aria-label and is
+// passed here, so the toggle says what it folds on both pages - Projects on
+// the grid, the report's views on a report.
+export function stackToggleLabel(collapsed, panel) {
+  const subject = typeof panel === "string" && panel.trim() !== "" ? panel.trim() : "Projects";
+  return (isStackCollapsed(collapsed) ? "Expand " : "Collapse ") + subject;
 }
 
 // aria-expanded is true exactly while the Stack is open.
