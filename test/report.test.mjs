@@ -287,7 +287,7 @@ test("all three tables mark the column their row totals land in", () => {
   // column is not a plain one singled out by a stray line.
   const heads = {
     reportProjectSection: ["Total", "byProject"],
-    reportPersonSection: ["FTE-days", "byPerson"],
+    reportPersonSection: ["Total", "byPerson"],
     reportTagSection: ["Total", "byTag"]
   };
   Object.keys(heads).forEach((name) => {
@@ -333,6 +333,86 @@ test("all three tables head their share column Of plan", () => {
   assert.equal((person.match(/\{ text: "Of offer", cls: "report-table__num"/g) || []).length, 1,
     "the by-person table does not head its second percentage Of offer");
   assert.equal((APP.match(/"Of offer"/g) || []).length, 1, "Of offer appears outside the one head");
+});
+
+test("all three tables head their total column Total", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // The owner's consistency pass: the by-person table named the unit where the
+  // other two name the figure, so every copy of the old head is gone.
+  assert.equal(APP.includes('{ text: "FTE-days", cls: REPORT_TOTAL_COL }'), false,
+    "the by-person table still heads its total column with the unit");
+  const tables = ["reportProjectSection", "reportPersonSection", "reportTagSection"];
+  tables.forEach((name) => {
+    const pivot = functionSource(APP, name);
+    assert.ok(pivot.length > 0, name + " is missing");
+    assert.equal((pivot.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 1,
+      name + " does not head its total column Total");
+  });
+  // Three tables, three heads: no fourth table and no drift back to the unit.
+  assert.equal((APP.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 3);
+});
+
+test("the by-person table carries the person's tags, drawn as the project's are", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const person = functionSource(APP, "reportPersonSection");
+  const project = functionSource(APP, "reportProjectSection");
+  assert.ok(person.length > 0 && project.length > 0, "a table is missing");
+  // One tags column, defined and drawn the same way in both tables: the same
+  // head class, the same list helper, and the same empty cell on the Total row.
+  [person, project].forEach((pivot) => {
+    assert.match(pivot, /\{ text: "Tags", cls: "report-table__tags" \}/);
+    assert.match(pivot, /cells\.push\(\{ node: reportTagList\(r\.tags\), cls: "report-table__tags" \}\);/);
+    assert.match(pivot, /totalCells\.push\(\{ text: "", cls: "report-table__tags" \}\);/);
+  });
+  // The list itself is the one helper, so a Person with no tags reads the same
+  // `none` a Project with no tags reads.
+  assert.match(functionSource(APP, "reportTagList"), /none/);
+});
+
+test("the by-person table marks a person with the colour the grid marks them with", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const person = functionSource(APP, "reportPersonSection");
+  // The grid's own row head resolves a Person's slot from the people key; the
+  // table passes that same resolution, so the two marks cannot disagree.
+  assert.match(APP, /var markSlot = personSlot\(person\.tags, tagKeyMap, tagSlotMap\);/);
+  assert.match(person, /reportNameCell\(r\.name, personSlot\(r\.tags, tagKeyMap, tagSlotMap\)\)/);
+  // No slot in place of the resolved one: a Person with no colour under the
+  // people key keeps no swatch rather than wearing a wrong one.
+  assert.doesNotMatch(person, /reportNameCell\(r\.name, null\)/);
+  assert.equal((APP.match(/personSlot\(/g) || []).length, 2,
+    "a third caller resolves a person's colour some other way");
+});
+
+test("all three tables order their columns the same way", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // Name, the buckets, Total, Of plan, then the extras each view adds.
+  const COMMON = [
+    'cls: "report-table__name" }',
+    "reportBucketHeaders(model)",
+    "cls: REPORT_TOTAL_COL }",
+    '{ text: "Of plan"'
+  ];
+  const EXTRAS = {
+    reportProjectSection: ['{ text: "Tags", cls: "report-table__tags" }'],
+    reportPersonSection: ['{ text: "Of offer"', '{ text: "Tags", cls: "report-table__tags" }'],
+    reportTagSection: []
+  };
+  Object.keys(EXTRAS).forEach((name) => {
+    const pivot = functionSource(APP, name);
+    assert.ok(pivot.length > 0, name + " is missing");
+    const marks = COMMON.concat(EXTRAS[name]).map((needle) => {
+      const at = pivot.indexOf(needle);
+      assert.notEqual(at, -1, name + " has no " + needle + " column");
+      return at;
+    });
+    assert.deepEqual(marks.slice().sort((a, b) => a - b), marks,
+      name + " orders its columns against the rule");
+  });
+  // Where a view carries both extras, the tags column is the last one, the same
+  // place it takes in the by-project table.
+  const person = functionSource(APP, "reportPersonSection");
+  assert.ok(person.lastIndexOf('cls: "report-table__tags"') > person.indexOf('{ text: "Of offer"'),
+    "the tags column follows Of offer");
 });
 
 test("the report's outline closes up: the rail's h1, then the view's h2", () => {
