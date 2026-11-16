@@ -376,3 +376,58 @@ test("the absence and holiday marks read the app's ink, not the signal", () => {
   assert.equal(declaration(ABSENCE_CHECK[1], "width"), "auto");
   assert.equal(declaration(ABSENCE_CHECK[1], "justify-self"), "start");
 });
+
+/* --- the report's two totals --------------------------------------------- */
+
+// The Total row is marked with the title weight and a stronger rule above it.
+// The Total column is marked the same way a quarter turn round, on its leading
+// edge, so the two totals read as one cross where they meet. Lifted from the
+// stylesheet so the test tracks the rules rather than a copy of them.
+const TOTAL_ROW = STYLE.match(/\.report-row--total td\s*\{([^}]*)\}/);
+const TOTAL_COLUMN = STYLE.match(/\.report-table \.report-table__total\s*\{([^}]*)\}/);
+
+test("the Total column wears the Total row's emphasis on its leading edge", () => {
+  assert.ok(TOTAL_ROW, "the .report-row--total rule is missing");
+  assert.ok(TOTAL_COLUMN, "the .report-table__total rule is missing");
+  // The same weight, from the same token as the row.
+  assert.equal(declaration(TOTAL_ROW[1], "font-weight"), "var(--fw-title)");
+  assert.equal(declaration(TOTAL_COLUMN[1], "font-weight"), declaration(TOTAL_ROW[1], "font-weight"));
+  // The same stronger rule, turned a quarter turn: above the row, on the
+  // leading edge of the column.
+  assert.equal(declaration(TOTAL_ROW[1], "border-top"), "var(--base) solid var(--rule-strong)");
+  assert.equal(declaration(TOTAL_COLUMN[1], "border-left"), "var(--base) solid var(--rule-strong)");
+  // Neither draws on the other's axis, so the cell where the two meet carries
+  // one rule of each and no doubled border.
+  assert.doesNotMatch(TOTAL_ROW[1], /border-(left|right)\s*:/);
+  assert.doesNotMatch(TOTAL_COLUMN[1], /border-(top|right|bottom)\s*:/);
+});
+
+// A collapsed border between two cells is resolved in favour of the topmost
+// cell's, so the pale rule under the row above outbid the Total row's own strong
+// top rule of the same width and the stronger ink never reached the screen. The
+// row above yields that edge and the Total row's rule is the one drawn.
+const YIELDING_ROW = STYLE.match(
+  /\.report-table tbody tr:has\(\+ \.report-row--total\) td\s*\{([^}]*)\}/
+);
+
+test("the row above the Total row yields its rule so the strong one paints", () => {
+  assert.ok(YIELDING_ROW, "the rule above the Total row is not yielded");
+  assert.equal(declaration(YIELDING_ROW[1], "border-bottom"), "none");
+  // The edge still exists: it is the Total row's own stronger rule.
+  assert.equal(declaration(TOTAL_ROW[1], "border-top"), "var(--base) solid var(--rule-strong)");
+});
+
+// The table's own cell rule sets text-align: left, and a bare
+// `.report-table__num` cannot outrank `.report-table td`: the figures stayed
+// left-aligned and ragged while the cells stretched. Naming the table in the
+// selector is what holds their right edge.
+const NUM_CELL = STYLE.match(/\.report-table \.report-table__num\s*\{([^}]*)\}/);
+
+test("the figures hold their right edge against the table's left alignment", () => {
+  assert.ok(NUM_CELL, "the numeric cell rule no longer names .report-table");
+  assert.equal(declaration(NUM_CELL[1], "text-align"), "right");
+  // The left alignment it must outrank is still the table's default.
+  const CELLS = STYLE.match(/\.report-table th,\n\.report-table td \{([^}]*)\}/);
+  assert.ok(CELLS, "the shared cell rule is missing");
+  assert.equal(declaration(CELLS[1], "text-align"), "left");
+});

@@ -983,7 +983,9 @@ h1, h2, h3, p { margin: 0; }
   letter-spacing: 0.02em;
 }
 
-.report-table__num { text-align: right; }
+/* The table's own cell rule sets a left alignment; naming the table in this
+   selector is what lets the figures outrank it and hold their right edge. */
+.report-table .report-table__num { text-align: right; }
 
 .report-table__name {
   position: sticky;
@@ -999,9 +1001,27 @@ h1, h2, h3, p { margin: 0; }
 
 .report-table tbody tr:hover td { background: var(--off); }
 
+/* A collapsed border between two cells is resolved in favour of the topmost
+   cell's, so the pale rule under the row above would beat the Total row's own
+   strong top rule of the same width and the stronger ink never painted. The row
+   above yields that edge; the Total row's rule is the one drawn. */
+.report-table tbody tr:has(+ .report-row--total) td {
+  border-bottom: none;
+}
+
 .report-row--total td {
   font-weight: var(--fw-title);
   border-top: var(--base) solid var(--rule-strong);
+}
+
+/* The column carrying each row's total wears the Total row's emphasis a quarter
+   turn round: the same weight and the same stronger rule, on the leading edge,
+   so the two totals read as one cross. The cell where the two meet carries the
+   row's top rule and the column's leading rule and nothing doubled - neither
+   rule draws on the other's axis. */
+.report-table .report-table__total {
+  font-weight: var(--fw-title);
+  border-left: var(--base) solid var(--rule-strong);
 }
 
 .report-table__tags { color: var(--ink-soft); }

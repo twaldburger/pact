@@ -3508,6 +3508,16 @@ function reportNumCell(value) {
   return { text: reportFigure(value), cls: "report-table__num" };
 }
 
+// The column carrying each row's total is marked the way the Total row is -
+// the same weight and the same stronger rule, on the column's leading edge - so
+// the two totals read as one cross. The header and the cells take the one class,
+// which is the class the stylesheet marks.
+var REPORT_TOTAL_COL = "report-table__num report-table__total";
+
+function reportTotalCell(value) {
+  return { text: reportFigure(value), cls: REPORT_TOTAL_COL };
+}
+
 // One table. The first column is sticky so a wide matrix keeps its names, and
 // every numeric column is right-aligned to its own figures.
 function reportTable(headers, rows) {
@@ -3840,21 +3850,21 @@ function reportProjectSection(model) {
   var headers = [{ text: "Project", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
     .concat([
-      { text: "Total", cls: "report-table__num" },
+      { text: "Total", cls: REPORT_TOTAL_COL },
       { text: "Share of plan", cls: "report-table__num" },
       { text: "Tags", cls: "report-table__tags" }
     ]);
   var rows = model.byProject.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.name, r.colour), cls: "report-table__name" }];
     r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
-    cells.push(reportNumCell(r.total));
+    cells.push(reportTotalCell(r.total));
     cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
     cells.push({ node: reportTagList(r.tags), cls: "report-table__tags" });
     return { cells: cells };
   });
   var totalCells = [{ text: "Total", cls: "report-table__name" }];
   model.byProject.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
-  totalCells.push(reportNumCell(model.byProject.total.total));
+  totalCells.push(reportTotalCell(model.byProject.total.total));
   totalCells.push({ text: "100%", cls: "report-table__num" });
   totalCells.push({ text: "", cls: "report-table__tags" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
@@ -3870,21 +3880,21 @@ function reportPersonSection(model) {
   var headers = [{ text: "Person", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
     .concat([
-      { text: "FTE-days", cls: "report-table__num" },
+      { text: "FTE-days", cls: REPORT_TOTAL_COL },
       { text: "Share of plan", cls: "report-table__num" },
       { text: "% of offer", cls: "report-table__num", title: "The person's FTE-days as a share of the FTE-days they offer over the period" }
     ]);
   var rows = model.byPerson.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.name, null), cls: "report-table__name" }];
     r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
-    cells.push(reportNumCell(r.total));
+    cells.push(reportTotalCell(r.total));
     cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
     cells.push({ text: reportPercent(r.pct), cls: "report-table__num" });
     return { cells: cells };
   });
   var totalCells = [{ text: "Total", cls: "report-table__name" }];
   model.byPerson.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
-  totalCells.push(reportNumCell(model.byPerson.total.total));
+  totalCells.push(reportTotalCell(model.byPerson.total.total));
   totalCells.push({ text: "100%", cls: "report-table__num" });
   totalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
@@ -3900,19 +3910,19 @@ function reportTagSection(model) {
   var headers = [{ text: "Tag", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
     .concat([
-      { text: "Total", cls: "report-table__num" },
+      { text: "Total", cls: REPORT_TOTAL_COL },
       { text: "Share of plan", cls: "report-table__num" }
     ]);
   var rows = model.byTag.rows.map(function (r) {
     var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
     r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
-    cells.push(reportNumCell(r.total));
+    cells.push(reportTotalCell(r.total));
     cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
     return { cells: cells };
   });
   var totalCells = [{ text: "Total", cls: "report-table__name" }];
   model.byTag.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
-  totalCells.push(reportNumCell(model.byTag.total.total));
+  totalCells.push(reportTotalCell(model.byTag.total.total));
   totalCells.push({ text: "100%", cls: "report-table__num" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-tag"),
