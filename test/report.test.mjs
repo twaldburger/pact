@@ -402,14 +402,48 @@ test("a key's chip state is derived from its tags, and none is stored", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const head = functionSource(APP, "reportTagSplit");
   assert.match(head, /tagKeyState\(group\.tags, selected\)/);
-  // All of them on, some of them on, none of them on - the three states the
-  // chip draws, in that order, off the key's own tags and nothing else.
-  assert.match(head, /state\.all \? "on" : state\.some \? "some" : "off"/);
+  // Two states and no third: a key is selected when all of its tags are, and
+  // is drawn as not selected for every other reading of them.
+  assert.match(head, /state\.all \? "on" : "off"/);
   // A tag chip is selected by the tag row's own set, which is the truth the
   // key's state is read from.
   assert.match(head, /selected\.indexOf\(tag\) !== -1 \? "on" : "off"/);
   // No key state is ever written: the plan stores the tag set alone.
   assert.equal(APP.includes("tagSplit: { key"), false, "a key is still written to the plan");
+});
+
+test("the two rows are named inline, so the chooser gains no height", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const head = functionSource(APP, "reportTagSplit");
+  // Each row is its name and its chips together, built once for both rows.
+  assert.match(head, /var keysRow = row\("Keys", "report-tags--keys"\);/);
+  assert.match(head, /var tagsRow = row\("Tags", "report-tags--tags"\);/);
+  assert.match(head, /var label = el\("span", "report-taghead__label"\);/);
+  assert.ok(head.indexOf("line.appendChild(label)") < head.indexOf("line.appendChild(chips)"),
+    "the name is drawn after its chips");
+  // The row is a flex line: the name cannot shrink or wrap, and the chips take
+  // the rest of the line and wrap inside it. A name that could wrap would take
+  // a line of its own and grow the chooser by a line.
+  const line = STYLE.match(/\.report-taghead__row\s*\{([^}]*)\}/);
+  assert.ok(line, "the named row has no rule of its own");
+  assert.match(line[1], /display: flex;/);
+  assert.match(line[1], /align-items: baseline;/);
+  const label = STYLE.match(/\.report-taghead__label\s*\{([^}]*)\}/);
+  assert.ok(label, "the row's name has no rule of its own");
+  assert.match(label[1], /flex: none;/);
+  assert.equal(/white-space/.test(label[1]), false,
+    "the name is held to one line by its flex item, not by nowrap");
+  const chips = STYLE.match(/\.report-taghead__row \.report-tags\s*\{([^}]*)\}/);
+  assert.ok(chips, "the chips in a named row have no rule of their own");
+  assert.match(chips[1], /flex: 1 1 auto;/);
+  assert.match(chips[1], /min-width: 0;/);
+  // The name wears the small label the report's column heads wear, so it reads
+  // as a name rather than as the first chip of its row.
+  assert.match(label[1], /font-size: var\(--fs-axis\);/);
+  assert.match(label[1], /color: var\(--ink-soft\);/);
+  assert.match(label[1], /text-transform: uppercase;/);
+  assert.match(label[1], /letter-spacing: 0\.02em;/);
 });
 
 test("the TAGS column and the two chip rows are one chip, not two drawings", () => {
@@ -421,12 +455,15 @@ test("the TAGS column and the two chip rows are one chip, not two drawings", () 
   // a second kind of chip with its own colour.
   assert.match(chip, /chip\.setAttribute\("data-state", choice\.state\);/);
   assert.match(chip, /chip\.setAttribute\("aria-pressed",/);
-  assert.match(chip, /choice\.state === "some" \? "mixed"/);
+  // Two values, not three: a pressed chip says so and every other state says
+  // not pressed, because there is no third state left to read.
+  assert.match(chip, /choice\.state === "on" \? "true" : "false"/);
   assert.match(chip, /choice \? el\("button", "report-tag report-tag--choice"\) : el\("span", "report-tag"\)/);
-  // A coloured tag carries its fill and its label ink; a tag without a colour
-  // sets neither, and the stylesheet's ink stands in.
-  assert.match(chip, /setProperty\("--tag-fill", activeColour\(slot\)\)/);
-  assert.match(chip, /setProperty\("--tag-ink", labelInkFor\(activeColour\(slot\)\)\)/);
+  // The swatch is the only thing that carries a tag's colour: the chip itself
+  // sets no fill, so every selected chip fills alike.
+  assert.match(chip, /swatch\.style\.background = activeColour\(slot\);/);
+  assert.equal(/--tag-fill|--tag-ink/.test(chip), false, "a chip still sets a fill per tag");
+  assert.equal(/setProperty\(/.test(chip), false, "the chip still sets a colour of its own");
   // One drawing, two callers: the TAGS column and the head both build the chip
   // through this function, and nothing else builds a `.report-tag`.
   assert.match(functionSource(APP, "reportTagList"), /reportTagChip\(tag, slot\)/);
@@ -455,26 +492,33 @@ test("the chip takes its width from its text in both places", () => {
   assert.match(functionSource(APP, "reportTagSplit"), /el\("div", "report-taghead"\)/);
 });
 
-test("the chip's filled, half and outline states are the element's own", () => {
+test("a selected chip's fill is the app's ink, whatever colour its tag has", () => {
   const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
   const on = STYLE.match(/\.report-tag--choice\[data-state="on"\]\s*\{([^}]*)\}/);
-  const some = STYLE.match(/\.report-tag--choice\[data-state="some"\]\s*\{([^}]*)\}/);
   const off = STYLE.match(/\.report-tag--choice\s*\{([^}]*)\}/);
   assert.ok(on, "a selected chip has no rule of its own");
-  assert.ok(some, "a half-selected chip has no rule of its own");
   assert.ok(off, "the chip's resting state has no rule of its own");
-  // Selected fills with the tag's fill and takes the label ink from it.
-  assert.match(on[1], /background: var\(--tag-fill\);/);
-  assert.match(on[1], /color: var\(--tag-ink\);/);
-  assert.match(on[1], /border-color: var\(--tag-fill\);/);
-  // A tag with no colour has no fill set by the script, so the chip's own ink
-  // is the fill and the paper is the label: selection never needs a colour.
-  assert.match(off[1], /--tag-fill: var\(--ink\);/);
-  assert.match(off[1], /--tag-ink: var\(--canvas\);/);
-  // Half is half the fill mixed into the paper, not the outline's paper.
-  assert.match(some[1], /color-mix\(in srgb, var\(--tag-fill\) var\(--mix-half\), var\(--panel\)\)/);
-  assert.match(STYLE, /--mix-half:\s*[0-9.]+%;/);
-  assert.notEqual(on[1].replace(/\s+/g, " "), some[1].replace(/\s+/g, " "));
+  // One fill for every selected chip - the app's ink, which is what a tag with
+  // no colour always filled with - so a coloured tag and a plain one are
+  // selected in the same way. The paper is the label ink on that fill.
+  assert.match(on[1], /background: var\(--ink\);/);
+  assert.match(on[1], /border-color: var\(--ink\);/);
+  assert.match(on[1], /color: var\(--canvas\);/);
+  // No per-tag fill is left for a rule to read: the swatch carries the colour
+  // and nothing else does.
+  assert.equal(/--tag-fill|--tag-ink/.test(STYLE), false, "a per-tag fill is still styled");
+});
+
+test("a chip has two states, and no partial one is drawn or set", () => {
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  assert.equal(/data-state="some"/.test(STYLE + APP), false, "a partial chip state is still drawn");
+  assert.equal(/state\.some/.test(APP), false, "a key still reads a partial state");
+  assert.equal(/"mixed"/.test(APP), false, "a chip still reports a mixed press");
+  // The chip is selected or it is not: those are the only two states any rule
+  // or any attribute draws on.
+  const states = [...STYLE.matchAll(/\.report-tag--choice\[data-state="([a-z]+)"\]/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(states)].sort(), ["off", "on"]);
 });
 
 test("the chooser is capped at about three lines, and scrolls inside them", () => {

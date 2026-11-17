@@ -87,7 +87,6 @@
   --mix-band: 8%;         /* the rubber band of a range being drawn */
   --mix-hatch: 42%;       /* the over-allocation hatch, drawn in --signal */
   --mix-over: 5%;         /* the row header of a Person over their Availability */
-  --mix-half: 40%;        /* half a tag's colour over the paper: a key's part */
   --op-disabled: 0.45;    /* a control at the end of its range */
   --op-archived: 0.6;     /* history: an archived Assignment, and its chip */
   /* A text glyph is not centred in its line box, and a "+" sits below the cap
@@ -1068,15 +1067,14 @@ h1, h2, h3, p { margin: 0; }
 
 /* A chip that can be ticked: the TAGS column's chip as a toggle. Its state is
    on the element, as data-state for the drawing and aria-pressed for everything
-   else, so full, half and empty are read from the chip rather than from its
-   colour. A selected chip fills with the tag's colour and takes its label ink
-   from that fill the way a block does; a tag with no colour sets no fill of its
-   own, so the ink below stands in and a selection never depends on a colour
-   having been set. A key's half state mixes that fill into the paper rather than
-   painting half the chip, which keeps its label legible on both halves. */
+   else, so selected and not selected are read from the chip rather than from its
+   colour. There are two states and no third: a key's chip is selected exactly
+   when all of its tags are, and a key holding some of them reads as not
+   selected. A selected chip fills with the app's ink whatever colour its tag
+   has - one fill for every chip, so the fill never says a colour a second time -
+   and takes the paper as its label ink, while the swatch keeps naming the tag's
+   own colour. */
 .report-tag--choice {
-  --tag-fill: var(--ink);
-  --tag-ink: var(--canvas);
   appearance: none;
   font: inherit;
   font-size: var(--fs-axis);
@@ -1090,21 +1088,16 @@ h1, h2, h3, p { margin: 0; }
 }
 
 .report-tag--choice[data-state="on"] {
-  background: var(--tag-fill);
-  border-color: var(--tag-fill);
-  color: var(--tag-ink);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--canvas);
 }
 
-/* The swatch's job is to name a colour the chip does not carry; on a filled
-   chip the fill carries it, so the mark reads in the label ink instead. */
+/* The swatch on the dark fill: three of the paired colours sit under 3:1 against
+   the ink, the darkest barely off it at all, so the dot keeps its colour and
+   carries a hairline of the paper around it rather than surrendering either. */
 .report-tag--choice[data-state="on"] .report-tag__swatch {
-  background: var(--tag-ink);
-}
-
-.report-tag--choice[data-state="some"] {
-  background: color-mix(in srgb, var(--tag-fill) var(--mix-half), var(--panel));
-  border-color: var(--tag-fill);
-  color: var(--ink);
+  box-shadow: 0 0 0 var(--base) var(--canvas);
 }
 
 .report-tag--choice:focus-visible {
@@ -1112,13 +1105,44 @@ h1, h2, h3, p { margin: 0; }
   outline-offset: 1px;
 }
 
-/* The by-tag view's head: the tags its rows are, as two rows of chips - every
-   key over every tag - in one bounded, scrolling list, so a plan carrying many
-   tags cannot push the table down or move it as a row wraps. */
+/* The by-tag view's head: the tags its rows are, as two named rows of chips -
+   every key over every tag - in one bounded, scrolling list, so a plan carrying
+   many tags cannot push the table down or move it as a row wraps. */
 .report-taghead {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* One named row: its name at the start of the line, its chips beside it. The
+   name is a flex item that cannot shrink or wrap, so it never takes a line of
+   its own and naming the two rows costs the chooser no height. The two are
+   aligned on their text's baseline, so when a long tag row wraps the name stays
+   on the first line with the chips rather than moving to the middle of them. */
+.report-taghead__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* The row's name wears the small label the report's own headings and column
+   heads wear - axis type, upper case, tracked, in the soft ink - so the two
+   names read as names rather than as the first chip of their row. */
+.report-taghead__label {
+  flex: none;
+  font-size: var(--fs-axis);
+  font-weight: var(--fw-ui);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* The chips take the rest of the line and wrap inside it, so the name stays at
+   the start of the row's first line however many chips a plan carries. */
+.report-taghead__row .report-tags {
+  flex: 1 1 auto;
   min-width: 0;
 }
 

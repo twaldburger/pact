@@ -500,27 +500,30 @@ test("the keys offered are the first row of chips, the keyless tags left to the 
   assert.deepEqual(tagChoices(both), ["api:Solar", "api:Terra", "Web:Site"]);
 });
 
-test("a key's chip is derived from its tags: all of them, some of them, or none", () => {
+test("a key's chip is derived from its tags: all of them, or not selected", () => {
   const plan = splitFixture();
   const api = tagKeyGroups(plan)[0].tags;
-  // None ticked: an empty key chip.
-  assert.deepEqual(tagKeyState(api, []), { count: 0, total: 2, all: false, some: false });
-  // Some of them: a half-filled key, which is neither empty nor full.
-  assert.deepEqual(tagKeyState(api, ["api:Solar"]), { count: 1, total: 2, all: false, some: true });
-  // All of them: a filled key. A tag ticked outside the key changes neither.
-  assert.deepEqual(tagKeyState(api, ["api:Solar", "api:Terra"]), { count: 2, total: 2, all: true, some: false });
-  assert.deepEqual(tagKeyState(api, ["api:Solar", "QA"]), { count: 1, total: 2, all: false, some: true });
-  assert.deepEqual(tagKeyState(api, ["QA", "Testing"]), { count: 0, total: 2, all: false, some: false });
+  // Two states and no third: a key holding some of its tags is not selected,
+  // so there is no third reading for a chip to draw.
+  assert.deepEqual(tagKeyState(api, []), { count: 0, total: 2, all: false });
+  assert.deepEqual(tagKeyState(api, ["api:Solar"]), { count: 1, total: 2, all: false });
+  // All of them: a selected key. A tag ticked outside the key changes neither.
+  assert.deepEqual(tagKeyState(api, ["api:Solar", "api:Terra"]), { count: 2, total: 2, all: true });
+  assert.deepEqual(tagKeyState(api, ["api:Solar", "QA"]), { count: 1, total: 2, all: false });
+  assert.deepEqual(tagKeyState(api, ["QA", "Testing"]), { count: 0, total: 2, all: false });
+  // A key with no tags at all is never selected, so an empty key can never read
+  // as a complete one.
+  assert.equal(tagKeyState([], []).all, false);
 });
 
-test("a press on a partly filled key completes it, and on a full one clears it", () => {
+test("a press on a partly selected key selects all of it, and on a selected one clears it", () => {
   const plan = splitFixture();
   const api = tagKeyGroups(plan)[0].tags;
   // From nothing: the key's chip ticks its whole set in one step and leaves
   // every tag outside it alone.
   assert.deepEqual(tagToggled([], api), ["api:Solar", "api:Terra"]);
-  // From a partly selected key: the press completes the set - the state the
-  // half-filled chip is offering - and keeps a tag ticked in the tag row.
+  // From a partly selected key: the press selects every tag of the set - the
+  // state the key's own chip is offering - and keeps a tag ticked in the tag row.
   assert.deepEqual(tagToggled(["api:Solar", "QA"], api), ["api:Solar", "QA", "api:Terra"]);
   // From a fully selected key: the press clears every one of its tags and
   // leaves the tag row's own selection standing.
