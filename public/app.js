@@ -3811,7 +3811,11 @@ function drawReportNav() {
     var name = el("span", "stack__name");
     name.textContent = entry.label;
     item.appendChild(name);
-    item.addEventListener("click", function () { selectReportView(entry.key); });
+    // A click's detail is 0 when the keyboard made the press and non-zero when
+    // a pointer did, which is what decides whether focus is put back below.
+    item.addEventListener("click", function (e) {
+      selectReportView(entry.key, e.detail === 0);
+    });
     row.appendChild(item);
     reportViewsList.appendChild(row);
   });
@@ -3819,11 +3823,14 @@ function drawReportNav() {
 
 // A press on a row draws that view alone and remembers the choice as a view
 // setting, like the Zoom, so a reload and a return from the plan resume here.
-function selectReportView(key) {
+// Only a keyboard press has focus put back: the redraw takes the pressed row
+// with it, so the keyboard would otherwise be dropped, but a pointer press is
+// no instruction to move the focus a mouse user left on the row they pressed -
+// and the refocused row would wear the keyboard's ring over the view it marks.
+function selectReportView(key, pressedWithKeyboard) {
   var next = normalizeReportView(key);
   if (next === reportView) return;
   reportView = next;
-  var pressedWithKeyboard = reportViewsList && reportViewsList.contains(document.activeElement);
   render();
   // The list is redrawn with the selection in its new place, so the pressed row
   // is gone: the keyboard is put back on the row that is now current.
