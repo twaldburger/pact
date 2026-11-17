@@ -32,7 +32,7 @@ import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
-import { reportContent } from "./lib/report-content.mjs";
+import { reportContent, tagSplitKeys, tagSplitSuggestions } from "./lib/report-content.mjs";
 import { REPORT_VIEWS, REPORT_VIEW_DEFAULT, normalizeReportView, reportViewLabel } from "./lib/report-views.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
@@ -2146,7 +2146,9 @@ function shareControl(value) {
 var tagListSeq = 0;
 
 // Tag chips plus an input that takes a new tag or one from `suggest`.
-function tagEditor(initial, suggest) {
+// `onChange`, when given, is called with the new list after a chip is added or
+// removed, so a list that saves itself needs no Save button of its own.
+function tagEditor(initial, suggest, onChange) {
   var tags = (initial || []).slice();
   var wrap = el("div", "tags");
   var chips = el("span", "chips");
@@ -2182,6 +2184,7 @@ function tagEditor(initial, suggest) {
         tags = withoutTag(tags, tag);
         render();
         input.focus();
+        if (onChange) onChange(tags.slice());
       });
       chip.appendChild(text);
       chip.appendChild(remove);
@@ -2200,6 +2203,7 @@ function tagEditor(initial, suggest) {
     tags = withTag(tags, input.value);
     input.value = "";
     render();
+    if (onChange) onChange(tags.slice());
   }
 
   input.addEventListener("keydown", function (e) {
@@ -3731,11 +3735,13 @@ function reportLegend(items) {
 /* --- the report page ----------------------------------------------------- */
 
 /* The report's own content: one of its six views at a time, from the plan the
- * Filter and the rail's sort leave. It writes nothing to the plan; the figures
- * come from public/lib/report-content.mjs, which reads the app's own
- * working-day rule, so the report and the grid agree by construction. The rail
- * is drawn beside it and lists those six views - the plan's own panel, folded
- * by the same control and remembering the same collapsed state. */
+ * Filter and the rail's sort leave. The figures come from
+ * public/lib/report-content.mjs, which reads the app's own working-day rule, so
+ * the report and the grid agree by construction. The one thing the report
+ * writes is the by-tag view's own split, which is the owner's choice stored in
+ * the plan like the holidays. The rail is drawn beside it and lists those six
+ * views - the plan's own panel, folded by the same control and remembering the
+ * same collapsed state. */
 function renderReport() {
   tl.classList.add("is-report");
   // The panel is drawn whatever the Filter leaves, so an empty result never
@@ -3937,7 +3943,80 @@ function reportAllocationPersonSection(model) {
   return section;
 }
 
-// FTE-days by tag: one row per tag, each project's days shared over its tags.
+/* The by-tag view's head: what its rows are split by. A `Split by` chooser of
+ * the tag keys the plan actually uses, and an `Also` chip row for tags added
+ * beside that key. The choice is the plan's own, so it travels with the plan
+ * and resumes after a reload - one write to /api/plan, one undo step, exactly
+ * as the holidays and the tag colours are set. Nothing is chosen until the
+ * owner picks a key: no stored split means no table, rather than a guess at a
+ * taxonomy. */
+function reportTagSplit(model) {
+  var split = model.byTagSplit;
+  var head = el("div", "report-split");
+  // Created first so the save below can report into it; the stylesheet orders
+  // it after the controls, so a refusal reads under the row it belongs to.
+  var error = errorLine(head);
+
+  function save(next) {
+    error.clear();
+    api("PATCH", "/api/plan", { tagSplit: next })
+      .then(function () { return refresh({ keepPanel: true }); })
+      .catch(function (err) {
+        error.set(err && err.message ? err.message : "Could not save the split.");
+      });
+  }
+
+  var keyField = el("label", "report-split__field");
+  var keyLabel = el("span", "report-split__label");
+  keyLabel.textContent = "Split by";
+  var select = el("select", "report-split__select");
+  select.setAttribute("aria-label", "Split the tags by key");
+  var none = document.createElement("option");
+  none.value = "";
+  none.textContent = "Choose a key";
+  select.appendChild(none);
+  var keys = tagSplitKeys(data);
+  // A stored key the plan no longer carries still lists, so the choice can be
+  // read back and changed rather than silently disappearing from the control.
+  if (split && keys.indexOf(split.key) === -1) keys = keys.concat([split.key]);
+  keys.forEach(function (kind) {
+    var option = document.createElement("option");
+    option.value = kind;
+    option.textContent = kind;
+    select.appendChild(option);
+  });
+  select.value = split ? split.key : "";
+  select.addEventListener("change", function () {
+    if (select.value === "") { save(null); return; }
+    var next = { key: select.value };
+    if (split && split.tags.length > 0) next.tags = split.tags;
+    save(next);
+  });
+  keyField.appendChild(keyLabel);
+  keyField.appendChild(select);
+  head.appendChild(keyField);
+
+  // Also: the tags added beside the key. It needs a key to sit outside of, so
+  // it appears once one is chosen.
+  if (split) {
+    var alsoField = el("div", "report-split__field");
+    var alsoLabel = el("span", "report-split__label");
+    alsoLabel.textContent = "Also";
+    var editor = tagEditor(split.tags, function () {
+      return tagSplitSuggestions(data, split);
+    }, function (tags) {
+      save({ key: split.key, tags: tags });
+    });
+    alsoField.appendChild(alsoLabel);
+    alsoField.appendChild(editor.node);
+    head.appendChild(alsoField);
+  }
+
+  return head;
+}
+
+// FTE-days by tag: the key's values, then the tags added beside it, then one
+// residual row for everything else, so the rows reconcile with the plan total.
 function reportTagSection(model) {
   var headers = [{ text: "Tag", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
@@ -3945,21 +4024,34 @@ function reportTagSection(model) {
       { text: "Total", cls: REPORT_TOTAL_COL },
       { text: "Of plan", cls: "report-table__num" }
     ]);
-  var rows = model.byTag.rows.map(function (r) {
-    var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
-    r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
-    cells.push(reportTotalCell(r.total));
-    cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
-    return { cells: cells };
-  });
-  var totalCells = [{ text: "Total", cls: "report-table__name" }];
-  model.byTag.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
-  totalCells.push(reportTotalCell(model.byTag.total.total));
-  totalCells.push({ text: "100%", cls: "report-table__num" });
-  rows.push({ cells: totalCells, cls: "report-row--total" });
+  var split = model.byTagSplit;
   var section = reportSection(reportViewLabel("by-tag"),
     "Each project's days are split between its tags, so the totals fit the plan.");
-  section.appendChild(reportTable(headers, rows));
+  section.appendChild(reportTagSplit(model));
+
+  if (!split) {
+    // Nothing is chosen: the view says so rather than guessing at a taxonomy.
+    var empty = el("p", "report__note");
+    empty.textContent = "Nothing is split by yet - choose the tag key the rows should split by.";
+    section.appendChild(empty);
+  } else {
+    function cellsFor(r) {
+      var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
+      r.cells.forEach(function (v) { cells.push(reportNumCell(v)); });
+      cells.push(reportTotalCell(r.total));
+      cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
+      return cells;
+    }
+
+    var rows = split.rows.map(function (r) { return { cells: cellsFor(r) }; });
+    if (split.other) rows.push({ cells: cellsFor(split.other) });
+    var totalCells = [{ text: "Total", cls: "report-table__name" }];
+    model.byTag.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
+    totalCells.push(reportTotalCell(model.byTag.total.total));
+    totalCells.push({ text: "100%", cls: "report-table__num" });
+    rows.push({ cells: totalCells, cls: "report-row--total" });
+    section.appendChild(reportTable(headers, rows));
+  }
   section.appendChild(reportAbsencesNote());
   return section;
 }

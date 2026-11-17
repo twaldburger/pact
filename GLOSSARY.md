@@ -146,3 +146,7 @@ _Avoid_: revert, roll back, history, snapshot
 **Filter**:
 The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `project tag:platform`, `people: tim` or `project notes: delayed`, with a bare `tag:` spanning all three kinds and `project tag:` narrowing to Projects. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
 _Avoid_: search, find, search bar, query
+
+**Tag split**:
+The by-tag report's own choice of what its rows are: a tag key whose values become the rows, and any individual tags added beside it, with one `Other tags` row gathering every tag not shown. A project's FTE-days are split evenly over all its tags, as everywhere in the report, so that residual is what makes the rows reconcile with the plan's total; it covers a tag nobody chose and a project carrying no tag under the key alike. Nothing is chosen to begin with, and the choice is stored in the plan beside the holidays and the tag colours, so it travels with the plan.
+_Avoid_: grouping, pivot key, split setting

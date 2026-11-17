@@ -922,6 +922,81 @@ test("setting the tag colours is one undo step, like any other change", () => {
   assert.deepEqual(store.get().tagColours.colours, { "api:Stellar": 1 });
 });
 
+/* --- the report's own split (issue #168) ---------------------------------- */
+
+test("the seed leaves the report's tag split out, so an existing plan is unchanged", () => {
+  assert.equal(seedPlan().tagSplit, undefined);
+});
+
+test("a plan with a report tag split validates, and a malformed one is refused by name", () => {
+  const plan = seedPlan();
+  plan.tagSplit = { key: "api", tags: ["Testing", "QA"] };
+  assert.deepEqual(validatePlan(plan), []);
+  // The key alone is a whole split: nothing added beside it yet.
+  plan.tagSplit = { key: "api" };
+  assert.deepEqual(validatePlan(plan), []);
+
+  plan.tagSplit = "api";
+  assert.deepEqual(validatePlan(plan), ["tagSplit must be an object"]);
+  plan.tagSplit = ["api"];
+  assert.deepEqual(validatePlan(plan), ["tagSplit must be an object"]);
+  // A split always names a key: one with none is no split at all.
+  plan.tagSplit = {};
+  assert.deepEqual(validatePlan(plan), ["tagSplit.key must be a non-empty string"]);
+  plan.tagSplit = { key: "   ", tags: ["QA"] };
+  assert.deepEqual(validatePlan(plan), ["tagSplit.key must be a non-empty string"]);
+  // The key is the kind before a colon, so a tag written whole is refused.
+  plan.tagSplit = { key: "api:Solar" };
+  assert.deepEqual(validatePlan(plan), ["tagSplit.key must be a tag kind, without a colon"]);
+  plan.tagSplit = { key: "api", tags: "QA" };
+  assert.deepEqual(validatePlan(plan), ["tagSplit.tags must be an array of non-empty strings"]);
+  plan.tagSplit = { key: "api", tags: ["QA", ""] };
+  assert.deepEqual(validatePlan(plan), ["tagSplit.tags must be an array of non-empty strings"]);
+  plan.tagSplit = { key: "api", tags: ["QA", 3] };
+  assert.deepEqual(validatePlan(plan), ["tagSplit.tags must be an array of non-empty strings"]);
+});
+
+test("the store sets the report's tag split and it round-trips through the plan file", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const tagSplit = { key: "api", tags: ["Testing"] };
+  const set = store.setTagSplit({ tagSplit: tagSplit });
+  assert.deepEqual(set.tagSplit, tagSplit);
+  assert.deepEqual(store.get().tagSplit, tagSplit);
+  const reloaded = createStore(file);
+  assert.deepEqual(reloaded.get().tagSplit, tagSplit);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).tagSplit, tagSplit);
+});
+
+test("clearing or emptying the report's tag split removes the key and a refusal writes nothing", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  store.setTagSplit({ tagSplit: { key: "api", tags: ["QA"] } });
+  // A split naming no key and adding nothing is no split at all, the way an
+  // empty holidays list is.
+  store.setTagSplit({ tagSplit: { tags: [] } });
+  assert.equal(store.get().tagSplit, undefined);
+  store.setTagSplit({ tagSplit: { key: "api" } });
+  store.setTagSplit({ tagSplit: null });
+  assert.equal(store.get().tagSplit, undefined);
+
+  const before = fs.readFileSync(file, "utf8");
+  assert.throws(() => store.setTagSplit({ tagSplit: { key: "api:Solar" } }), /tag kind, without a colon/);
+  assert.throws(() => store.setTagSplit({ tagSplit: { key: "api", tags: ["QA", ""] } }), /array of non-empty strings/);
+  assert.throws(() => store.setTagSplit({ tagSplit: {}, extra: 1 }), ValidationError);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  assert.equal(store.get().tagSplit, undefined);
+});
+
+test("setting the report's tag split is one undo step, like any other change", () => {
+  const store = createStore(tempFile());
+  store.setTagSplit({ tagSplit: { key: "api" } });
+  store.setTagSplit({ tagSplit: { key: "api", tags: ["QA"] } });
+  assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
+  store.undo();
+  assert.deepEqual(store.get().tagSplit, { key: "api" });
+});
+
 /* --- choosing the plan file ----------------------------------------------- */
 
 test("an empty plan is valid, has no content, and keeps a period", () => {

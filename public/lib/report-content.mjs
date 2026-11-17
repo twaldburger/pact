@@ -21,6 +21,8 @@
  *     bucket they offer nothing in has no share at all, and reads as null.
  *   - A project carrying two tags splits its FTE-days evenly between them, so
  *     the tag pivot's totals reconcile exactly with the plan's.
+ *   - The by-tag view splits by the tag key the owner chose, which is stored in
+ *     the plan as `tagSplit` (issue #168).
  *   - Absences are excluded entirely: no absence Project contributes an
  *     FTE-day to any pivot or chart, and the offer is read net of the time off.
  *   - The buckets are the report's own zoom level: a month report has months,
@@ -31,6 +33,7 @@
  * down rather than hunted through.
  */
 import { absencesFor, absenceProjectIds, workingDays } from "./workdays.mjs";
+import { isTypedTag, tagKind } from "./tags.mjs";
 
 const DAY_MS = 86400000;
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -195,12 +198,124 @@ function projectTags(project) {
 // the project stores its tags in. Two tags differing only in case keep a
 // stable order between themselves. A copy, so the plan's own order is not
 // touched, and display only, so no figure depends on it.
+function compareTagText(a, b) {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  return x < y ? -1 : x > y ? 1 : a < b ? -1 : a > b ? 1 : 0;
+}
+
 function sortedTags(tags) {
-  return tags.slice().sort(function (a, b) {
-    const x = a.toLowerCase();
-    const y = b.toLowerCase();
-    return x < y ? -1 : x > y ? 1 : a < b ? -1 : a > b ? 1 : 0;
+  return tags.slice().sort(compareTagText);
+}
+
+/* --- what the by-tag view splits by --------------------------------------- */
+
+// The split as the plan stores it, read defensively: the key it names, trimmed,
+// and the tags added beside it. The server's validator refuses a malformed one,
+// so this only keeps a hand-edited file from breaking the draw.
+function splitKey(split) {
+  return split && typeof split.key === "string" ? split.key.trim() : "";
+}
+
+function splitTags(split) {
+  return split && Array.isArray(split.tags) ? split.tags.filter(function (tag) {
+    return typeof tag === "string" && tag !== "";
+  }) : [];
+}
+
+/*
+ * The keys the by-tag view can split by: every kind the plan's Project tags
+ * carry, deduplicated and sorted case-insensitively. Project tags alone,
+ * because Project tags are what the by-tag pivot is made of, so a key offered
+ * here always has a row to show - a taxonomy to split by rather than an
+ * incidental label beside it.
+ */
+export function tagSplitKeys(plan) {
+  const kinds = new Set();
+  ((plan && plan.projects) || []).forEach(function (project) {
+    projectTags(project).forEach(function (tag) {
+      if (isTypedTag(tag)) kinds.add(tagKind(tag));
+    });
   });
+  return Array.from(kinds).sort(compareTagText);
+}
+
+/*
+ * The tags the Also area can offer: every Project tag the plan carries that
+ * sits outside the chosen key and is not already added, in the one alphabetical
+ * order, so the list is scanned rather than hunted through.
+ */
+export function tagSplitSuggestions(plan, split) {
+  const key = splitKey(split);
+  const added = new Set(splitTags(split));
+  const seen = new Set();
+  const out = [];
+  ((plan && plan.projects) || []).forEach(function (project) {
+    projectTags(project).forEach(function (tag) {
+      if (seen.has(tag) || added.has(tag)) return;
+      if (key !== "" && tagKind(tag) === key) return;
+      seen.add(tag);
+      out.push(tag);
+    });
+  });
+  return out.sort(compareTagText);
+}
+
+/*
+ * The by-tag view's rows for a chosen split, shaped from the complete tag list
+ * the pivot already computed: the key's values in size order, then the tags
+ * added beside it in size order, then one `Other tags` row gathering every tag
+ * not shown. A project's FTE-days are split over all its tags, so that residual
+ * is exactly what makes the rows reconcile with the plan total - it covers a
+ * tag nobody selected and a project carrying no tag under the key alike, as one
+ * row rather than two.
+ *
+ * The residual is left out when it holds no FTE-days, so a split that accounts
+ * for every day draws no empty row. Null when the split names no key: nothing
+ * is chosen, so there is nothing to split by.
+ */
+export function tagSplitRows(rows, split) {
+  const key = splitKey(split);
+  if (key === "") return null;
+  const all = Array.isArray(rows) ? rows : [];
+  // `all` arrives in descending size order, so filtering keeps both lists in it.
+  const values = all.filter(function (row) {
+    return isTypedTag(row.tag) && tagKind(row.tag) === key;
+  });
+  const shown = new Set(values.map(function (row) { return row.tag; }));
+  const also = [];
+  splitTags(split).forEach(function (tag) {
+    if (shown.has(tag)) return;
+    const row = all.find(function (r) { return r.tag === tag; });
+    // A tag the report has no row for - one no project under this view carries
+    // - adds nothing to draw.
+    if (!row) return;
+    shown.add(tag);
+    also.push(row);
+  });
+  // The added tags keep the view's own rule rather than the order they were
+  // typed in: the most FTE-days first, the label breaking a tie.
+  also.sort(function (a, b) {
+    if (a.total !== b.total) return b.total - a.total;
+    return compareTagText(a.label, b.label);
+  });
+
+  const rest = all.filter(function (row) { return !shown.has(row.tag); });
+  const cells = zeros(rest.length > 0 ? rest[0].cells.length : 0);
+  let total = 0;
+  rest.forEach(function (row) {
+    total += row.total;
+    row.cells.forEach(function (value, i) { cells[i] += value; });
+  });
+  const other = Math.abs(total) < 1e-9 ? null : {
+    tag: "",
+    label: "Other tags",
+    slot: null,
+    cells: cells,
+    total: total
+  };
+
+  return { key: key, tags: splitTags(split), rows: values.concat(also), other: other };
 }
 
 /*
@@ -213,7 +328,10 @@ function sortedTags(tags) {
  * for the holidays, the absences and the tag colours. `options` carries the
  * report's zoom, the derived sprint chain, and the resolved tag colour map.
  *
- * The report writes nothing: it only reads.
+ * The report writes nothing to the plan, with one exception: the by-tag view's
+ * own split is the owner's choice and is stored in the plan like the holidays
+ * and the tag colours, so it travels with the plan (issue #168). This module
+ * only reads that choice and shapes the view; the write is the store's.
  */
 export function reportContent(view, plan, options) {
   const opts = options || {};
@@ -371,6 +489,18 @@ export function reportContent(view, plan, options) {
   withShare(projectRows, planTotal);
   withShare(personRows, planTotal);
   withShare(tagList, planTotal);
+
+  // --- the by-tag view's own split -----------------------------------------
+  //
+  // Shaped from the complete tag list, so the residual is what the rows need to
+  // reach the plan total rather than a second reading of the plan, and the
+  // view's total row is the pivot's own: the rows and the residual add up to it
+  // by construction.
+  const tagSplit = tagSplitRows(tagList, plan && plan.tagSplit);
+  if (tagSplit) {
+    if (tagSplit.other) tagSplit.other.share = planTotal > 0 ? tagSplit.other.total / planTotal : 0;
+    tagSplit.total = { cells: tagBuckets, total: planTotal };
+  }
   personRows.forEach(function (r) {
     r.pct = r.offered > 0 ? r.total / r.offered : 0;
   });
@@ -452,6 +582,9 @@ export function reportContent(view, plan, options) {
       rows: tagList,
       total: { cells: tagBuckets, total: planTotal }
     },
+    // The by-tag view's rows as the owner chose to split them, or null while no
+    // key is chosen. The complete pivot above stays for the chart beside it.
+    byTagSplit: tagSplit,
     charts: charts
   };
 }

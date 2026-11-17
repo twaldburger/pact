@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { seedPlan } from "../lib/plan.mjs";
 import { projectMeasures, sortProjects } from "../public/lib/sort.mjs";
-import { reportBuckets, reportContent } from "../public/lib/report-content.mjs";
+import { reportBuckets, reportContent, tagSplitKeys, tagSplitSuggestions } from "../public/lib/report-content.mjs";
 
 /*
  * A plan whose arithmetic is easy to check by hand. January 2026 has 22
@@ -426,4 +426,122 @@ test("the view keeps the rail's order and the Filter's narrowing", () => {
   // The filtered view still offers what the whole plan says a person offers,
   // because the offer is the Person's own.
   near(narrowed.allocationByPerson.rows[1].cells[0], 0.5);
+});
+
+/* --- what the by-tag view splits by (issue #168) -------------------------- */
+
+/*
+ * A plan carrying a taxonomy beside incidental labels, the shape the issue
+ * complains about: two `api:` values, two untyped tags and one untagged project.
+ * January 2026 has 22 weekdays, so Solar's full-time month is 22 FTE-days over
+ * its two tags, Terra is Ben's half over five weekdays (2.5 over two tags), and
+ * Ops is an untagged full week (5).
+ */
+function splitFixture() {
+  const plan = fixture();
+  plan.projects.push(
+    { id: "terra", name: "Terra", colour: 1, tags: ["api:Terra", "QA"] },
+    { id: "ops", name: "Ops", colour: 2, tags: [] }
+  );
+  plan.assignments.push(
+    { id: "a3", projectId: "terra", personId: "ben", start: "2026-01-05", end: "2026-01-09", share: 50, tags: [] },
+    { id: "a4", projectId: "ops", personId: "anna", start: "2026-01-12", end: "2026-01-16", share: 100, tags: [] }
+  );
+  return plan;
+}
+
+test("nothing is chosen until the owner picks a key", () => {
+  const plan = splitFixture();
+  // No stored split, no rows: the view says so rather than guessing at a
+  // taxonomy - a most-used tag or the colour setting included.
+  const f = report(plan);
+  assert.equal(f.byTagSplit, null);
+  plan.tagColours = { keys: { projects: "api" }, colours: { "api:Solar": 2 } };
+  assert.equal(report(plan).byTagSplit, null);
+});
+
+test("choosing a key lists exactly its values", () => {
+  const plan = splitFixture();
+  plan.tagSplit = { key: "api" };
+  const split = report(plan).byTagSplit;
+  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "api:Terra"]);
+  assert.deepEqual(split.other.tag, "");
+  assert.equal(split.other.label, "Other tags");
+  // The label each row wears is the tag it is, so a value under a chosen key is
+  // still readable as the tag the projects carry.
+  assert.deepEqual(split.rows.map((r) => r.label), ["api:Solar", "api:Terra"]);
+});
+
+test("adding a tag adds its row after the key's values", () => {
+  const plan = splitFixture();
+  plan.tagSplit = { key: "api", tags: ["QA", "Testing"] };
+  const split = report(plan).byTagSplit;
+  // The key's values first, then the added tags, each group in size order.
+  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "api:Terra", "Testing", "QA"]);
+  near(split.rows.find((r) => r.tag === "Testing").total, 8.5);
+  near(split.rows.find((r) => r.tag === "QA").total, 1.25);
+  // A tag already shown under the key is not drawn twice.
+  plan.tagSplit = { key: "api", tags: ["api:Solar", "QA"] };
+  assert.deepEqual(report(plan).byTagSplit.rows.map((r) => r.tag), ["api:Solar", "api:Terra", "QA"]);
+  // A tag no project under this view carries adds no row.
+  plan.tagSplit = { key: "api", tags: ["Nowhere"] };
+  assert.deepEqual(report(plan).byTagSplit.rows.map((r) => r.tag), ["api:Solar", "api:Terra"]);
+});
+
+test("the residual row is the plan total minus the rows shown", () => {
+  const plan = splitFixture();
+  plan.tagSplit = { key: "api", tags: ["QA"] };
+  const f = report(plan);
+  const split = f.byTagSplit;
+  near(f.planTotal, 24.5);
+  // Testing (8.5) and the untagged project (5) are gathered in the one residual.
+  near(split.other.total, 13.5);
+  const shown = split.rows.reduce((s, r) => s + r.total, 0) + split.other.total;
+  near(shown, f.planTotal);
+  // And the row it sits under says the same.
+  near(shown, f.byTag.total.total);
+  near(split.rows.reduce((s, r) => s + r.share, 0) + split.other.share, 1);
+});
+
+test("a project carrying no tag under the key lands in the same residual", () => {
+  const plan = splitFixture();
+  // Every tag except the untagged project is shown: the residual is that project
+  // alone, so the one row covers both cases rather than two.
+  plan.tagSplit = { key: "api", tags: ["QA", "Testing", "Absence"] };
+  const split = report(plan).byTagSplit;
+  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "api:Terra", "Testing", "QA"]);
+  near(split.other.total, 5);
+  // Nothing left over means no residual row at all.
+  plan.projects = plan.projects.filter((p) => p.id !== "ops");
+  plan.assignments = plan.assignments.filter((a) => a.projectId !== "ops");
+  assert.equal(report(plan).byTagSplit.other, null);
+});
+
+test("the split's rows and residual reconcile bucket by bucket", () => {
+  const plan = splitFixture();
+  plan.tagSplit = { key: "api", tags: ["QA"] };
+  const f = reportContent(wholeView(plan), plan, { zoom: "week" });
+  const drawn = f.byTagSplit.rows.concat(f.byTagSplit.other ? [f.byTagSplit.other] : []);
+  assert.ok(f.buckets.length > 4);
+  f.buckets.forEach((_, i) => {
+    const sum = drawn.reduce((s, r) => s + r.cells[i], 0);
+    near(sum, f.byTag.total.cells[i]);
+  });
+  near(drawn.reduce((s, r) => s + r.total, 0), f.planTotal);
+});
+
+test("the keys offered are the kinds the plan's project tags carry", () => {
+  assert.deepEqual(tagSplitKeys(splitFixture()), ["api"]);
+  // Nothing typed is nothing to offer, rather than every tag the plan carries.
+  const plan = fixture();
+  plan.projects[0].tags = ["Testing", "QA"];
+  assert.deepEqual(tagSplitKeys(plan), []);
+});
+
+test("the tags offered are the project tags outside the chosen key", () => {
+  const plan = splitFixture();
+  assert.deepEqual(tagSplitSuggestions(plan, { key: "api" }), ["Absence", "QA", "Testing"]);
+  // A tag already added beside the key is not offered again, and the key's own
+  // values never are.
+  assert.deepEqual(tagSplitSuggestions(plan, { key: "api", tags: ["QA"] }), ["Absence", "Testing"]);
 });
