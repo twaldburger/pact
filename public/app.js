@@ -3884,8 +3884,7 @@ function reportPersonSection(model) {
     .concat([
       { text: "Total", cls: REPORT_TOTAL_COL },
       { text: "Of plan", cls: "report-table__num" },
-      { text: "Of offer", cls: "report-table__num", title: "The person's FTE-days against the FTE-days they offer over the period" },
-      { text: "Tags", cls: "report-table__tags" }
+      { text: "Of offer", cls: "report-table__num", title: "The person's FTE-days against the FTE-days they offer over the period" }
     ]);
   var rows = model.byPerson.rows.map(function (r) {
     // The mark is the grid's own: the Person's slot under the people key, and
@@ -3896,7 +3895,6 @@ function reportPersonSection(model) {
     cells.push(reportTotalCell(r.total));
     cells.push({ text: reportPercent(r.share), cls: "report-table__num" });
     cells.push({ text: reportPercent(r.pct), cls: "report-table__num" });
-    cells.push({ node: reportTagList(r.tags), cls: "report-table__tags" });
     return { cells: cells };
   });
   var totalCells = [{ text: "Total", cls: "report-table__name" }];
@@ -3904,7 +3902,6 @@ function reportPersonSection(model) {
   totalCells.push(reportTotalCell(model.byPerson.total.total));
   totalCells.push({ text: "100%", cls: "report-table__num" });
   totalCells.push({ text: reportPercent(model.byPerson.total.pct), cls: "report-table__num" });
-  totalCells.push({ text: "", cls: "report-table__tags" });
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-person"),
     "Of offer is against each person's own availability, so someone at 80% can reach 100%.");

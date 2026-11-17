@@ -398,20 +398,24 @@ test("a bucket a person offers nothing in reads as the report's missing figure",
   assert.match(APP, /function reportFigure\(value\) \{\n  if \(!isFinite\(value\)\) return "-";/);
 });
 
-test("the by-person table carries the person's tags, drawn as the project's are", () => {
+test("the by-project table carries the project's tags, and the by-person table has none", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const person = functionSource(APP, "reportPersonSection");
   const project = functionSource(APP, "reportProjectSection");
   assert.ok(person.length > 0 && project.length > 0, "a table is missing");
-  // One tags column, defined and drawn the same way in both tables: the same
-  // head class, the same list helper, and the same empty cell on the Total row.
-  [person, project].forEach((pivot) => {
-    assert.match(pivot, /\{ text: "Tags", cls: "report-table__tags" \}/);
-    assert.match(pivot, /cells\.push\(\{ node: reportTagList\(r\.tags\), cls: "report-table__tags" \}\);/);
-    assert.match(pivot, /totalCells\.push\(\{ text: "", cls: "report-table__tags" \}\);/);
-  });
-  // The list itself is the one helper, so a Person with no tags reads the same
-  // `none` a Project with no tags reads.
+  // The by-project table keeps the tags column: the head class, the list helper,
+  // and the empty cell on the Total row.
+  assert.match(project, /\{ text: "Tags", cls: "report-table__tags" \}/);
+  assert.match(project, /cells\.push\(\{ node: reportTagList\(r\.tags\), cls: "report-table__tags" \}\);/);
+  assert.match(project, /totalCells\.push\(\{ text: "", cls: "report-table__tags" \}\);/);
+  // The by-person table ends at Of offer: the owner asked for the column back
+  // out (#166), so no head, no row cell and no Total-row placeholder remain.
+  assert.equal((person.match(/report-table__tags/g) || []).length, 0,
+    "the by-person table still carries the tags column");
+  assert.doesNotMatch(person, /reportTagList/);
+  assert.doesNotMatch(person, /"Tags"/);
+  // Both tables keep their tags list: the one helper still describes a Person's
+  // tags too, which the by-person table's colour mark reads.
   assert.match(functionSource(APP, "reportTagList"), /none/);
 });
 
@@ -444,7 +448,7 @@ test("all three tables order their columns the same way", () => {
   ];
   const EXTRAS = {
     reportProjectSection: ['{ text: "Tags", cls: "report-table__tags" }'],
-    reportPersonSection: ['{ text: "Of offer"', '{ text: "Tags", cls: "report-table__tags" }'],
+    reportPersonSection: ['{ text: "Of offer"'],
     reportTagSection: []
   };
   Object.keys(EXTRAS).forEach((name) => {
@@ -458,11 +462,16 @@ test("all three tables order their columns the same way", () => {
     assert.deepEqual(marks.slice().sort((a, b) => a - b), marks,
       name + " orders its columns against the rule");
   });
-  // Where a view carries both extras, the tags column is the last one, the same
-  // place it takes in the by-project table.
+  // The by-person table ends at Of offer: no column follows it there, while the
+  // by-project table's tags column remains its last one.
   const person = functionSource(APP, "reportPersonSection");
-  assert.ok(person.lastIndexOf('cls: "report-table__tags"') > person.indexOf('{ text: "Of offer"'),
-    "the tags column follows Of offer");
+  const personHeads = person.slice(person.indexOf("var headers"), person.indexOf("var rows"));
+  const named = (personHeads.match(/\{ text: "([^"]+)"/g) || []);
+  assert.equal(named.length, 4, "the by-person table heads a column the rule does not name");
+  assert.match(named[3], /Of offer/, "a column follows Of offer in the by-person table");
+  const project = functionSource(APP, "reportProjectSection");
+  assert.ok(project.lastIndexOf('cls: "report-table__tags"') > project.indexOf('{ text: "Of plan"'),
+    "the tags column follows Of plan in the by-project table");
 });
 
 test("the report's outline closes up: the rail's h1, then the view's h2", () => {
