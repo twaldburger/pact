@@ -1052,55 +1052,80 @@ h1, h2, h3, p { margin: 0; }
   flex: none;
 }
 
-/* The by-tag view's head: what its rows are split by. Two labelled controls on
-   one line, the error line wrapping under them when a save is refused. The tag
-   input takes the form's own box so the chip row reads as it does in a panel. */
-.report-split {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-3) var(--sp-4);
-}
-
-.report-split__field {
+/* The by-tag view's head: the tags its rows are, grouped by key. One bounded,
+   scrolling list over the table, so a plan carrying many tags cannot push the
+   table off screen. A key's row holds its tick and its count, and its tags sit
+   under it as the app's own chips, each holding a checkbox in the form's own
+   treatment. */
+.report-tags {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   min-width: 0;
 }
 
-.report-split__label {
+.report-tags__label {
   font-size: var(--fs-axis);
   color: var(--ink-soft);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
-.report-split__select {
-  padding: var(--sp-1) var(--sp-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--canvas);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--fs-data);
+.report-tags__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  /* Bounded against the window as well as in rem, so a short window keeps room
+     for the table under it rather than the list owning the whole view. */
+  max-height: min(14rem, 30vh);
+  overflow-y: auto;
+  padding-right: var(--sp-2);
 }
 
-.report-split .tags__input {
-  width: 7rem;
-  padding: var(--base) var(--sp-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--canvas);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--fs-data);
+.report-tags__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
 }
 
-.report-split .form__error {
-  order: 1;
-  flex-basis: 100%;
-  margin-top: 0;
+.report-tags__key {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.report-tags__keyname {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+
+.report-tags__count {
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-tags__tag {
+  cursor: pointer;
+}
+
+/* A tick in the head reads exactly as the Absence mark in a panel: the form's
+   own box, the accent in the bar's ink rather than the browser's blue. */
+.report-tags input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--ink);
+}
+.report-tags input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
 }
 
 /* The two charts: hand-drawn SVG in the app's own tokens, one chart to a view,

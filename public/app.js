@@ -32,7 +32,7 @@ import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
-import { reportContent, tagSplitKeys, tagSplitSuggestions } from "./lib/report-content.mjs";
+import { reportContent, tagGroups, tagGroupState, tagSelection, tagToggled } from "./lib/report-content.mjs";
 import { REPORT_VIEWS, REPORT_VIEW_DEFAULT, normalizeReportView, reportViewLabel } from "./lib/report-views.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
@@ -3943,80 +3943,99 @@ function reportAllocationPersonSection(model) {
   return section;
 }
 
-/* The by-tag view's head: what its rows are split by. A `Split by` chooser of
- * the tag keys the plan actually uses, and an `Also` chip row for tags added
- * beside that key. The choice is the plan's own, so it travels with the plan
- * and resumes after a reload - one write to /api/plan, one undo step, exactly
- * as the holidays and the tag colours are set. Nothing is chosen until the
- * owner picks a key: no stored split means no table, rather than a guess at a
- * taxonomy. */
-function reportTagSplit(model) {
-  var split = model.byTagSplit;
-  var head = el("div", "report-split");
-  // Created first so the save below can report into it; the stylesheet orders
-  // it after the controls, so a refusal reads under the row it belongs to.
+/* The by-tag view's head: which tags its rows are. One row per tag key - a
+ * count of how many of its tags are ticked, and a tick that selects or clears
+ * all of them - then that key's tags as tickable chips, then the tags belonging
+ * to no key. Every tick is the same write: the whole set of tags replaces the
+ * plan's, so the choice travels with the plan and resumes after a reload - one
+ * write to /api/plan, one undo step, exactly as the holidays and the tag
+ * colours are set. Nothing is ticked until the owner ticks it: no stored
+ * selection means no table, rather than a guess at a taxonomy. */
+function reportTagSplit() {
+  var selected = tagSelection(data);
+  var head = el("div", "report-tags");
+  var label = el("span", "report-tags__label");
+  label.textContent = "Split by";
+  head.appendChild(label);
+
+  // The list is bounded and scrolls: a plan with many tags makes it tall, and
+  // the table below has to stay on screen.
+  var list = el("div", "report-tags__list");
+  list.setAttribute("role", "group");
+  list.setAttribute("aria-label", "The tags the rows are");
+  head.appendChild(list);
+
+  // Created last so a refusal reads under the ticks it belongs to, the way a
+  // panel's refusal reads under its form.
   var error = errorLine(head);
 
   function save(next) {
+    // The next tick is read against what this one leaves, not against the plan
+    // the screen was drawn from, so two ticks landing inside one save cannot
+    // drop the first one's tag.
+    selected = next;
     error.clear();
-    api("PATCH", "/api/plan", { tagSplit: next })
+    api("PATCH", "/api/plan", { tagSplit: { tags: next } })
       .then(function () { return refresh({ keepPanel: true }); })
       .catch(function (err) {
-        error.set(err && err.message ? err.message : "Could not save the split.");
+        error.set(err && err.message ? err.message : "Could not save the tags.");
       });
   }
 
-  var keyField = el("label", "report-split__field");
-  var keyLabel = el("span", "report-split__label");
-  keyLabel.textContent = "Split by";
-  var select = el("select", "report-split__select");
-  select.setAttribute("aria-label", "Split the tags by key");
-  var none = document.createElement("option");
-  none.value = "";
-  none.textContent = "Choose a key";
-  select.appendChild(none);
-  var keys = tagSplitKeys(data);
-  // A stored key the plan no longer carries still lists, so the choice can be
-  // read back and changed rather than silently disappearing from the control.
-  if (split && keys.indexOf(split.key) === -1) keys = keys.concat([split.key]);
-  keys.forEach(function (kind) {
-    var option = document.createElement("option");
-    option.value = kind;
-    option.textContent = kind;
-    select.appendChild(option);
-  });
-  select.value = split ? split.key : "";
-  select.addEventListener("change", function () {
-    if (select.value === "") { save(null); return; }
-    var next = { key: select.value };
-    if (split && split.tags.length > 0) next.tags = split.tags;
-    save(next);
-  });
-  keyField.appendChild(keyLabel);
-  keyField.appendChild(select);
-  head.appendChild(keyField);
-
-  // Also: the tags added beside the key. It needs a key to sit outside of, so
-  // it appears once one is chosen.
-  if (split) {
-    var alsoField = el("div", "report-split__field");
-    var alsoLabel = el("span", "report-split__label");
-    alsoLabel.textContent = "Also";
-    var editor = tagEditor(split.tags, function () {
-      return tagSplitSuggestions(data, split);
-    }, function (tags) {
-      save({ key: split.key, tags: tags });
-    });
-    alsoField.appendChild(alsoLabel);
-    alsoField.appendChild(editor.node);
-    head.appendChild(alsoField);
+  // A tick wearing the form's own checkbox: one control treatment for the whole
+  // app, and part checked where a key holds some of its tags rather than all.
+  function tick(checked, indeterminate, name, onToggle) {
+    var box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = checked;
+    box.indeterminate = indeterminate;
+    box.setAttribute("aria-label", name);
+    box.addEventListener("change", onToggle);
+    return box;
   }
+
+  tagGroups(data).forEach(function (group) {
+    var state = tagGroupState(group, selected);
+    var row = el("div", "report-tags__group");
+
+    var keyRow = el("div", "report-tags__key");
+    var keyLabel = el("label", "report-tags__keyname");
+    keyLabel.appendChild(tick(state.all, state.count > 0 && !state.all,
+      "Select or clear all " + group.label + " tags", function () {
+        save(tagToggled(selected, group.tags));
+      }));
+    var keyName = el("span");
+    keyName.textContent = group.label;
+    keyLabel.appendChild(keyName);
+    keyRow.appendChild(keyLabel);
+    // The count sits outside the tick's label so the tick is still named by the
+    // key alone, and it states a partly selected key as plainly as a full one.
+    var count = el("span", "report-tags__count");
+    count.textContent = state.count + " of " + state.total;
+    keyRow.appendChild(count);
+    row.appendChild(keyRow);
+
+    var chips = el("div", "chips");
+    group.tags.forEach(function (tag) {
+      var chip = el("label", "chip report-tags__tag");
+      chip.appendChild(tick(selected.indexOf(tag) !== -1, false,
+        "Split the rows by " + tag, function () {
+          save(tagToggled(selected, [tag]));
+        }));
+      var text = el("span", "chip__text");
+      text.textContent = tag;
+      chip.appendChild(text);
+      chips.appendChild(chip);
+    });
+    row.appendChild(chips);
+    list.appendChild(row);
+  });
 
   return head;
 }
 
-// FTE-days by tag: the key's values, then the tags added beside it, then one
-// residual row for everything else, so the rows reconcile with the plan total.
+// FTE-days by tag: the tags the owner ticked in the head, then one residual row
+// for everything else, so the rows reconcile with the plan total.
 function reportTagSection(model) {
   var headers = [{ text: "Tag", cls: "report-table__name" }]
     .concat(reportBucketHeaders(model))
@@ -4027,12 +4046,12 @@ function reportTagSection(model) {
   var split = model.byTagSplit;
   var section = reportSection(reportViewLabel("by-tag"),
     "Each project's days are split between its tags, so the totals fit the plan.");
-  section.appendChild(reportTagSplit(model));
+  section.appendChild(reportTagSplit());
 
   if (!split) {
-    // Nothing is chosen: the view says so rather than guessing at a taxonomy.
+    // Nothing is ticked: the view says so rather than guessing at a taxonomy.
     var empty = el("p", "report__note");
-    empty.textContent = "Nothing is split by yet - choose the tag key the rows should split by.";
+    empty.textContent = "Nothing is selected yet - tick the tags the rows should split by.";
     section.appendChild(empty);
   } else {
     function cellsFor(r) {

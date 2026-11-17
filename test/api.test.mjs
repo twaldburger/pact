@@ -157,13 +157,13 @@ test("the tag colours can be set, read back and refused over the plan route", as
   assert.equal(store.get().tagColours, undefined);
 });
 
-test("the report's tag split can be set, read back and refused over the plan route", async () => {
+test("the report's tag selection can be set, read back and refused over the plan route", async () => {
   const { base, store } = await server();
-  // Absent until the owner chooses one: the report writes nothing before that.
+  // Absent until the owner ticks one: the report writes nothing before that.
   const fresh = await api(base, "GET", "/api/plan");
   assert.equal(fresh.body.tagSplit, undefined);
 
-  const tagSplit = { key: "api", tags: ["Testing"] };
+  const tagSplit = { tags: ["api:Solar", "Testing"] };
   const set = await api(base, "PATCH", "/api/plan", { tagSplit: tagSplit });
   assert.equal(set.status, 200);
   assert.deepEqual(set.body, { tagSplit: tagSplit });
@@ -172,10 +172,10 @@ test("the report's tag split can be set, read back and refused over the plan rou
   const read = await api(base, "GET", "/api/plan");
   assert.deepEqual(read.body.tagSplit, tagSplit);
 
-  const bad = await api(base, "PATCH", "/api/plan", { tagSplit: { key: "api:Solar" } });
+  const bad = await api(base, "PATCH", "/api/plan", { tagSplit: { tags: ["Testing", 3] } });
   assert.equal(bad.status, 400);
-  assert.match(bad.body.error, /tag kind, without a colon/);
-  // The refusal left the stored split alone.
+  assert.match(bad.body.error, /array of non-empty strings/);
+  // The refusal left the stored selection alone.
   assert.deepEqual(store.get().tagSplit, tagSplit);
 
   const cleared = await api(base, "PATCH", "/api/plan", { tagSplit: null });

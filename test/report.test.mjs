@@ -357,6 +357,50 @@ test("all four tables head their total column Total", () => {
   assert.equal((APP.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 4);
 });
 
+/* --- the by-tag head is rows of ticks (issue #173) ------------------------ */
+
+test("the by-tag head offers its tags as rows of ticks, not a chooser", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const head = functionSource(APP, "reportTagSplit");
+  assert.ok(head.length > 0, "reportTagSplit is missing");
+  // The rows come from the one function that says what is offered and how it
+  // groups, so a second tag source widens the list there alone.
+  assert.match(head, /tagGroups\(data\)\.forEach/);
+  assert.match(head, /box\.type = "checkbox";/);
+  // A key's row ticks or clears its whole group, a tag's own tick one tag, and
+  // either way the write replaces the plan's own set of tags.
+  assert.match(head, /save\(tagToggled\(selected, group\.tags\)\)/);
+  assert.match(head, /save\(tagToggled\(selected, \[tag\]\)\)/);
+  assert.match(head, /api\("PATCH", "\/api\/plan", \{ tagSplit: \{ tags: next \} \}\)/);
+  // A key's count is stated whether it is partly or wholly selected, so a
+  // partly selected key never reads as an empty one.
+  assert.match(head, /tagGroupState\(group, selected\)/);
+  assert.match(head, /count\.textContent = state\.count \+ " of " \+ state\.total;/);
+  // The dropdown and the second chip row it replaced are gone, from the script
+  // and from the stylesheet both.
+  ["report-split__select", "Choose a key", "tagSplitSuggestions", "report-split__field"].forEach((old) => {
+    assert.equal(APP.includes(old), false, "the old head is still there: " + old);
+  });
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  assert.equal(STYLE.includes(".report-split"), false, "the old head's rules are still there");
+});
+
+test("the tag list stays bounded, so a long one cannot push the table away", () => {
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const list = STYLE.match(/\.report-tags__list\s*\{([^}]*)\}/);
+  assert.ok(list, "the by-tag list has no rule of its own");
+  assert.match(list[1], /max-height:/);
+  assert.match(list[1], /overflow-y: auto;/);
+});
+
+test("an empty selection says so, in the view's own words", () => {
+  const APP = flatSource(fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8"));
+  assert.match(APP, /"Nothing is selected yet - tick the tags the rows should split by\."/);
+  const head = functionSource(fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8"), "reportTagSection");
+  assert.ok(head.length > 0, "reportTagSection is missing");
+  assert.match(head, /if \(!split\) \{/);
+});
+
 test("a share past the person's own offer reads as over-allocation", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const cell = functionSource(APP, "reportShareCell");

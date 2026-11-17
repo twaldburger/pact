@@ -2,7 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { seedPlan } from "../lib/plan.mjs";
 import { projectMeasures, sortProjects } from "../public/lib/sort.mjs";
-import { reportBuckets, reportContent, tagSplitKeys, tagSplitSuggestions } from "../public/lib/report-content.mjs";
+import {
+  reportBuckets,
+  reportContent,
+  tagGroups,
+  tagGroupState,
+  tagSelection,
+  tagSplitRows,
+  tagToggled
+} from "../public/lib/report-content.mjs";
 
 /*
  * A plan whose arithmetic is easy to check by hand. January 2026 has 22
@@ -428,14 +436,16 @@ test("the view keeps the rail's order and the Filter's narrowing", () => {
   near(narrowed.allocationByPerson.rows[1].cells[0], 0.5);
 });
 
-/* --- what the by-tag view splits by (issue #168) -------------------------- */
+/* --- the tags the by-tag view splits by (issues #168 and #173) ------------ */
 
 /*
- * A plan carrying a taxonomy beside incidental labels, the shape the issue
- * complains about: two `api:` values, two untyped tags and one untagged project.
- * January 2026 has 22 weekdays, so Solar's full-time month is 22 FTE-days over
- * its two tags, Terra is Ben's half over five weekdays (2.5 over two tags), and
- * Ops is an untagged full week (5).
+ * A plan carrying a taxonomy beside incidental labels: two `api:` values, two
+ * untyped tags and one untagged project. The absence Project's own tag sits
+ * outside every figure, so it is no row and is not offered either. January 2026
+ * has 22 weekdays and Anna's five days off are not working days, so Solar's
+ * full-time month is 17 FTE-days over its two tags (8.5 each), Terra is Ben's
+ * half over five weekdays (2.5 over its two tags, 1.25 each), and Ops is an
+ * untagged full week (5). The plan's total is 24.5.
  */
 function splitFixture() {
   const plan = fixture();
@@ -450,47 +460,96 @@ function splitFixture() {
   return plan;
 }
 
-test("nothing is chosen until the owner picks a key", () => {
+test("nothing is selected until the owner ticks a tag", () => {
   const plan = splitFixture();
-  // No stored split, no rows: the view says so rather than guessing at a
+  // No stored selection, no rows: the view says so rather than guessing at a
   // taxonomy - a most-used tag or the colour setting included.
   const f = report(plan);
   assert.equal(f.byTagSplit, null);
+  assert.deepEqual(tagSelection(plan), []);
   plan.tagColours = { keys: { projects: "api" }, colours: { "api:Solar": 2 } };
+  assert.equal(report(plan).byTagSplit, null);
+  // An empty selection is no selection either, not a plan that will not open.
+  plan.tagSplit = {};
+  assert.deepEqual(tagSelection(plan), []);
+  assert.equal(report(plan).byTagSplit, null);
+  plan.tagSplit = { tags: [] };
   assert.equal(report(plan).byTagSplit, null);
 });
 
-test("choosing a key lists exactly its values", () => {
+test("the tags offered group by key, the tags without one last", () => {
   const plan = splitFixture();
-  plan.tagSplit = { key: "api" };
-  const split = report(plan).byTagSplit;
-  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "api:Terra"]);
-  assert.deepEqual(split.other.tag, "");
-  assert.equal(split.other.label, "Other tags");
-  // The label each row wears is the tag it is, so a value under a chosen key is
-  // still readable as the tag the projects carry.
-  assert.deepEqual(split.rows.map((r) => r.label), ["api:Solar", "api:Terra"]);
+  const groups = tagGroups(plan);
+  assert.deepEqual(groups.map((g) => g.label), ["api", "No key"]);
+  assert.deepEqual(groups[0].tags, ["api:Solar", "api:Terra"]);
+  // Testing and QA belong to no key, and the absence Project's own tag is not
+  // offered: no absence contributes a day, so its tags are never rows.
+  assert.deepEqual(groups[1].tags, ["QA", "Testing"]);
+  assert.equal(groups[1].key, "");
+  // A plan whose tags all carry a key draws no untyped group at all.
+  const typed = fixture();
+  typed.projects = typed.projects.filter((p) => !p.absence);
+  typed.projects[0].tags = ["api:Solar"];
+  assert.deepEqual(tagGroups(typed).map((g) => g.label), ["api"]);
+  // Two keys list alphabetically, case insensitively, each tag alphabetical.
+  const both = typed;
+  both.projects[0].tags = ["Web:Site", "api:Terra", "api:Solar"];
+  assert.deepEqual(tagGroups(both).map((g) => g.label), ["api", "Web"]);
+  assert.deepEqual(tagGroups(both)[1].tags, ["Web:Site"]);
 });
 
-test("adding a tag adds its row after the key's values", () => {
+test("a key's tick selects every tag under it, and clears them again", () => {
   const plan = splitFixture();
-  plan.tagSplit = { key: "api", tags: ["QA", "Testing"] };
-  const split = report(plan).byTagSplit;
-  // The key's values first, then the added tags, each group in size order.
-  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "api:Terra", "Testing", "QA"]);
-  near(split.rows.find((r) => r.tag === "Testing").total, 8.5);
-  near(split.rows.find((r) => r.tag === "QA").total, 1.25);
-  // A tag already shown under the key is not drawn twice.
-  plan.tagSplit = { key: "api", tags: ["api:Solar", "QA"] };
-  assert.deepEqual(report(plan).byTagSplit.rows.map((r) => r.tag), ["api:Solar", "api:Terra", "QA"]);
-  // A tag no project under this view carries adds no row.
-  plan.tagSplit = { key: "api", tags: ["Nowhere"] };
-  assert.deepEqual(report(plan).byTagSplit.rows.map((r) => r.tag), ["api:Solar", "api:Terra"]);
+  const api = tagGroups(plan)[0];
+  const untyped = tagGroups(plan)[1];
+  // From nothing: the key's row ticks its whole set in one step and leaves
+  // every other group untouched.
+  assert.deepEqual(tagToggled([], api.tags), ["api:Solar", "api:Terra"]);
+  // From a partly selected key: the tick completes it.
+  assert.deepEqual(tagToggled(["api:Solar"], api.tags), ["api:Solar", "api:Terra"]);
+  // From a fully selected key: the tick clears every one of its tags and keeps
+  // a tag ticked under another group.
+  assert.deepEqual(tagToggled(["api:Solar", "api:Terra", "QA"], api.tags), ["QA"]);
+  // A single tag's own tick is the same rule over a list of one, so ticking a
+  // tag never disturbs the rest of the selection.
+  assert.deepEqual(tagToggled([], ["QA"]), ["QA"]);
+  assert.deepEqual(tagToggled(["api:Solar", "QA"], ["QA"]), ["api:Solar"]);
+  assert.deepEqual(tagToggled(["QA"], untyped.tags), ["QA", "Testing"]);
+});
+
+test("a partly selected key states its count, and a full one says all of them", () => {
+  const plan = splitFixture();
+  const api = tagGroups(plan)[0];
+  assert.deepEqual(tagGroupState(api, []), { count: 0, total: 2, all: false });
+  // The count is the row's own statement: a partly selected key says two of
+  // three without being ticked, and the tick itself stays off rather than
+  // claiming the whole set.
+  assert.deepEqual(tagGroupState(api, ["api:Solar"]), { count: 1, total: 2, all: false });
+  assert.deepEqual(tagGroupState(api, ["api:Solar", "api:Terra"]), { count: 2, total: 2, all: true });
+  // A tag ticked from another group is not counted against this one.
+  assert.deepEqual(tagGroupState(api, ["api:Solar", "QA"]), { count: 1, total: 2, all: false });
+});
+
+test("the selected tags are the rows, and every other tag is Other tags", () => {
+  const plan = splitFixture();
+  plan.tagSplit = { tags: ["api:Solar", "QA"] };
+  const f = report(plan);
+  const split = f.byTagSplit;
+  // Exactly the two ticked tags, in the view's own size order; the tags nobody
+  // ticked (Testing, api:Terra) and the untagged Project are one residual.
+  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "QA"]);
+  near(split.rows[0].total, 8.5);
+  near(split.rows[1].total, 1.25);
+  assert.equal(split.other.label, "Other tags");
+  near(split.other.total, 14.75);
+  // The label each row wears is the tag it is, so a row is readable as the tag
+  // the projects carry.
+  assert.deepEqual(split.rows.map((r) => r.label), ["api:Solar", "QA"]);
 });
 
 test("the residual row is the plan total minus the rows shown", () => {
   const plan = splitFixture();
-  plan.tagSplit = { key: "api", tags: ["QA"] };
+  plan.tagSplit = { tags: ["api:Solar", "api:Terra", "QA"] };
   const f = report(plan);
   const split = f.byTagSplit;
   near(f.planTotal, 24.5);
@@ -501,25 +560,20 @@ test("the residual row is the plan total minus the rows shown", () => {
   // And the row it sits under says the same.
   near(shown, f.byTag.total.total);
   near(split.rows.reduce((s, r) => s + r.share, 0) + split.other.share, 1);
-});
-
-test("a project carrying no tag under the key lands in the same residual", () => {
-  const plan = splitFixture();
-  // Every tag except the untagged project is shown: the residual is that project
-  // alone, so the one row covers both cases rather than two.
-  plan.tagSplit = { key: "api", tags: ["QA", "Testing", "Absence"] };
-  const split = report(plan).byTagSplit;
-  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar", "api:Terra", "Testing", "QA"]);
-  near(split.other.total, 5);
-  // Nothing left over means no residual row at all.
+  // Everything the report carries is ticked, so the residual is the untagged
+  // Project alone; take that away and there is no residual row at all.
+  plan.tagSplit = { tags: ["api:Solar", "api:Terra", "QA", "Testing"] };
+  assert.deepEqual(report(plan).byTagSplit.rows.map((r) => r.tag),
+    ["Testing", "api:Solar", "QA", "api:Terra"]);
+  near(report(plan).byTagSplit.other.total, 5);
   plan.projects = plan.projects.filter((p) => p.id !== "ops");
   plan.assignments = plan.assignments.filter((a) => a.projectId !== "ops");
   assert.equal(report(plan).byTagSplit.other, null);
 });
 
-test("the split's rows and residual reconcile bucket by bucket", () => {
+test("the selection's rows and residual reconcile bucket by bucket", () => {
   const plan = splitFixture();
-  plan.tagSplit = { key: "api", tags: ["QA"] };
+  plan.tagSplit = { tags: ["api:Solar", "QA"] };
   const f = reportContent(wholeView(plan), plan, { zoom: "week" });
   const drawn = f.byTagSplit.rows.concat(f.byTagSplit.other ? [f.byTagSplit.other] : []);
   assert.ok(f.buckets.length > 4);
@@ -528,20 +582,46 @@ test("the split's rows and residual reconcile bucket by bucket", () => {
     near(sum, f.byTag.total.cells[i]);
   });
   near(drawn.reduce((s, r) => s + r.total, 0), f.planTotal);
+  // Row for row, the same tags and the same figures the complete pivot carries.
+  f.byTagSplit.rows.forEach((row) => {
+    const whole = f.byTag.rows.find((r) => r.tag === row.tag);
+    near(row.total, whole.total);
+  });
 });
 
-test("the keys offered are the kinds the plan's project tags carry", () => {
-  assert.deepEqual(tagSplitKeys(splitFixture()), ["api"]);
-  // Nothing typed is nothing to offer, rather than every tag the plan carries.
-  const plan = fixture();
-  plan.projects[0].tags = ["Testing", "QA"];
-  assert.deepEqual(tagSplitKeys(plan), []);
-});
-
-test("the tags offered are the project tags outside the chosen key", () => {
+test("a plan carrying the shape this replaced opens with the same tags selected", () => {
   const plan = splitFixture();
-  assert.deepEqual(tagSplitSuggestions(plan, { key: "api" }), ["Absence", "QA", "Testing"]);
-  // A tag already added beside the key is not offered again, and the key's own
-  // values never are.
-  assert.deepEqual(tagSplitSuggestions(plan, { key: "api", tags: ["QA"] }), ["Absence", "Testing"]);
+  const now = splitFixture();
+  now.tagSplit = { tags: ["api:Solar", "api:Terra", "QA"] };
+  // The obsolete shape: a key plus the tags added beside it. Read as the tags
+  // it stood for - every api tag, plus QA - so an old plan opens with its
+  // selection intact rather than losing it or failing to load.
+  plan.tagSplit = { key: "api", tags: ["QA"] };
+  assert.deepEqual(tagSelection(plan), ["api:Solar", "api:Terra", "QA"]);
+  const f = report(plan);
+  const migrated = report(now);
+  assert.deepEqual(f.byTagSplit.rows.map((r) => r.tag), migrated.byTagSplit.rows.map((r) => r.tag));
+  near(f.byTagSplit.other.total, migrated.byTagSplit.other.total);
+  // A key alone stands for its whole set.
+  plan.tagSplit = { key: "api" };
+  assert.deepEqual(tagSelection(plan), ["api:Solar", "api:Terra"]);
+  // A key no project carries stands for the tags added beside it alone, so an
+  // old selection never draws a row the plan cannot feed.
+  plan.tagSplit = { key: "gone" };
+  assert.deepEqual(tagSelection(plan), []);
+  assert.equal(report(plan).byTagSplit, null);
+  // A malformed one is no selection, not a plan that will not draw.
+  plan.tagSplit = "api";
+  assert.deepEqual(tagSelection(plan), []);
+});
+
+test("a tag the view carries no row for adds nothing to draw", () => {
+  const plan = splitFixture();
+  // The report's own complete tag list is the one thing a row can come from, so
+  // a selection naming a tag no Project under this view carries draws no row
+  // and still reconciles: the residual covers it with the rest.
+  const rows = report(plan).byTag.rows;
+  const split = tagSplitRows(rows, ["api:Solar", "Nowhere"]);
+  assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar"]);
+  assert.equal(tagSplitRows(rows, []), null);
 });
