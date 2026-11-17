@@ -151,7 +151,7 @@ function reportRenderSource() {
 test("the panel lists the seven views and marks the one showing", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const nav = APP.slice(APP.indexOf("function drawReportNav() {"),
-    APP.indexOf("function selectReportView(key) {"));
+    APP.indexOf("function selectReportView("));
   assert.ok(nav.length > 0, "drawReportNav is missing");
   // One row per view from the report's own list, so the panel and the content
   // cannot drift, and the selected row marked the way the view switch marks the
@@ -165,6 +165,45 @@ test("the panel lists the seven views and marks the one showing", () => {
   assert.ok(current, "the selected row's rule is missing");
   assert.match(current[1], /background:\s*var\(--ink\);/);
   assert.match(current[1], /color:\s*var\(--canvas\);/);
+});
+
+/* --- the rail's focus, and the two other reads of it --------------------- */
+
+// The keyboard ring is the keyboard's, and only the keyboard's press needs the
+// focus put back on the redrawn row. "Focused" is not "keyboard": a mouse press
+// focuses the button it lands on, so the rail's press has to say which it was -
+// the click's own detail, 0 for the keyboard and non-zero for a pointer.
+test("a pointer press on a view leaves focus where it is, and the keyboard's does not", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const nav = APP.slice(APP.indexOf("function drawReportNav() {"),
+    APP.indexOf("function selectReportView("));
+  assert.ok(nav.length > 0, "drawReportNav is missing");
+  assert.match(flatSource(nav),
+    /item\.addEventListener\("click", function \(e\) \{ selectReportView\(entry\.key, e\.detail === 0\); \}\)/);
+  const select = functionSource(APP, "selectReportView");
+  assert.ok(select.length > 0, "selectReportView is missing");
+  // The decision is the press's own kind, never "something in the list has
+  // focus"; the refocus then happens for the keyboard alone, and the ring it
+  // draws stays the ring the keyboard needs.
+  assert.doesNotMatch(select, /document\.activeElement/);
+  assert.match(select, /if \(pressedWithKeyboard\) \{/);
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const ring = STYLE.match(/(^|\n):focus-visible\s*\{([^}]*)\}/);
+  assert.ok(ring, "the global focus ring rule is missing");
+  assert.match(ring[2], /outline:\s*2px solid var\(--ink\);/);
+  assert.match(ring[2], /outline-offset:\s*2px;/);
+});
+
+// The app's two other reads of document.activeElement were checked for the same
+// conflation and are right as they are: the filter's blur guard asks whether
+// focus left the filter (an outside pointer is handled by its own pointerdown,
+// and a suggestion's own mousedown keeps the input focused), and the sort
+// menu's arrow keys start from the focused item in a keydown handler, which no
+// pointer can reach.
+test("the filter's guard and the menu's arrow keys ask about focus, and mean it", () => {
+  const APP = flatSource(fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8"));
+  assert.match(APP, /if \(!filterEl\.contains\(document\.activeElement\)\) hideSuggestions\(\);/);
+  assert.match(APP, /var i = items\.indexOf\(document\.activeElement\);/);
 });
 
 test("one view is drawn at a time, and the selection decides which", () => {
