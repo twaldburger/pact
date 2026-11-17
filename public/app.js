@@ -3482,27 +3482,21 @@ function reportNameCell(name, slot) {
 }
 
 // One tag, drawn as a chip in the project's tag list. Its own colour slot is
-// the colour-by-key feature's, and a tag without one is left plain. The TAGS
-// column and the by-tag view's two rows draw this one chip: given a choice it
-// is a toggle instead of a plain mark, and its state rides on the element as a
-// whole - `data-state` for the drawing, `aria-pressed` for everything else - so
-// full, half and empty are read off the chip rather than off its colour. A
-// selected chip fills with the tag's own colour and takes its label ink from
-// that fill the way a block does; a tag with no colour sets no fill, and the
-// stylesheet's own ink stands in, so a selection never depends on a colour
-// having been set.
+// the colour-by-key feature's, and a tag without one is left plain - the swatch
+// is what names a tag's colour. The TAGS column and the by-tag view's two rows
+// draw this one chip: given a choice it is a toggle instead of a plain mark, and
+// its state rides on the element as a whole - `data-state` for the drawing,
+// `aria-pressed` for everything else - so selected and not selected are read
+// off the chip rather than off its colour. A selected chip's fill is the same
+// ink whatever colour the tag has; the swatch keeps carrying the colour.
 function reportTagChip(tag, slot, choice) {
   var coloured = Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT;
   var chip = choice ? el("button", "report-tag report-tag--choice") : el("span", "report-tag");
   if (choice) {
     chip.type = "button";
     chip.setAttribute("data-state", choice.state);
-    chip.setAttribute("aria-pressed", choice.state === "on" ? "true" : choice.state === "some" ? "mixed" : "false");
+    chip.setAttribute("aria-pressed", choice.state === "on" ? "true" : "false");
     if (choice.name) chip.setAttribute("aria-label", choice.name);
-    if (coloured) {
-      chip.style.setProperty("--tag-fill", activeColour(slot));
-      chip.style.setProperty("--tag-ink", labelInkFor(activeColour(slot)));
-    }
     chip.addEventListener("click", choice.onClick);
   }
   if (coloured) {
@@ -3963,19 +3957,18 @@ function reportAllocationPersonSection(model) {
   return section;
 }
 
-/* The by-tag view's head: which tags its rows are, as two flat rows of chips.
+/* The by-tag view's head: which tags its rows are, as two named rows of chips.
  * The first row is every key the plan's tags carry, the second every tag the
  * view can draw a row for, keyless ones included. Both are multi-select and
  * both start empty. A tag's own chip is the truth; a key's chip is derived from
- * its tags - on when all of them are on, half-filled when only some are - so
- * the two rows cannot disagree. A press on a partly selected key completes its
- * set and a press on a full one clears it, which is the one rule the tag chips
- * already follow over a list of one. Every press is the same write: the whole
- * set of tags replaces the plan's, so the choice travels with the plan and
- * resumes after a reload - one write to /api/plan, one undo step, exactly as
- * the holidays and the tag colours are set. Nothing is ticked until the owner
- * ticks it: no stored selection means no table, rather than a guess at a
- * taxonomy. */
+ * its tags - selected when all of them are, not selected otherwise - so the two
+ * rows cannot disagree. A press on a key selects its whole set and a press on a
+ * selected one clears it, which is the one rule the tag chips already follow
+ * over a list of one. Every press is the same write: the whole set of tags
+ * replaces the plan's, so the choice travels with the plan and resumes after a
+ * reload - one write to /api/plan, one undo step, exactly as the holidays and
+ * the tag colours are set. Nothing is ticked until the owner ticks it: no
+ * stored selection means no table, rather than a guess at a taxonomy. */
 function reportTagSplit() {
   var selected = tagSelection(data);
   var head = el("div", "report-taghead");
@@ -4005,8 +3998,8 @@ function reportTagSplit() {
   }
 
   // Both rows are the TAGS column's chip, given a state and a press. A key
-  // carries no colour of its own - the colours belong to its tags - so its fill
-  // is the app's own ink.
+  // carries no colour of its own - the colours belong to its tags - so it shows
+  // no swatch at all.
   function choice(tag, slot, on, name, onPress) {
     return reportTagChip(tag, slot, {
       state: on,
@@ -4015,28 +4008,39 @@ function reportTagSplit() {
     });
   }
 
+  // A row is its name and its chips on one line, so naming the rows costs the
+  // chooser no height: the name cannot wrap onto a line of its own, and the
+  // chips wrap inside the box it leaves.
+  function row(name, cls) {
+    var line = el("div", "report-taghead__row");
+    var label = el("span", "report-taghead__label");
+    label.textContent = name;
+    line.appendChild(label);
+    var chips = el("div", "report-tags " + cls);
+    line.appendChild(chips);
+    list.appendChild(line);
+    return chips;
+  }
+
   var keys = tagKeyGroups(data);
   if (keys.length > 0) {
-    var keysRow = el("div", "report-tags report-tags--keys");
+    var keysRow = row("Keys", "report-tags--keys");
     keys.forEach(function (group) {
       var state = tagKeyState(group.tags, selected);
-      keysRow.appendChild(choice(group.key, null,
-        state.all ? "on" : state.some ? "some" : "off",
+      keysRow.appendChild(choice(group.key, null, state.all ? "on" : "off",
         "Select or clear all " + group.key + " tags",
         function () { return tagToggled(selected, group.tags); }));
     });
-    list.appendChild(keysRow);
   }
 
   var tags = tagChoices(data);
   if (tags.length > 0) {
-    var tagsRow = el("div", "report-tags report-tags--tags");
+    var tagsRow = row("Tags", "report-tags--tags");
     tags.forEach(function (tag) {
       var slot = Object.prototype.hasOwnProperty.call(tagSlotMap, tag) ? tagSlotMap[tag] : null;
       tagsRow.appendChild(choice(tag, slot, selected.indexOf(tag) !== -1 ? "on" : "off",
         null, function () { return tagToggled(selected, [tag]); }));
     });
-    list.appendChild(tagsRow);
   }
 
   return head;

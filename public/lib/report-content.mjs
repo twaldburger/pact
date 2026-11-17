@@ -295,8 +295,9 @@ export function tagChoices(plan) {
 
 /*
  * A key's tags read against the selection: how many of them are ticked, and
- * whether that is all, some or none of them. A key's chip has no state of its
- * own, so its three states are these three readings and nothing else.
+ * whether that is all of them. A key's chip has no state of its own, so these
+ * two readings are its two states and nothing else: it is selected exactly when
+ * all of its tags are, and a key holding some of them reads as not selected.
  */
 export function tagKeyState(tags, selected) {
   const ticks = new Set(Array.isArray(selected) ? selected : []);
@@ -305,8 +306,7 @@ export function tagKeyState(tags, selected) {
   return {
     count: count,
     total: list.length,
-    all: count > 0 && count === list.length,
-    some: count > 0 && count < list.length
+    all: list.length > 0 && count === list.length
   };
 }
 

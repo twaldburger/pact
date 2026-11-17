@@ -434,16 +434,16 @@ test("the figures hold their right edge against the table's left alignment", () 
   assert.equal(declaration(CELLS[1], "text-align"), "left");
 });
 
-/* --- the by-tag chips' contrast, in both palette schemes ----------------- */
+/* --- the by-tag chips' one fill, in both palette schemes ------------------ */
 
-// A chip's three states are told apart by more than their colour, but its
-// label still has to read on whichever fill it carries. The two fills are the
-// tag's own palette colour (a selected tag or key) and the app's ink (a tag
-// with no colour set), and the half state mixes the fill into the paper. The
-// values are lifted from the stylesheet so the test tracks the rules.
+// Every selected chip fills with the app's ink, so the label has one fill to
+// read against and the swatch is the only thing carrying a tag's colour. Three
+// of the paired colours sit under 3:1 against that ink, the darkest barely off
+// it, so the dot wears a hairline of the paper instead of losing its colour.
+// The values are lifted from the stylesheet so the test tracks the rules.
 const CHIP_ON = STYLE.match(/\.report-tag--choice\[data-state="on"\]\s*\{([^}]*)\}/);
-const CHIP_SOME = STYLE.match(/\.report-tag--choice\[data-state="some"\]\s*\{([^}]*)\}/);
 const CHIP_OFF = STYLE.match(/\.report-tag--choice\s*\{([^}]*)\}/);
+const CHIP_SWATCH = STYLE.match(/\.report-tag--choice\[data-state="on"\] \.report-tag__swatch\s*\{([^}]*)\}/);
 
 function tokenHex(name) {
   const value = STYLE.match(new RegExp(name + ":\\s*(#[0-9A-Fa-f]{6});"));
@@ -451,39 +451,41 @@ function tokenHex(name) {
   return value[1];
 }
 
-test("a chip's label reads on its fill, in either palette and in its half state", () => {
+test("a selected chip's label reads on the one fill, in both palette schemes", () => {
   assert.ok(CHIP_ON, "the selected chip has no rule");
-  assert.ok(CHIP_SOME, "the half chip has no rule");
   assert.ok(CHIP_OFF, "the resting chip has no rule");
-  // A selected chip's label ink is the fill's own, exactly as a block's is, so
-  // it holds the floor the blocks hold: the two mid-tone fills that no ink the
-  // app owns can lift past 4.5:1 are the same two short here, and no others.
-  assert.match(CHIP_ON[1], /color: var\(--tag-ink\);/);
-  const fills = PALETTES.paired.concat(PALETTES.set3);
-  const short = fills.filter((hex) => contrast(hex, labelInkFor(hex)) < 4.5);
-  assert.deepEqual(short, ["#33a02c", "#bc80bd"]);
-  fills.forEach((hex) => {
-    assert.ok(contrast(hex, labelInkFor(hex)) >= 3,
-      "a label on " + hex + " reads at " + contrast(hex, labelInkFor(hex)).toFixed(2));
-  });
-  // A tag with no colour fills with the app's ink and takes the paper as its
-  // label: a selection never depends on a colour having been set.
   const ink = tokenHex("--ink");
-  assert.match(CHIP_OFF[1], /--tag-fill: var\(--ink\);/);
-  assert.match(CHIP_OFF[1], /--tag-ink: var\(--canvas\);/);
-  assert.ok(contrast(ink, tokenHex("--canvas")) >= 4.5,
-    "the label on a colourless chip reads at " + contrast(ink, tokenHex("--canvas")).toFixed(2));
-  // A half-filled key keeps the app's ink as its label, so the mixed fill has
-  // to hold that ink for every tag colour there is.
-  const half = STYLE.match(/--mix-half:\s*([0-9.]+)%;/);
-  assert.ok(half, "the half fill's mix is not a percentage token");
-  const percent = Number(half[1]);
-  assert.match(CHIP_SOME[1], /color: var\(--ink\);/);
-  assert.match(CHIP_SOME[1], /color-mix\(in srgb, var\(--tag-fill\) var\(--mix-half\), var\(--panel\)\)/);
-  const panel = tokenHex("--panel");
-  for (const fill of fills.concat([ink])) {
-    const mixed = mix(panel, fill, percent);
-    assert.ok(contrast(mixed, tokenHex("--ink")) >= 4.5,
-      "a half chip on " + fill + " reads at " + contrast(mixed, ink).toFixed(2));
-  }
+  const paper = tokenHex("--canvas");
+  // One fill for every chip, so the label reads at the same ratio whatever
+  // colour the tag has, and holds well past the floor the blocks hold.
+  const paints = CHIP_ON[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(paints, /background: var\(--ink\);/);
+  assert.match(paints, /border-color: var\(--ink\);/);
+  assert.match(paints, /(?:^|[;\s])color: var\(--canvas\);/);
+  assert.ok(contrast(ink, paper) >= 4.5,
+    "a label on the chip's fill reads at " + contrast(ink, paper).toFixed(2));
+  // Nothing sets a fill per tag any more, and no third state is styled: the
+  // selection is the same mark on every chip.
+  assert.equal(/--tag-fill|--tag-ink|--mix-half/.test(STYLE), false,
+    "a per-tag fill or its half mix is still styled");
+});
+
+test("a selected chip's swatch keeps its colour, ringed where it would vanish", () => {
+  assert.ok(CHIP_SWATCH, "the selected chip's swatch has no rule");
+  const ink = tokenHex("--ink");
+  const paints = CHIP_SWATCH[1].replace(/\/\*[\s\S]*?\*\//g, "");
+  // The dot keeps naming the tag's colour: the rule neither repaints it nor
+  // tints it, and only adds the hairline that separates it from the fill.
+  assert.equal(/background|opacity|filter/.test(paints), false,
+    "a selected chip still repaints or dims its swatch");
+  assert.equal(declaration(paints, "box-shadow"), "0 0 0 var(--base) var(--canvas)");
+  // Why it is there, measured: the paired scheme carries colours that no longer
+  // separate from the ink, the Set3 scheme carries none.
+  const vanishing = (hexes) => hexes.filter((hex) => contrast(hex, ink) < 3);
+  assert.deepEqual(vanishing(PALETTES.paired), ["#1f78b4", "#e31a1c", "#6a3d9a"]);
+  assert.deepEqual(vanishing(PALETTES.set3), []);
+  // Every dot is ringed in the paper, so every one of them reads by shape even
+  // where its colour is the fill's own darkness.
+  assert.ok(contrast(tokenHex("--canvas"), ink) >= 4.5,
+    "the ring reads at " + contrast(tokenHex("--canvas"), ink).toFixed(2));
 });
