@@ -1052,6 +1052,57 @@ h1, h2, h3, p { margin: 0; }
   flex: none;
 }
 
+/* The by-tag view's head: what its rows are split by. Two labelled controls on
+   one line, the error line wrapping under them when a save is refused. The tag
+   input takes the form's own box so the chip row reads as it does in a panel. */
+.report-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3) var(--sp-4);
+}
+
+.report-split__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.report-split__label {
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.report-split__select {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.report-split .tags__input {
+  width: 7rem;
+  padding: var(--base) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.report-split .form__error {
+  order: 1;
+  flex-basis: 100%;
+  margin-top: 0;
+}
+
 /* The two charts: hand-drawn SVG in the app's own tokens, one chart to a view,
    each in its own card under the section the panel names. */
 .report-chartcard {

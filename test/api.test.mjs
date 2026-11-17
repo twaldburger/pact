@@ -157,6 +157,32 @@ test("the tag colours can be set, read back and refused over the plan route", as
   assert.equal(store.get().tagColours, undefined);
 });
 
+test("the report's tag split can be set, read back and refused over the plan route", async () => {
+  const { base, store } = await server();
+  // Absent until the owner chooses one: the report writes nothing before that.
+  const fresh = await api(base, "GET", "/api/plan");
+  assert.equal(fresh.body.tagSplit, undefined);
+
+  const tagSplit = { key: "api", tags: ["Testing"] };
+  const set = await api(base, "PATCH", "/api/plan", { tagSplit: tagSplit });
+  assert.equal(set.status, 200);
+  assert.deepEqual(set.body, { tagSplit: tagSplit });
+  assert.deepEqual(store.get().tagSplit, tagSplit);
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.deepEqual(read.body.tagSplit, tagSplit);
+
+  const bad = await api(base, "PATCH", "/api/plan", { tagSplit: { key: "api:Solar" } });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /tag kind, without a colon/);
+  // The refusal left the stored split alone.
+  assert.deepEqual(store.get().tagSplit, tagSplit);
+
+  const cleared = await api(base, "PATCH", "/api/plan", { tagSplit: null });
+  assert.equal(cleared.status, 200);
+  assert.equal(store.get().tagSplit, undefined);
+});
+
 test("the server accepts an off-step whole value over the API", async () => {
   const { base } = await server();
   const created = await api(base, "POST", "/api/assignments", {

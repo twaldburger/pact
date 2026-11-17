@@ -82,6 +82,10 @@ function planForClient(store, includeArchived) {
     // as stored. Absent until configured, so a plan without them reaches the
     // client exactly as it always has.
     tagColours: plan.tagColours,
+    // The report's by-tag split, passed through as stored. Absent until the
+    // owner chooses one, so a plan without it reaches the client exactly as it
+    // always has.
+    tagSplit: plan.tagSplit,
     people: visible.people,
     projects: visible.projects,
     assignments: visible.assignments,
@@ -257,6 +261,9 @@ export function createServer(store, options) {
               }
               if (body && Object.prototype.hasOwnProperty.call(body, "tagColours")) {
                 return sendJSON(res, 200, store.setTagColours(body));
+              }
+              if (body && Object.prototype.hasOwnProperty.call(body, "tagSplit")) {
+                return sendJSON(res, 200, store.setTagSplit(body));
               }
               return sendJSON(res, 200, store.setRange(body));
             });
