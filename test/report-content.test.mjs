@@ -633,3 +633,169 @@ test("a tag the view carries no row for adds nothing to draw", () => {
   assert.deepEqual(split.rows.map((r) => r.tag), ["api:Solar"]);
   assert.equal(tagSplitRows(rows, []), null);
 });
+
+/* --- allocation by tag: the same rows over the plan's whole capacity ------ */
+
+/*
+ * Two months, so a bucket's share and the period's share can differ. January
+ * 2026 has 22 working days and February 20, and Anna offers a full week while
+ * Ben offers half of one: the plan offers 33 FTE-days in January and 30 in
+ * February, 63 over the period - the denominator every tag row divides by.
+ *   - Atlas carries api:Atlas and QA, and Anna is on it at a full Allocation for
+ *     January: 22 FTE-days, 11 to each tag.
+ *   - Borealis carries QA alone, and Ben is on it at a full Allocation for
+ *     February's 20 working days: 20 FTE-days, all of them to QA.
+ * The plan's total is 42, and api:Atlas is the one ticked tag.
+ */
+function tagCapacityFixture() {
+  return {
+    range: { start: "2026-01-01", end: "2026-02-28" },
+    people: [
+      { id: "anna", name: "Anna", availability: 100, tags: [] },
+      { id: "ben", name: "Ben", availability: 50, tags: [] }
+    ],
+    projects: [
+      { id: "atlas", name: "Atlas", colour: 0, tags: ["api:Atlas", "QA"] },
+      { id: "borealis", name: "Borealis", colour: 1, tags: ["QA"] }
+    ],
+    assignments: [
+      { id: "a1", projectId: "atlas", personId: "anna", start: "2026-01-01", end: "2026-01-31", share: 100, tags: [] },
+      { id: "a2", projectId: "borealis", personId: "ben", start: "2026-02-02", end: "2026-02-27", share: 100, tags: [] }
+    ],
+    tagSplit: { tags: ["api:Atlas"] }
+  };
+}
+
+// The capacity the plan offers in one bucket, read from the people's own offers
+// rather than from the view being tested.
+function offeredIn(f, i) {
+  return f.byPerson.rows.reduce((s, r) => s + r.offeredCells[i], 0);
+}
+
+test("a tag's cell is its FTE-days over the capacity the plan offers in that bucket", () => {
+  const plan = tagCapacityFixture();
+  const f = report(plan);
+  assert.equal(f.buckets.map((b) => b.key).join(","), "2026-01,2026-02");
+  near(f.offeredTotal, 63);
+  assert.equal(f.allocationByTag.rows.length, 1);
+  const atlas = f.allocationByTag.rows[0];
+  assert.equal(atlas.tag, "api:Atlas");
+  // 11 FTE-days of January's 33 offered, and nothing in February.
+  near(atlas.cells[0], 11 / 33);
+  near(atlas.cells[1], 0);
+  // The Total column is the period's share - 11 over the 63 the plan offers - not
+  // the sum of the two cells.
+  near(atlas.total, 11 / 63);
+  // QA carries Atlas's other 11 January days and all 20 of February's.
+  const other = f.allocationByTag.other;
+  assert.equal(other.label, "Other tags");
+  near(other.cells[0], 11 / 33);
+  near(other.cells[1], 20 / 30);
+  near(other.total, 31 / 63);
+  // Every figure is the FTE-days view's own row over the capacity in the same
+  // bucket, not a second computation: the two readings of a tag cannot disagree.
+  const days = f.byTagSplit.rows.find((r) => r.tag === "api:Atlas");
+  atlas.cells.forEach((cell, i) => near(cell, days.cells[i] / offeredIn(f, i)));
+  near(atlas.total, days.total / f.offeredTotal);
+});
+
+test("the rows and the residual add up to the plan's own utilisation", () => {
+  const plan = tagCapacityFixture();
+  const f = report(plan);
+  const split = f.allocationByTag;
+  const drawn = split.rows.concat(split.other ? [split.other] : []);
+  // January: 22 FTE-days of 33 offered. February: 20 of 30. Over the period: 42
+  // of 63 - the plan's own utilisation, the figure the allocation chart plots.
+  near(split.total.cells[0], 22 / 33);
+  near(split.total.cells[1], 20 / 30);
+  near(split.total.total, 42 / 63);
+  near(split.total.total, f.planTotal / f.offeredTotal);
+  near(split.total.total, f.allocationByPerson.total.total);
+  f.buckets.forEach((_, i) => {
+    // Percentages of one denominator add, so the rows reconcile with the row
+    // they sit under rather than with 100%.
+    near(drawn.reduce((s, r) => s + r.cells[i], 0), split.total.cells[i]);
+    near(split.total.cells[i], f.charts.line[i].alloc / f.charts.line[i].capacity);
+  });
+  near(drawn.reduce((s, r) => s + r.total, 0), split.total.total);
+  // And the residual is what the selection does not carry: as FTE-days it is
+  // the plan total less the row, so as shares it is that over the same offer.
+  near(f.byTagSplit.rows[0].total + f.byTagSplit.other.total, f.planTotal);
+  near(split.rows[0].total + split.other.total, f.planTotal / f.offeredTotal);
+});
+
+test("a tag carrying more than the whole team reads over 100%", () => {
+  const plan = {
+    range: { start: "2026-01-01", end: "2026-01-31" },
+    people: [{ id: "anna", name: "Anna", availability: 100, tags: [] }],
+    projects: [{ id: "atlas", name: "Atlas", colour: 0, tags: ["QA"] }],
+    assignments: [
+      { id: "a1", projectId: "atlas", personId: "anna", start: "2026-01-01", end: "2026-01-31", share: 150, tags: [] }
+    ],
+    tagSplit: { tags: ["QA"] }
+  };
+  const f = report(plan);
+  // 33 FTE-days over the 22 the one person offers: the tag occupies half again
+  // as much as the whole team together, in its cell, its Total and the plan's
+  // own utilisation alike.
+  near(f.allocationByTag.rows[0].cells[0], 1.5);
+  near(f.allocationByTag.rows[0].total, 1.5);
+  near(f.allocationByTag.total.cells[0], 1.5);
+  near(f.allocationByTag.total.total, 1.5);
+  // Drawn as the whole 150% the app prints, past the 100% mark.
+  assert.equal(Math.round(f.allocationByTag.rows[0].cells[0] * 100), 150);
+});
+
+test("a bucket the plan offers nothing in shows no share rather than Infinity", () => {
+  const plan = tagCapacityFixture();
+  // At Day zoom a Saturday offers no working day at all, so there is nothing to
+  // divide by: every tag cell there is null, which the report draws as its
+  // missing figure.
+  const f = report(plan, wholeView(plan), { zoom: "day" });
+  const saturday = f.buckets.findIndex((b) => b.key === "2026-01-03");
+  assert.notEqual(saturday, -1, "the fixture has a Saturday in it");
+  near(offeredIn(f, saturday), 0);
+  assert.equal(f.allocationByTag.rows[0].cells[saturday], null);
+  assert.equal(f.allocationByTag.other.cells[saturday], null);
+  assert.equal(f.allocationByTag.total.cells[saturday], null);
+  // And nothing anywhere reads as Infinity or NaN.
+  const all = f.allocationByTag.rows.map((r) => r.cells.concat([r.total]))
+    .concat([f.allocationByTag.other.cells, [f.allocationByTag.other.total]])
+    .concat(f.allocationByTag.total.cells, [f.allocationByTag.total.total])
+    .reduce((s, v) => s.concat(v), []);
+  all.forEach((cell) => assert.ok(cell === null || Number.isFinite(cell), String(cell)));
+});
+
+test("one stored selection draws both tag views, and nothing ticked draws neither", () => {
+  const plan = tagCapacityFixture();
+  const f = report(plan);
+  // The very rows the FTE-days view draws, in its own order.
+  assert.deepEqual(f.allocationByTag.rows.map((r) => r.tag),
+    f.byTagSplit.rows.map((r) => r.tag));
+  assert.equal(f.allocationByTag.other.tag, f.byTagSplit.other.tag);
+  // The same plan read with no selection at all: no split, and no shares to
+  // read off it.
+  plan.tagSplit = {};
+  assert.equal(report(plan).allocationByTag, null);
+  delete plan.tagSplit;
+  assert.equal(report(plan).allocationByTag, null);
+});
+
+test("the allocation-by-tag rows respect the Filter and still reconcile", () => {
+  const plan = tagCapacityFixture();
+  const view = wholeView(plan);
+  // The Filter hides Borealis and its February work: Atlas's tag is the same
+  // figure against the same capacity, since the offer is the Person's own.
+  view.projects = plan.projects.filter((p) => p.id !== "borealis");
+  view.assignments = plan.assignments.filter((a) => a.projectId !== "borealis");
+  const narrowed = reportContent(view, plan, { zoom: "month" });
+  near(narrowed.allocationByTag.rows[0].cells[0], 11 / 33);
+  near(narrowed.allocationByTag.rows[0].cells[1], 0);
+  // Atlas's own QA share is the residual now, and the two still add up to the
+  // narrowed plan's utilisation in every bucket.
+  near(narrowed.allocationByTag.other.cells[0], 11 / 33);
+  near(narrowed.allocationByTag.total.cells[0], 22 / 33);
+  near(narrowed.allocationByTag.total.cells[1], 0);
+  near(narrowed.allocationByTag.rows[0].total + narrowed.allocationByTag.other.total,
+    narrowed.planTotal / narrowed.offeredTotal);
+});

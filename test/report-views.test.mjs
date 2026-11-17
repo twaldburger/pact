@@ -8,25 +8,27 @@ import {
   reportViewLabel
 } from "../public/lib/report-views.mjs";
 
-/* --- the six views ------------------------------------------------------- */
+/* --- the seven views ----------------------------------------------------- */
 
-test("a report has six views, in the panel's order, with the names the owner chose", () => {
+test("a report has seven views, in the panel's order, with the names the owner chose", () => {
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.label), [
     "FTE-days by project",
     "FTE-days by person",
     "Allocation by person",
     "FTE-days by tag",
+    "Allocation by tag",
     "FTE-days by tag over time",
     "Allocation against capacity"
   ]);
   // The absolute readings - by project, by person - then by person's own
-  // percentage counterpart, the split, and the two charts: the stacked bar per
-  // bucket, the line.
+  // percentage counterpart, the split and its counterpart, and the two charts:
+  // the stacked bar per bucket, the line.
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.key), [
     "by-project",
     "by-person",
     "allocation-by-person",
     "by-tag",
+    "allocation-by-tag",
     "by-tag-over-time",
     "allocation"
   ]);
@@ -38,8 +40,11 @@ test("each reading sits beside its own counterpart in the panel", () => {
   // Person's FTE-days and that same figure as a share of their offer read
   // together. The pair the owner asked for, in the order he asked for it.
   assert.equal(index("allocation-by-person"), index("by-person") + 1);
-  // The share table is a sixth view, not a replacement for any of the five.
-  assert.equal(REPORT_VIEWS.length, 6);
+  // The tag pair follows the same rule, so a tag's FTE-days and that same
+  // figure as a share of the plan's capacity read together.
+  assert.equal(index("allocation-by-tag"), index("by-tag") + 1);
+  // The share table is a seventh view, not a replacement for any of the six.
+  assert.equal(REPORT_VIEWS.length, 7);
 });
 
 test("every name says what the view shows, and no two say the same thing", () => {
