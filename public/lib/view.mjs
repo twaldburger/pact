@@ -121,7 +121,7 @@ export function normalizeView(raw) {
     // The report's own level, so the grid moving to Day never turns the report
     // into 365 columns. A separate key, falling back on its own like the rest.
     reportZoom: isZoom(source.reportZoom) ? source.reportZoom : VIEW_DEFAULTS.reportZoom,
-    // Which of the report's five views is showing. Its own key, falling back
+    // Which of the report's six views is showing. Its own key, falling back
     // on its own to the first view, so a renamed view opens a report rather
     // than a blank panel.
     reportView: normalizeReportView(source.reportView),

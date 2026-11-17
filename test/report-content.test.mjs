@@ -295,3 +295,135 @@ test("the by-tag rows keep their own order: the most FTE-days first", () => {
   // between the split's two halves breaks by label, untouched by this sort.
   assert.deepEqual(f.byTag.rows.map((r) => r.tag), ["Zebra", "Testing", "api:Solar"]);
 });
+
+/* --- allocation by person: one denominator, the person's own offer --------- */
+
+/*
+ * A plan across two months, so a bucket's share and the period's share can
+ * differ. January 2026 has 22 working days and February 20.
+ *   - Anna offers a full week: 11 of her 22 January days at 50%, and 5 of her
+ *     20 February days at 100%, so her cells are 50% and 25% while her period
+ *     figure is 16 over the 42 days she offers - not the 75% the two cells add
+ *     to.
+ *   - Ben offers half a week and is put on a full Allocation for January, so he
+ *     is at 200% of his own offer in that bucket: the over-allocation the
+ *     view exists to show. Nothing is allocated to him in February.
+ */
+function spreadFixture() {
+  return {
+    range: { start: "2026-01-01", end: "2026-02-28" },
+    people: [
+      { id: "anna", name: "Anna", availability: 100, tags: ["lead"] },
+      { id: "ben", name: "Ben", availability: 50, tags: [] }
+    ],
+    projects: [{ id: "atlas", name: "Atlas", colour: 0, tags: [] }],
+    assignments: [
+      { id: "a1", projectId: "atlas", personId: "anna", start: "2026-01-01", end: "2026-01-31", share: 50, tags: [] },
+      { id: "a2", projectId: "atlas", personId: "anna", start: "2026-02-02", end: "2026-02-06", share: 100, tags: [] },
+      { id: "a3", projectId: "atlas", personId: "ben", start: "2026-01-01", end: "2026-01-31", share: 100, tags: [] }
+    ]
+  };
+}
+
+function spread(plan, options) {
+  return report(plan, wholeView(plan), options);
+}
+
+test("a person's cell is their FTE-days over what they offer in that bucket", () => {
+  const plan = spreadFixture();
+  const f = spread(plan);
+  const anna = f.allocationByPerson.rows.find((r) => r.id === "anna");
+  const ben = f.allocationByPerson.rows.find((r) => r.id === "ben");
+  assert.equal(f.buckets.map((b) => b.key).join(","), "2026-01,2026-02");
+  // Half a full Allocation over January, then a full one over five February
+  // days: the share of what each person offers, read bucket by bucket.
+  near(anna.cells[0], 0.5);
+  near(anna.cells[1], 5 / 20);
+  // Ben offers half a week, so a full Allocation over January is 200% of him.
+  near(ben.cells[0], 2);
+  near(ben.cells[1], 0);
+  // Each figure is the by-person row's own FTE-days over its own offer array,
+  // not a second computation: the two tables cannot disagree.
+  const annaDays = f.byPerson.rows.find((r) => r.id === "anna");
+  anna.cells.forEach((cell, i) => near(cell, annaDays.cells[i] / annaDays.offeredCells[i]));
+});
+
+test("every cell divides by the offer in the same bucket, and no other figure", () => {
+  const plan = spreadFixture();
+  const f = spread(plan);
+  f.allocationByPerson.rows.forEach((row) => {
+    const days = f.byPerson.rows.find((r) => r.id === row.id);
+    assert.equal(row.cells.length, f.buckets.length);
+    row.cells.forEach((cell, i) => {
+      if (days.offeredCells[i] > 0) near(cell, days.cells[i] / days.offeredCells[i]);
+      else assert.equal(cell, null, "a bucket with no offer carries no share");
+    });
+  });
+});
+
+test("a bucket a person offers nothing in shows no share rather than Infinity", () => {
+  const plan = spreadFixture();
+  // At Day zoom a Saturday offers no working day at all, so there is nothing to
+  // divide by: the cell is null, which the report draws as its missing figure.
+  const f = spread(plan, { zoom: "day" });
+  const saturday = f.buckets.findIndex((b) => b.key === "2026-01-03");
+  assert.notEqual(saturday, -1, "the fixture has a Saturday in it");
+  near(f.byPerson.rows.find((r) => r.id === "anna").offeredCells[saturday], 0);
+  const anna = f.allocationByPerson.rows.find((r) => r.id === "anna");
+  assert.equal(anna.cells[saturday], null);
+  // The total row divides by the whole plan's offer, which is also nothing on a
+  // Saturday.
+  assert.equal(f.allocationByPerson.total.cells[saturday], null);
+  // And nothing anywhere reads as Infinity or NaN.
+  const all = f.allocationByPerson.rows.flatMap((r) => r.cells.concat([r.total]))
+    .concat(f.allocationByPerson.total.cells, [f.allocationByPerson.total.total]);
+  all.forEach((cell) => assert.ok(cell === null || Number.isFinite(cell), String(cell)));
+});
+
+test("a row's Total is the period's share, not the sum of its cells", () => {
+  const plan = spreadFixture();
+  const f = spread(plan);
+  const anna = f.allocationByPerson.rows.find((r) => r.id === "anna");
+  const days = f.byPerson.rows.find((r) => r.id === "anna");
+  // 16 FTE-days over the 42 she offers across both months, not 50% + 25%.
+  near(anna.total, 16 / 42);
+  near(anna.total, days.pct);
+  near(anna.total, days.total / days.offered);
+  near(anna.cells.reduce((s, v) => s + v, 0), 0.75);
+  assert.notEqual(Math.round(anna.total * 1000), Math.round(anna.cells.reduce((s, v) => s + v, 0) * 1000));
+});
+
+test("the total row is everything allocated over everything offered", () => {
+  const plan = spreadFixture();
+  const f = spread(plan);
+  const total = f.allocationByPerson.total;
+  // January: 33 FTE-days allocated over 33 offered. February: 5 over 30.
+  near(total.cells[0], 1);
+  near(total.cells[1], 5 / 30);
+  // Over the period that is the by-person total's own figure, not a sum of the
+  // two bucket shares.
+  near(total.total, f.byPerson.total.pct);
+  near(total.total, f.planTotal / f.offeredTotal);
+  // 38 FTE-days allocated over the 63 the two people offer: Anna's 42 and Ben's
+  // 21, half a week over the two months' 42 working days.
+  near(total.total, 38 / 63);
+  // The rows reconcile with the row they sit under, per bucket and over all.
+  f.buckets.forEach((_, i) => {
+    const allocated = f.byPerson.rows.reduce((s, r) => s + r.cells[i], 0);
+    const offered = f.byPerson.rows.reduce((s, r) => s + r.offeredCells[i], 0);
+    near(total.cells[i], allocated / offered);
+  });
+});
+
+test("the view keeps the rail's order and the Filter's narrowing", () => {
+  const plan = spreadFixture();
+  const view = wholeView(plan);
+  view.people = plan.people.slice().reverse();
+  const f = spread(plan);
+  assert.deepEqual(f.allocationByPerson.rows.map((r) => r.id), ["anna", "ben"]);
+  const narrowed = reportContent(view, plan, { zoom: "month" });
+  assert.deepEqual(narrowed.allocationByPerson.rows.map((r) => r.id), ["ben", "anna"]);
+  // The filtered view still offers what the whole plan says a person offers,
+  // because the offer is the Person's own.
+  near(narrowed.allocationByPerson.rows[1].cells[0], 0.5);
+});
