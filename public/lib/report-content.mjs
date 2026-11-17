@@ -1,6 +1,7 @@
 /*
- * PACT report content: the report's own figures - the three pivots and the two
- * charts - derived from the plan with the app's own rules.
+ * PACT report content: the report's own figures - the three pivots, the
+ * per-person share table and the two charts - derived from the plan with the
+ * app's own rules.
  *
  * A plain ES module importing only the working-day rule, so the browser
  * (public/app.js) and `node --test` load exactly the same source. Every figure
@@ -15,6 +16,9 @@
  *     Total row. Each row carries its FTE-days as a share of the report total.
  *   - The by-person table carries the person's offered FTE-days beside the
  *     work, so the percentage of what they offer is readable.
+ *   - Allocation by person reads that matrix as a share of what each person
+ *     offers in the same stretch, so 100% is that person's own ceiling. A
+ *     bucket they offer nothing in has no share at all, and reads as null.
  *   - A project carrying two tags splits its FTE-days evenly between them, so
  *     the tag pivot's totals reconcile exactly with the plan's.
  *   - Absences are excluded entirely: no absence Project contributes an
@@ -371,6 +375,37 @@ export function reportContent(view, plan, options) {
     r.pct = r.offered > 0 ? r.total / r.offered : 0;
   });
 
+  // --- allocation by person: each person's FTE-days over what they offer -----
+  //
+  // The by-person matrix read as shares: one denominator throughout, the same
+  // person's offer in the same bucket, so 100% is their own ceiling whatever
+  // their Availability. A row's total is the period figure, not the sum of the
+  // cells - percentages do not add - so it is read from the offer over the
+  // period rather than accumulated bucket by bucket. A bucket a person offers
+  // nothing in (a day off, a weekend day) has no share to state, and is null
+  // rather than an Infinity or a 0% that would claim they filled nothing.
+  const allocationCells = buckets.map(function (_, i) {
+    return capacityBuckets[i] > 0 ? personBuckets[i] / capacityBuckets[i] : null;
+  });
+  const allocationRows = personRows.map(function (r) {
+    return {
+      id: r.id,
+      name: r.name,
+      tags: r.tags,
+      cells: r.cells.map(function (value, i) {
+        return r.offeredCells[i] > 0 ? value / r.offeredCells[i] : null;
+      }),
+      total: r.offered > 0 ? r.pct : null
+    };
+  });
+  const byPersonTotal = {
+    cells: personBuckets,
+    total: planTotal,
+    offeredCells: capacityBuckets,
+    offered: offeredTotal,
+    pct: offeredTotal > 0 ? planTotal / offeredTotal : 0
+  };
+
   const charts = {
     stacked: buckets.map(function (b, i) {
       return {
@@ -401,12 +436,16 @@ export function reportContent(view, plan, options) {
     },
     byPerson: {
       rows: personRows,
+      total: byPersonTotal
+    },
+    allocationByPerson: {
+      rows: allocationRows,
+      // Everything allocated over everything offered, per bucket and over the
+      // period: the same measure the rows carry, with the period figure the
+      // by-person total already reads.
       total: {
-        cells: personBuckets,
-        total: planTotal,
-        offeredCells: capacityBuckets,
-        offered: offeredTotal,
-        pct: offeredTotal > 0 ? planTotal / offeredTotal : 0
+        cells: allocationCells,
+        total: offeredTotal > 0 ? byPersonTotal.pct : null
       }
     },
     byTag: {

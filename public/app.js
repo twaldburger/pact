@@ -218,7 +218,7 @@ var zoomButtons = [];
 // on load. Separate, so moving the grid to Day never turns the report into
 // 365 columns; the four levels are the report's time buckets.
 var reportZoom = ZOOM_DEFAULT;
-// Which of the report's five views is showing, as the left panel's selection.
+// Which of the report's six views is showing, as the left panel's selection.
 // One of the view settings kept in the config and restored on load; the report
 // draws this view alone. Never written to the plan.
 var reportView = REPORT_VIEW_DEFAULT;
@@ -3517,6 +3517,20 @@ function reportTotalCell(value) {
   return { text: reportFigure(value), cls: REPORT_TOTAL_COL };
 }
 
+// One share of an offer, as a cell: the whole percentage the app prints for a
+// percentage everywhere else. Whether it is over-allocation is read off that
+// same whole figure, exactly as the grid reads a row head's assigned figure
+// against the person's availability, so the number and the colour can never
+// disagree. A bucket the person offers nothing in has no share to state: it
+// reads as the dash a figure with no value reads as, never as Infinity or a
+// 0% that would claim they filled nothing.
+function reportShareCell(value, totalColumn) {
+  var cls = totalColumn ? REPORT_TOTAL_COL : "report-table__num";
+  if (typeof value !== "number" || !isFinite(value)) return { text: "-", cls: cls };
+  var shown = Math.round(value * 100);
+  return { text: shown + "%", cls: shown > 100 ? cls + " is-over" : cls };
+}
+
 // One table. The first column is sticky so a wide matrix keeps its names, and
 // every numeric column is right-aligned to its own figures.
 function reportTable(headers, rows) {
@@ -3716,11 +3730,11 @@ function reportLegend(items) {
 
 /* --- the report page ----------------------------------------------------- */
 
-/* The report's own content: one of its five views at a time, from the plan the
+/* The report's own content: one of its six views at a time, from the plan the
  * Filter and the rail's sort leave. It writes nothing to the plan; the figures
  * come from public/lib/report-content.mjs, which reads the app's own
  * working-day rule, so the report and the grid agree by construction. The rail
- * is drawn beside it and lists those five views - the plan's own panel, folded
+ * is drawn beside it and lists those six views - the plan's own panel, folded
  * by the same control and remembering the same collapsed state. */
 function renderReport() {
   tl.classList.add("is-report");
@@ -3807,13 +3821,14 @@ function reportBucketWord() {
   return reportBucketLabel(reportZoom).toLowerCase();
 }
 
-/* --- the five views ------------------------------------------------------- */
+/* --- the six views -------------------------------------------------------- */
 
 // The view the selection names. Each builder draws one section under the panel
 // entry's own label, so the panel and the content can never say different
 // things.
 function reportViewSection(model) {
   if (reportView === "by-person") return reportPersonSection(model);
+  if (reportView === "allocation-by-person") return reportAllocationPersonSection(model);
   if (reportView === "by-tag") return reportTagSection(model);
   if (reportView === "by-tag-over-time") return reportTagTimeSection(model);
   if (reportView === "allocation") return reportAllocationSection(model);
@@ -3893,6 +3908,33 @@ function reportPersonSection(model) {
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-person"),
     "Of offer is against each person's own availability, so someone at 80% can reach 100%.");
+  section.appendChild(reportTable(headers, rows));
+  section.appendChild(reportAbsencesNote());
+  return section;
+}
+
+// Allocation by person: each person's FTE-days as a share of what they offer in
+// the same bucket, and over the period in the Total column. One denominator
+// throughout, so no second percentage column sits beside it, and the Total
+// column is a reading of the period rather than the sum of the cells.
+function reportAllocationPersonSection(model) {
+  var headers = [{ text: "Person", cls: "report-table__name" }]
+    .concat(reportBucketHeaders(model))
+    .concat([{ text: "Total", cls: REPORT_TOTAL_COL }]);
+  var rows = model.allocationByPerson.rows.map(function (r) {
+    // Marked with the Person's own colour slot, as the by-person table marks
+    // them, so the two side-by-side readings name a person the same way.
+    var cells = [{ node: reportNameCell(r.name, personSlot(r.tags, tagKeyMap, tagSlotMap)), cls: "report-table__name" }];
+    r.cells.forEach(function (v) { cells.push(reportShareCell(v)); });
+    cells.push(reportShareCell(r.total, true));
+    return { cells: cells };
+  });
+  var totalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.allocationByPerson.total.cells.forEach(function (v) { totalCells.push(reportShareCell(v)); });
+  totalCells.push(reportShareCell(model.allocationByPerson.total.total, true));
+  rows.push({ cells: totalCells, cls: "report-row--total" });
+  var section = reportSection(reportViewLabel("allocation-by-person"),
+    "Each person's FTE-days as a share of what they offer in the same stretch of time; above 100% is over-allocation.");
   section.appendChild(reportTable(headers, rows));
   section.appendChild(reportAbsencesNote());
   return section;

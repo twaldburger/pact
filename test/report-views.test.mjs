@@ -8,25 +8,38 @@ import {
   reportViewLabel
 } from "../public/lib/report-views.mjs";
 
-/* --- the five views ------------------------------------------------------- */
+/* --- the six views ------------------------------------------------------- */
 
-test("a report has five views, in the panel's order, with the names the owner chose", () => {
+test("a report has six views, in the panel's order, with the names the owner chose", () => {
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.label), [
     "FTE-days by project",
     "FTE-days by person",
+    "Allocation by person",
     "FTE-days by tag",
     "FTE-days by tag over time",
     "Allocation against capacity"
   ]);
-  // Two tables of the same figure, one table of its split, then its two charts:
-  // by project, by person, by tag, the stacked bar per bucket, the line.
+  // The absolute readings - by project, by person - then by person's own
+  // percentage counterpart, the split, and the two charts: the stacked bar per
+  // bucket, the line.
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.key), [
     "by-project",
     "by-person",
+    "allocation-by-person",
     "by-tag",
     "by-tag-over-time",
     "allocation"
   ]);
+});
+
+test("each reading sits beside its own counterpart in the panel", () => {
+  const index = (key) => REPORT_VIEWS.findIndex((entry) => entry.key === key);
+  // The absolute reading and its percentage counterpart are neighbours, so a
+  // Person's FTE-days and that same figure as a share of their offer read
+  // together. The pair the owner asked for, in the order he asked for it.
+  assert.equal(index("allocation-by-person"), index("by-person") + 1);
+  // The share table is a sixth view, not a replacement for any of the five.
+  assert.equal(REPORT_VIEWS.length, 6);
 });
 
 test("every name says what the view shows, and no two say the same thing", () => {
