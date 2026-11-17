@@ -19,6 +19,11 @@
  *   - Allocation by person reads that matrix as a share of what each person
  *     offers in the same stretch, so 100% is that person's own ceiling. A
  *     bucket they offer nothing in has no share at all, and reads as null.
+ *   - Allocation by tag reads the selected tag rows the same way, over the
+ *     capacity the whole plan offers in the same stretch. One denominator for
+ *     every row, so the rows and the Other tags residual add up to the plan's
+ *     own utilisation - the figure the allocation chart plots. A bucket the
+ *     plan offers nothing in has no share at all, and reads as null.
  *   - A project carrying two tags splits its FTE-days evenly between them, so
  *     the tag pivot's totals reconcile exactly with the plan's.
  *   - The by-tag view's rows are the tags the owner ticked, which are stored in
@@ -557,6 +562,15 @@ export function reportContent(view, plan, options) {
     r.pct = r.offered > 0 ? r.total / r.offered : 0;
   });
 
+  // A figure as a share of the capacity the whole plan offers in the same
+  // bucket: the one denominator every allocation-by-tag row divides by, so the
+  // rows and the residual add up to the plan's own utilisation rather than to
+  // 100%. A bucket the plan offers nothing in has no share to state, and is
+  // null rather than an Infinity or a 0% that would claim nothing was offered.
+  function shareOfCapacity(value, i) {
+    return capacityBuckets[i] > 0 ? value / capacityBuckets[i] : null;
+  }
+
   // --- allocation by person: each person's FTE-days over what they offer -----
   //
   // The by-person matrix read as shares: one denominator throughout, the same
@@ -587,6 +601,36 @@ export function reportContent(view, plan, options) {
     offered: offeredTotal,
     pct: offeredTotal > 0 ? planTotal / offeredTotal : 0
   };
+
+  // --- allocation by tag: the same rows, over the plan's whole capacity ------
+  //
+  // The rows the FTE-days view draws - the selection's tags and the Other tags
+  // residual - each read as a share of what the whole plan offers in the same
+  // bucket, and of everything it offers over the period in the Total column. One
+  // denominator for every row, so the rows reconcile with the total row they sit
+  // under rather than with 100%. Null while nothing is ticked: there is no split
+  // to read.
+  function capacityRow(r) {
+    return {
+      tag: r.tag,
+      label: r.label,
+      slot: r.slot,
+      cells: r.cells.map(shareOfCapacity),
+      total: offeredTotal > 0 ? r.total / offeredTotal : null
+    };
+  }
+  const allocationByTag = tagSplit ? {
+    rows: tagSplit.rows.map(capacityRow),
+    other: tagSplit.other ? capacityRow(tagSplit.other) : null,
+    // The plan's overall utilisation, per bucket and over the period: the tag
+    // pivot's own total over the capacity the plan offers, which is also what
+    // the rows and the residual add up to and the figure the allocation chart
+    // plots.
+    total: {
+      cells: tagBuckets.map(shareOfCapacity),
+      total: offeredTotal > 0 ? planTotal / offeredTotal : null
+    }
+  } : null;
 
   const charts = {
     stacked: buckets.map(function (b, i) {
@@ -637,6 +681,9 @@ export function reportContent(view, plan, options) {
     // The by-tag view's rows as the owner selected them, or null while nothing
     // is ticked. The complete pivot above stays for the chart beside it.
     byTagSplit: tagSplit,
+    // The same rows as shares of the plan's own capacity, or null while nothing
+    // is ticked. One selection, two readings.
+    allocationByTag: allocationByTag,
     charts: charts
   };
 }

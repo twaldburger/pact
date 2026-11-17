@@ -218,7 +218,7 @@ var zoomButtons = [];
 // on load. Separate, so moving the grid to Day never turns the report into
 // 365 columns; the four levels are the report's time buckets.
 var reportZoom = ZOOM_DEFAULT;
-// Which of the report's six views is showing, as the left panel's selection.
+// Which of the report's seven views is showing, as the left panel's selection.
 // One of the view settings kept in the config and restored on load; the report
 // draws this view alone. Never written to the plan.
 var reportView = REPORT_VIEW_DEFAULT;
@@ -3748,12 +3748,12 @@ function reportLegend(items) {
 
 /* --- the report page ----------------------------------------------------- */
 
-/* The report's own content: one of its six views at a time, from the plan the
+/* The report's own content: one of its seven views at a time, from the plan the
  * Filter and the rail's sort leave. The figures come from
  * public/lib/report-content.mjs, which reads the app's own working-day rule, so
  * the report and the grid agree by construction. The one thing the report
  * writes is the by-tag view's own split, which is the owner's choice stored in
- * the plan like the holidays. The rail is drawn beside it and lists those six
+ * the plan like the holidays. The rail is drawn beside it and lists those seven
  * views - the plan's own panel, folded by the same control and remembering the
  * same collapsed state. */
 function renderReport() {
@@ -3841,7 +3841,7 @@ function reportBucketWord() {
   return reportBucketLabel(reportZoom).toLowerCase();
 }
 
-/* --- the six views -------------------------------------------------------- */
+/* --- the seven views ------------------------------------------------------ */
 
 // The view the selection names. Each builder draws one section under the panel
 // entry's own label, so the panel and the content can never say different
@@ -3850,6 +3850,7 @@ function reportViewSection(model) {
   if (reportView === "by-person") return reportPersonSection(model);
   if (reportView === "allocation-by-person") return reportAllocationPersonSection(model);
   if (reportView === "by-tag") return reportTagSection(model);
+  if (reportView === "allocation-by-tag") return reportAllocationTagSection(model);
   if (reportView === "by-tag-over-time") return reportTagTimeSection(model);
   if (reportView === "allocation") return reportAllocationSection(model);
   return reportProjectSection(model);
@@ -4063,9 +4064,7 @@ function reportTagSection(model) {
 
   if (!split) {
     // Nothing is ticked: the view says so rather than guessing at a taxonomy.
-    var empty = el("p", "report__note");
-    empty.textContent = "Nothing is selected yet - tick the tags the rows should split by.";
-    section.appendChild(empty);
+    section.appendChild(reportNothingSelected());
   } else {
     function cellsFor(r) {
       var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
@@ -4081,6 +4080,55 @@ function reportTagSection(model) {
     model.byTag.total.cells.forEach(function (v) { totalCells.push(reportNumCell(v)); });
     totalCells.push(reportTotalCell(model.byTag.total.total));
     totalCells.push({ text: "100%", cls: "report-table__num" });
+    rows.push({ cells: totalCells, cls: "report-row--total" });
+    section.appendChild(reportTable(headers, rows));
+  }
+  section.appendChild(reportAbsencesNote());
+  return section;
+}
+
+// The one line both tag views carry where nothing is ticked: they say so rather
+// than guessing at a taxonomy. One choice stored in the plan, one sentence.
+function reportNothingSelected() {
+  var note = el("p", "report__note");
+  note.textContent = "Nothing is selected yet - tick the tags the rows should split by.";
+  return note;
+}
+
+// Allocation by tag: the FTE-days view's own rows - the tags ticked in the head
+// and the Other tags residual - as a share of the capacity the whole plan offers
+// in the same bucket, and of everything it offers over the period in the Total
+// column. One denominator for every row, so the rows reconcile with the total
+// row they sit under rather than with 100%, and no second percentage column sits
+// beside it. Above 100% is a tag whose projects occupy more than the whole team
+// together: the same over-allocation mark, decided on the same whole figure.
+function reportAllocationTagSection(model) {
+  var headers = [{ text: "Tag", cls: "report-table__name" }]
+    .concat(reportBucketHeaders(model))
+    .concat([{ text: "Total", cls: REPORT_TOTAL_COL }]);
+  var split = model.allocationByTag;
+  var section = reportSection(reportViewLabel("allocation-by-tag"),
+    "Each tag's FTE-days as a share of the capacity the plan offers in the same " +
+    "stretch of time; above 100% is over-allocation.");
+  // The same chooser the FTE-days view draws, from the same stored selection, so
+  // a tag ticked in either view is ticked in both.
+  section.appendChild(reportTagSplit());
+
+  if (!split) {
+    section.appendChild(reportNothingSelected());
+  } else {
+    function cellsFor(r) {
+      var cells = [{ node: reportNameCell(r.label, r.slot), cls: "report-table__name" }];
+      r.cells.forEach(function (v) { cells.push(reportShareCell(v)); });
+      cells.push(reportShareCell(r.total, true));
+      return cells;
+    }
+
+    var rows = split.rows.map(function (r) { return { cells: cellsFor(r) }; });
+    if (split.other) rows.push({ cells: cellsFor(split.other) });
+    var totalCells = [{ text: "Total", cls: "report-table__name" }];
+    split.total.cells.forEach(function (v) { totalCells.push(reportShareCell(v)); });
+    totalCells.push(reportShareCell(split.total.total, true));
     rows.push({ cells: totalCells, cls: "report-row--total" });
     section.appendChild(reportTable(headers, rows));
   }

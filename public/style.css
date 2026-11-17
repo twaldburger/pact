@@ -1004,9 +1004,10 @@ h1, h2, h3, p { margin: 0; }
   font-weight: var(--fw-title);
 }
 
-/* A share past the person's own offer is over-allocation, and reads in the same
-   signal colour the grid gives its over-allocated row-head figure. As there,
-   the colour is the whole mark and the weight is left alone. */
+/* A share past the capacity it is read against - a person's own offer, or the
+   capacity the whole plan offers in a tag's bucket - is over-allocation, and
+   reads in the same signal colour the grid gives its over-allocated row-head
+   figure. As there, the colour is the whole mark and the weight is left alone. */
 .report-table__num.is-over {
   color: var(--signal);
 }

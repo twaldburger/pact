@@ -1,5 +1,5 @@
 /*
- * PACT report views: the six views a report shows one at a time, and the rule
+ * PACT report views: the seven views a report shows one at a time, and the rule
  * for which one a stored selection names.
  *
  * The list is the report's navigation panel, in its order. Each label names
@@ -18,6 +18,7 @@ export const REPORT_VIEWS = Object.freeze([
   Object.freeze({ key: "by-person", label: "FTE-days by person" }),
   Object.freeze({ key: "allocation-by-person", label: "Allocation by person" }),
   Object.freeze({ key: "by-tag", label: "FTE-days by tag" }),
+  Object.freeze({ key: "allocation-by-tag", label: "Allocation by tag" }),
   Object.freeze({ key: "by-tag-over-time", label: "FTE-days by tag over time" }),
   Object.freeze({ key: "allocation", label: "Allocation against capacity" })
 ]);
