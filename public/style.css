@@ -59,6 +59,10 @@
      selection cannot move or resize the Filter control. Anything longer is
      ellipsised. */
   --scope-w: 4.5625rem;
+  /* The by-tag chooser's own height: three lines of chips - a key row and the
+     tag row's first two - with the rows scrolling inside it beyond that, so a
+     plan that grows tags never moves the table below. */
+  --chooser-h: 4rem;
   /* The Minimap's fixed size, the same at every zoom and window width. */
   --minimap-w: 12rem;
   --minimap-h: 3.5rem;
@@ -83,6 +87,7 @@
   --mix-band: 8%;         /* the rubber band of a range being drawn */
   --mix-hatch: 42%;       /* the over-allocation hatch, drawn in --signal */
   --mix-over: 5%;         /* the row header of a Person over their Availability */
+  --mix-half: 40%;        /* half a tag's colour over the paper: a key's part */
   --op-disabled: 0.45;    /* a control at the end of its range */
   --op-archived: 0.6;     /* history: an archived Assignment, and its chip */
   /* A text glyph is not centred in its line box, and a "+" sits below the cap
@@ -1022,10 +1027,14 @@ h1, h2, h3, p { margin: 0; }
   flex: none;
 }
 
+/* A list of chips: the TAGS column's and either row of the by-tag chooser's.
+   It wraps at the box it is given and each chip keeps its own text's width. */
 .report-tags {
   display: inline-flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--sp-2);
+  min-width: 0;
 }
 
 .report-tag {
@@ -1037,6 +1046,11 @@ h1, h2, h3, p { margin: 0; }
   border-radius: var(--radius-chip);
   background: var(--panel);
   font-size: var(--fs-axis);
+  /* A chip is its text's width. In the TAGS column it used to be squeezed to
+     the column's width and wrap its label; a chip that cannot shrink keeps its
+     own width there, and the by-tag view's chips are drawn at the same one. */
+  flex: none;
+  white-space: nowrap;
 }
 
 .report-tag--none {
@@ -1052,80 +1066,71 @@ h1, h2, h3, p { margin: 0; }
   flex: none;
 }
 
-/* The by-tag view's head: the tags its rows are, grouped by key. One bounded,
-   scrolling list over the table, so a plan carrying many tags cannot push the
-   table off screen. A key's row holds its tick and its count, and its tags sit
-   under it as the app's own chips, each holding a checkbox in the form's own
-   treatment. */
-.report-tags {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-
-.report-tags__label {
+/* A chip that can be ticked: the TAGS column's chip as a toggle. Its state is
+   on the element, as data-state for the drawing and aria-pressed for everything
+   else, so full, half and empty are read from the chip rather than from its
+   colour. A selected chip fills with the tag's colour and takes its label ink
+   from that fill the way a block does; a tag with no colour sets no fill of its
+   own, so the ink below stands in and a selection never depends on a colour
+   having been set. A key's half state mixes that fill into the paper rather than
+   painting half the chip, which keeps its label legible on both halves. */
+.report-tag--choice {
+  --tag-fill: var(--ink);
+  --tag-ink: var(--canvas);
+  appearance: none;
+  font: inherit;
   font-size: var(--fs-axis);
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.report-tags__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  /* Bounded against the window as well as in rem, so a short window keeps room
-     for the table under it rather than the list owning the whole view. */
-  max-height: min(14rem, 30vh);
-  overflow-y: auto;
-  padding-right: var(--sp-2);
-}
-
-.report-tags__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-
-.report-tags__key {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-}
-
-.report-tags__keyname {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-data);
+  line-height: inherit;
+  color: var(--ink);
   cursor: pointer;
 }
 
-.report-tags__count {
-  font-size: var(--fs-axis);
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
+.report-tag--choice[data-state="off"]:hover {
+  background: var(--off);
 }
 
-.report-tags__tag {
-  cursor: pointer;
+.report-tag--choice[data-state="on"] {
+  background: var(--tag-fill);
+  border-color: var(--tag-fill);
+  color: var(--tag-ink);
 }
 
-/* A tick in the head reads exactly as the Absence mark in a panel: the form's
-   own box, the accent in the bar's ink rather than the browser's blue. */
-.report-tags input[type="checkbox"] {
-  width: auto;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  accent-color: var(--ink);
+/* The swatch's job is to name a colour the chip does not carry; on a filled
+   chip the fill carries it, so the mark reads in the label ink instead. */
+.report-tag--choice[data-state="on"] .report-tag__swatch {
+  background: var(--tag-ink);
 }
-.report-tags input[type="checkbox"]:focus-visible {
+
+.report-tag--choice[data-state="some"] {
+  background: color-mix(in srgb, var(--tag-fill) var(--mix-half), var(--panel));
+  border-color: var(--tag-fill);
+  color: var(--ink);
+}
+
+.report-tag--choice:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
+}
+
+/* The by-tag view's head: the tags its rows are, as two rows of chips - every
+   key over every tag - in one bounded, scrolling list, so a plan carrying many
+   tags cannot push the table down or move it as a row wraps. */
+.report-taghead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.report-taghead__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  /* Three lines of chips, and no more: the rows scroll inside this box rather
+     than the table giving way to them. */
+  max-height: var(--chooser-h);
+  overflow-y: auto;
+  padding-right: var(--sp-2);
 }
 
 /* The two charts: hand-drawn SVG in the app's own tokens, one chart to a view,

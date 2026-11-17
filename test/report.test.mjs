@@ -217,7 +217,8 @@ test("each view's heading carries its own sentence, in the owner's words", () =>
       '"Each person\'s FTE-days as a share of what they offer in the same stretch of time; ' +
       'above 100% is over-allocation.")',
     byTag: 'reportSection(reportViewLabel("by-tag"), ' +
-      '"Each project\'s days are split between its tags, so the totals fit the plan.")',
+      '"The rows are the tags you tick; ticking a key ticks all of its tags at once, " + ' +
+      '"and the tags you leave out are gathered under Other tags.")',
     byTagOverTime: 'reportChartSection("by-tag-over-time", ' +
       '"Colours follow the plan\'s colour keys.",',
     // The bucket stays the report's own zoom word, not a fixed "month".
@@ -357,40 +358,138 @@ test("all four tables head their total column Total", () => {
   assert.equal((APP.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 4);
 });
 
-/* --- the by-tag head is rows of ticks (issue #173) ------------------------ */
+/* --- the by-tag head is two rows of chips (issue #175) -------------------- */
 
-test("the by-tag head offers its tags as rows of ticks, not a chooser", () => {
+test("the by-tag head offers two flat rows of chips, keys over tags", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const head = functionSource(APP, "reportTagSplit");
   assert.ok(head.length > 0, "reportTagSplit is missing");
-  // The rows come from the one function that says what is offered and how it
-  // groups, so a second tag source widens the list there alone.
-  assert.match(head, /tagGroups\(data\)\.forEach/);
-  assert.match(head, /box\.type = "checkbox";/);
-  // A key's row ticks or clears its whole group, a tag's own tick one tag, and
+  // The two rows come from the one function that says what a key is and the one
+  // that says what is offered, so a second tag source widens the chips there
+  // alone. The keys are drawn first and the tags under them.
+  assert.match(head, /var keys = tagKeyGroups\(data\);/);
+  assert.match(head, /var tags = tagChoices\(data\);/);
+  assert.ok(head.indexOf("report-tags--keys") < head.indexOf("report-tags--tags"),
+    "the tag row is drawn above the key row");
+  assert.equal((head.match(/report-tags--(keys|tags)/g) || []).length, 2, "the head is not two rows");
+  // Keyless tags are chips in the tag row only: no key chip stands for them,
+  // and no grouping heading is drawn at all.
+  assert.equal(/No key|UNTYPED|"" tags/.test(head), false, "a keyless key chip is still drawn");
+  assert.equal(/report-tags__(group|key|keyname|count|tag|label)"/.test(head), false,
+    "a grouping heading or its count is still drawn");
+  // No checkbox anywhere: the chip is the control.
+  assert.equal(/checkbox|createElement\("input"\)|type = "input"/.test(head), false,
+    "the choose-the-tags control is still a checkbox");
+  // A key's chip ticks or clears its whole group, a tag's own chip one tag, and
   // either way the write replaces the plan's own set of tags.
-  assert.match(head, /save\(tagToggled\(selected, group\.tags\)\)/);
-  assert.match(head, /save\(tagToggled\(selected, \[tag\]\)\)/);
+  assert.match(head, /return tagToggled\(selected, group\.tags\);/);
+  assert.match(head, /return tagToggled\(selected, \[tag\]\);/);
   assert.match(head, /api\("PATCH", "\/api\/plan", \{ tagSplit: \{ tags: next \} \}\)/);
-  // A key's count is stated whether it is partly or wholly selected, so a
-  // partly selected key never reads as an empty one.
-  assert.match(head, /tagGroupState\(group, selected\)/);
-  assert.match(head, /count\.textContent = state\.count \+ " of " \+ state\.total;/);
-  // The dropdown and the second chip row it replaced are gone, from the script
-  // and from the stylesheet both.
-  ["report-split__select", "Choose a key", "tagSplitSuggestions", "report-split__field"].forEach((old) => {
+  // The old dropdown and the ticks it became are gone, from the script and
+  // from the stylesheet both.
+  ["report-split__select", "Choose a key", "tagSplitSuggestions", "report-split__field",
+    "report-tags__label", "Split by"].forEach((old) => {
     assert.equal(APP.includes(old), false, "the old head is still there: " + old);
   });
   const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
-  assert.equal(STYLE.includes(".report-split"), false, "the old head's rules are still there");
+  [".report-split", ".report-tags__label", ".report-tags__group", ".report-tags__key",
+    ".report-tags__count", ".report-tags__tag", ".report-tags input"].forEach((old) => {
+    assert.equal(STYLE.includes(old), false, "the old head's rules are still there: " + old);
+  });
 });
 
-test("the tag list stays bounded, so a long one cannot push the table away", () => {
+test("a key's chip state is derived from its tags, and none is stored", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const head = functionSource(APP, "reportTagSplit");
+  assert.match(head, /tagKeyState\(group\.tags, selected\)/);
+  // All of them on, some of them on, none of them on - the three states the
+  // chip draws, in that order, off the key's own tags and nothing else.
+  assert.match(head, /state\.all \? "on" : state\.some \? "some" : "off"/);
+  // A tag chip is selected by the tag row's own set, which is the truth the
+  // key's state is read from.
+  assert.match(head, /selected\.indexOf\(tag\) !== -1 \? "on" : "off"/);
+  // No key state is ever written: the plan stores the tag set alone.
+  assert.equal(APP.includes("tagSplit: { key"), false, "a key is still written to the plan");
+});
+
+test("the TAGS column and the two chip rows are one chip, not two drawings", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const chip = functionSource(APP, "reportTagChip");
+  assert.ok(chip.length > 0, "reportTagChip is missing");
+  // The states ride on the one chip: data-state for the drawing, aria-pressed
+  // for the reading, so a chip's state is a property of the element rather than
+  // a second kind of chip with its own colour.
+  assert.match(chip, /chip\.setAttribute\("data-state", choice\.state\);/);
+  assert.match(chip, /chip\.setAttribute\("aria-pressed",/);
+  assert.match(chip, /choice\.state === "some" \? "mixed"/);
+  assert.match(chip, /choice \? el\("button", "report-tag report-tag--choice"\) : el\("span", "report-tag"\)/);
+  // A coloured tag carries its fill and its label ink; a tag without a colour
+  // sets neither, and the stylesheet's ink stands in.
+  assert.match(chip, /setProperty\("--tag-fill", activeColour\(slot\)\)/);
+  assert.match(chip, /setProperty\("--tag-ink", labelInkFor\(activeColour\(slot\)\)\)/);
+  // One drawing, two callers: the TAGS column and the head both build the chip
+  // through this function, and nothing else builds a `.report-tag`.
+  assert.match(functionSource(APP, "reportTagList"), /reportTagChip\(tag, slot\)/);
+  assert.match(functionSource(APP, "reportTagSplit"), /return reportTagChip\(tag, slot, \{/);
+  assert.equal((APP.match(/el\("span", "report-tag"\)/g) || []).length, 1,
+    "a second chip drawing is built beside reportTagChip");
+});
+
+test("the chip takes its width from its text in both places", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
-  const list = STYLE.match(/\.report-tags__list\s*\{([^}]*)\}/);
+  const tag = STYLE.match(/\.report-tag\s*\{([^}]*)\}/);
+  assert.ok(tag, "the chip has no rule of its own");
+  // A chip that cannot shrink keeps its own width: in the TAGS column it was
+  // being squeezed to the column and wrapping its label.
+  assert.match(tag[1], /flex: none;/);
+  assert.match(tag[1], /white-space: nowrap;/);
+  // One rule for the list of chips, which the TAGS column and both chip rows
+  // share. A second rule for the same class was what imposed the by-tag head's
+  // own layout on the column's chips and squeezed them; the head has a class of
+  // its own so the two cannot reach into each other.
+  assert.equal((STYLE.match(/^\.report-tags\s*\{/gm) || []).length, 1,
+    "the list of chips is styled more than once");
+  assert.match(STYLE, /\.report-taghead\s*\{/);
+  assert.match(functionSource(APP, "reportTagList"), /reportTagChip\(tag, slot\)/);
+  assert.match(functionSource(APP, "reportTagSplit"), /el\("div", "report-taghead"\)/);
+});
+
+test("the chip's filled, half and outline states are the element's own", () => {
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const on = STYLE.match(/\.report-tag--choice\[data-state="on"\]\s*\{([^}]*)\}/);
+  const some = STYLE.match(/\.report-tag--choice\[data-state="some"\]\s*\{([^}]*)\}/);
+  const off = STYLE.match(/\.report-tag--choice\s*\{([^}]*)\}/);
+  assert.ok(on, "a selected chip has no rule of its own");
+  assert.ok(some, "a half-selected chip has no rule of its own");
+  assert.ok(off, "the chip's resting state has no rule of its own");
+  // Selected fills with the tag's fill and takes the label ink from it.
+  assert.match(on[1], /background: var\(--tag-fill\);/);
+  assert.match(on[1], /color: var\(--tag-ink\);/);
+  assert.match(on[1], /border-color: var\(--tag-fill\);/);
+  // A tag with no colour has no fill set by the script, so the chip's own ink
+  // is the fill and the paper is the label: selection never needs a colour.
+  assert.match(off[1], /--tag-fill: var\(--ink\);/);
+  assert.match(off[1], /--tag-ink: var\(--canvas\);/);
+  // Half is half the fill mixed into the paper, not the outline's paper.
+  assert.match(some[1], /color-mix\(in srgb, var\(--tag-fill\) var\(--mix-half\), var\(--panel\)\)/);
+  assert.match(STYLE, /--mix-half:\s*[0-9.]+%;/);
+  assert.notEqual(on[1].replace(/\s+/g, " "), some[1].replace(/\s+/g, " "));
+});
+
+test("the chooser is capped at about three lines, and scrolls inside them", () => {
+  const STYLE = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const list = STYLE.match(/\.report-taghead__list\s*\{([^}]*)\}/);
   assert.ok(list, "the by-tag list has no rule of its own");
-  assert.match(list[1], /max-height:/);
+  assert.match(list[1], /max-height: var\(--chooser-h\);/);
   assert.match(list[1], /overflow-y: auto;/);
+  // The cap is a height in the tokens, not a share of the window: three chip
+  // lines is roughly 3rem of type at the chip's own scale, and it is stated
+  // once so the rows and the table below it cannot disagree.
+  const token = STYLE.match(/--chooser-h:\s*([0-9.]+)rem;/);
+  assert.ok(token, "the chooser's cap is not a rem token");
+  const px = Number(token[1]) * 16;
+  assert.ok(px >= 48 && px <= 72, "the chooser's cap is " + px + "px, not about three lines");
 });
 
 test("an empty selection says so, in the view's own words", () => {

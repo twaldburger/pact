@@ -5,8 +5,9 @@ import { projectMeasures, sortProjects } from "../public/lib/sort.mjs";
 import {
   reportBuckets,
   reportContent,
-  tagGroups,
-  tagGroupState,
+  tagChoices,
+  tagKeyGroups,
+  tagKeyState,
   tagSelection,
   tagSplitRows,
   tagToggled
@@ -477,57 +478,61 @@ test("nothing is selected until the owner ticks a tag", () => {
   assert.equal(report(plan).byTagSplit, null);
 });
 
-test("the tags offered group by key, the tags without one last", () => {
+test("the keys offered are the first row of chips, the keyless tags left to the second", () => {
   const plan = splitFixture();
-  const groups = tagGroups(plan);
-  assert.deepEqual(groups.map((g) => g.label), ["api", "No key"]);
-  assert.deepEqual(groups[0].tags, ["api:Solar", "api:Terra"]);
-  // Testing and QA belong to no key, and the absence Project's own tag is not
-  // offered: no absence contributes a day, so its tags are never rows.
-  assert.deepEqual(groups[1].tags, ["QA", "Testing"]);
-  assert.equal(groups[1].key, "");
-  // A plan whose tags all carry a key draws no untyped group at all.
-  const typed = fixture();
-  typed.projects = typed.projects.filter((p) => !p.absence);
-  typed.projects[0].tags = ["api:Solar"];
-  assert.deepEqual(tagGroups(typed).map((g) => g.label), ["api"]);
-  // Two keys list alphabetically, case insensitively, each tag alphabetical.
-  const both = typed;
+  const keys = tagKeyGroups(plan);
+  assert.deepEqual(keys.map((k) => k.key), ["api"]);
+  assert.deepEqual(keys[0].tags, ["api:Solar", "api:Terra"]);
+  // A tag belonging to no key is never a key of its own, and the keys' own row
+  // carries none of them: Testing and QA are chips in the tag row alone.
+  assert.equal(keys.some((k) => k.key === "" || k.key === "No key"), false);
+  // The tag row is every tag the view can draw a row for, alphabetical and case
+  // insensitive, keyless ones included; the absence Project's own tag is not
+  // offered, since no absence contributes a day.
+  assert.deepEqual(tagChoices(plan), ["api:Solar", "api:Terra", "QA", "Testing"]);
+  // Two keys list alphabetically, case insensitively, each key's tags
+  // alphabetical; and a plan whose tags all carry a key offers no other row.
+  const both = fixture();
+  both.projects = both.projects.filter((p) => !p.absence);
   both.projects[0].tags = ["Web:Site", "api:Terra", "api:Solar"];
-  assert.deepEqual(tagGroups(both).map((g) => g.label), ["api", "Web"]);
-  assert.deepEqual(tagGroups(both)[1].tags, ["Web:Site"]);
+  assert.deepEqual(tagKeyGroups(both).map((k) => k.key), ["api", "Web"]);
+  assert.deepEqual(tagKeyGroups(both)[1].tags, ["Web:Site"]);
+  assert.deepEqual(tagChoices(both), ["api:Solar", "api:Terra", "Web:Site"]);
 });
 
-test("a key's tick selects every tag under it, and clears them again", () => {
+test("a key's chip is derived from its tags: all of them, some of them, or none", () => {
   const plan = splitFixture();
-  const api = tagGroups(plan)[0];
-  const untyped = tagGroups(plan)[1];
-  // From nothing: the key's row ticks its whole set in one step and leaves
-  // every other group untouched.
-  assert.deepEqual(tagToggled([], api.tags), ["api:Solar", "api:Terra"]);
-  // From a partly selected key: the tick completes it.
-  assert.deepEqual(tagToggled(["api:Solar"], api.tags), ["api:Solar", "api:Terra"]);
-  // From a fully selected key: the tick clears every one of its tags and keeps
-  // a tag ticked under another group.
-  assert.deepEqual(tagToggled(["api:Solar", "api:Terra", "QA"], api.tags), ["QA"]);
-  // A single tag's own tick is the same rule over a list of one, so ticking a
-  // tag never disturbs the rest of the selection.
+  const api = tagKeyGroups(plan)[0].tags;
+  // None ticked: an empty key chip.
+  assert.deepEqual(tagKeyState(api, []), { count: 0, total: 2, all: false, some: false });
+  // Some of them: a half-filled key, which is neither empty nor full.
+  assert.deepEqual(tagKeyState(api, ["api:Solar"]), { count: 1, total: 2, all: false, some: true });
+  // All of them: a filled key. A tag ticked outside the key changes neither.
+  assert.deepEqual(tagKeyState(api, ["api:Solar", "api:Terra"]), { count: 2, total: 2, all: true, some: false });
+  assert.deepEqual(tagKeyState(api, ["api:Solar", "QA"]), { count: 1, total: 2, all: false, some: true });
+  assert.deepEqual(tagKeyState(api, ["QA", "Testing"]), { count: 0, total: 2, all: false, some: false });
+});
+
+test("a press on a partly filled key completes it, and on a full one clears it", () => {
+  const plan = splitFixture();
+  const api = tagKeyGroups(plan)[0].tags;
+  // From nothing: the key's chip ticks its whole set in one step and leaves
+  // every tag outside it alone.
+  assert.deepEqual(tagToggled([], api), ["api:Solar", "api:Terra"]);
+  // From a partly selected key: the press completes the set - the state the
+  // half-filled chip is offering - and keeps a tag ticked in the tag row.
+  assert.deepEqual(tagToggled(["api:Solar", "QA"], api), ["api:Solar", "QA", "api:Terra"]);
+  // From a fully selected key: the press clears every one of its tags and
+  // leaves the tag row's own selection standing.
+  assert.deepEqual(tagToggled(["api:Solar", "api:Terra", "QA"], api), ["QA"]);
+  // A tag's own chip is the same rule over a list of one, so its press never
+  // disturbs the rest of the selection.
   assert.deepEqual(tagToggled([], ["QA"]), ["QA"]);
   assert.deepEqual(tagToggled(["api:Solar", "QA"], ["QA"]), ["api:Solar"]);
-  assert.deepEqual(tagToggled(["QA"], untyped.tags), ["QA", "Testing"]);
-});
-
-test("a partly selected key states its count, and a full one says all of them", () => {
-  const plan = splitFixture();
-  const api = tagGroups(plan)[0];
-  assert.deepEqual(tagGroupState(api, []), { count: 0, total: 2, all: false });
-  // The count is the row's own statement: a partly selected key says two of
-  // three without being ticked, and the tick itself stays off rather than
-  // claiming the whole set.
-  assert.deepEqual(tagGroupState(api, ["api:Solar"]), { count: 1, total: 2, all: false });
-  assert.deepEqual(tagGroupState(api, ["api:Solar", "api:Terra"]), { count: 2, total: 2, all: true });
-  // A tag ticked from another group is not counted against this one.
-  assert.deepEqual(tagGroupState(api, ["api:Solar", "QA"]), { count: 1, total: 2, all: false });
+  assert.deepEqual(tagToggled(["QA"], ["Testing"]), ["QA", "Testing"]);
+  // A key's derived state after its own press: full from part, empty from full.
+  assert.equal(tagKeyState(api, tagToggled(["api:Solar"], api)).all, true);
+  assert.equal(tagKeyState(api, tagToggled(api, api)).count, 0);
 });
 
 test("the selected tags are the rows, and every other tag is Other tags", () => {
