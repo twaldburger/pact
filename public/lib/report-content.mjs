@@ -231,9 +231,6 @@ function planProjectTags(plan) {
   return out;
 }
 
-// The label the final group wears: the tags that belong to no key.
-const UNTYPED_LABEL = "No key";
-
 /*
  * What the plan's tag split stands for, as the set of tags the view's rows are.
  * The stored shape is that set, under `tags`.
@@ -266,35 +263,51 @@ export function tagSelection(plan) {
 }
 
 /*
- * The tags the by-tag view offers and how they group: one group per key the
- * plan's Project tags carry, alphabetical by key, then a final group for the
- * tags belonging to no key. Each group's tags are alphabetical too, case
- * insensitive, so a list is scanned rather than hunted through. This is the one
- * function that says what is offered, so a second tag source widens the list
- * here alone.
+ * The keys the by-tag view offers as its first row of chips: one entry per key
+ * the plan's Project tags carry, alphabetical by key, each key's tags
+ * alphabetical too, case insensitive, so a row of chips is scanned rather than
+ * hunted through. A tag carrying no key is no entry here - it is a chip in the
+ * second row alone, never a key of its own. This is the one function that says
+ * what a key is, so a second tag source widens the chips here alone.
  */
-export function tagGroups(plan) {
+export function tagKeyGroups(plan) {
   const byKind = new Map();
-  const untyped = [];
   planProjectTags(plan).forEach(function (tag) {
-    if (!isTypedTag(tag)) { untyped.push(tag); return; }
+    if (!isTypedTag(tag)) return;
     const kind = tagKind(tag);
     if (!byKind.has(kind)) byKind.set(kind, []);
     byKind.get(kind).push(tag);
   });
-  const groups = Array.from(byKind.keys()).sort(compareTagText).map(function (kind) {
-    return { key: kind, label: kind, tags: sortedTags(byKind.get(kind)) };
+  return Array.from(byKind.keys()).sort(compareTagText).map(function (kind) {
+    return { key: kind, tags: sortedTags(byKind.get(kind)) };
   });
-  if (untyped.length > 0) groups.push({ key: "", label: UNTYPED_LABEL, tags: sortedTags(untyped) });
-  return groups;
 }
 
-// A group read against the selection: how many of its tags are ticked, and
-// whether that is all of them - the count and the tick a key's own row shows.
-export function tagGroupState(group, selected) {
+/*
+ * Every tag the by-tag view offers, as its second row of chips: all the Project
+ * tags the report can draw a row for, keyless ones included, alphabetical and
+ * case insensitive. This row is the truth - a key's chip is read off it rather
+ * than the other way round - so the two rows cannot disagree.
+ */
+export function tagChoices(plan) {
+  return sortedTags(planProjectTags(plan));
+}
+
+/*
+ * A key's tags read against the selection: how many of them are ticked, and
+ * whether that is all, some or none of them. A key's chip has no state of its
+ * own, so its three states are these three readings and nothing else.
+ */
+export function tagKeyState(tags, selected) {
   const ticks = new Set(Array.isArray(selected) ? selected : []);
-  const count = group.tags.filter(function (tag) { return ticks.has(tag); }).length;
-  return { count: count, total: group.tags.length, all: count > 0 && count === group.tags.length };
+  const list = Array.isArray(tags) ? tags : [];
+  const count = list.filter(function (tag) { return ticks.has(tag); }).length;
+  return {
+    count: count,
+    total: list.length,
+    all: count > 0 && count === list.length,
+    some: count > 0 && count < list.length
+  };
 }
 
 /*

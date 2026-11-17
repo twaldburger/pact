@@ -32,7 +32,7 @@ import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
-import { reportContent, tagGroups, tagGroupState, tagSelection, tagToggled } from "./lib/report-content.mjs";
+import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
 import { REPORT_VIEWS, REPORT_VIEW_DEFAULT, normalizeReportView, reportViewLabel } from "./lib/report-views.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
@@ -3482,10 +3482,30 @@ function reportNameCell(name, slot) {
 }
 
 // One tag, drawn as a chip in the project's tag list. Its own colour slot is
-// the colour-by-key feature's, and a tag without one is left plain.
-function reportTagChip(tag, slot) {
-  var chip = el("span", "report-tag");
-  if (Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT) {
+// the colour-by-key feature's, and a tag without one is left plain. The TAGS
+// column and the by-tag view's two rows draw this one chip: given a choice it
+// is a toggle instead of a plain mark, and its state rides on the element as a
+// whole - `data-state` for the drawing, `aria-pressed` for everything else - so
+// full, half and empty are read off the chip rather than off its colour. A
+// selected chip fills with the tag's own colour and takes its label ink from
+// that fill the way a block does; a tag with no colour sets no fill, and the
+// stylesheet's own ink stands in, so a selection never depends on a colour
+// having been set.
+function reportTagChip(tag, slot, choice) {
+  var coloured = Number.isInteger(slot) && slot >= 0 && slot < SLOT_COUNT;
+  var chip = choice ? el("button", "report-tag report-tag--choice") : el("span", "report-tag");
+  if (choice) {
+    chip.type = "button";
+    chip.setAttribute("data-state", choice.state);
+    chip.setAttribute("aria-pressed", choice.state === "on" ? "true" : choice.state === "some" ? "mixed" : "false");
+    if (choice.name) chip.setAttribute("aria-label", choice.name);
+    if (coloured) {
+      chip.style.setProperty("--tag-fill", activeColour(slot));
+      chip.style.setProperty("--tag-ink", labelInkFor(activeColour(slot)));
+    }
+    chip.addEventListener("click", choice.onClick);
+  }
+  if (coloured) {
     var swatch = el("span", "report-tag__swatch");
     swatch.style.background = activeColour(slot);
     chip.appendChild(swatch);
@@ -3943,29 +3963,31 @@ function reportAllocationPersonSection(model) {
   return section;
 }
 
-/* The by-tag view's head: which tags its rows are. One row per tag key - a
- * count of how many of its tags are ticked, and a tick that selects or clears
- * all of them - then that key's tags as tickable chips, then the tags belonging
- * to no key. Every tick is the same write: the whole set of tags replaces the
- * plan's, so the choice travels with the plan and resumes after a reload - one
- * write to /api/plan, one undo step, exactly as the holidays and the tag
- * colours are set. Nothing is ticked until the owner ticks it: no stored
- * selection means no table, rather than a guess at a taxonomy. */
+/* The by-tag view's head: which tags its rows are, as two flat rows of chips.
+ * The first row is every key the plan's tags carry, the second every tag the
+ * view can draw a row for, keyless ones included. Both are multi-select and
+ * both start empty. A tag's own chip is the truth; a key's chip is derived from
+ * its tags - on when all of them are on, half-filled when only some are - so
+ * the two rows cannot disagree. A press on a partly selected key completes its
+ * set and a press on a full one clears it, which is the one rule the tag chips
+ * already follow over a list of one. Every press is the same write: the whole
+ * set of tags replaces the plan's, so the choice travels with the plan and
+ * resumes after a reload - one write to /api/plan, one undo step, exactly as
+ * the holidays and the tag colours are set. Nothing is ticked until the owner
+ * ticks it: no stored selection means no table, rather than a guess at a
+ * taxonomy. */
 function reportTagSplit() {
   var selected = tagSelection(data);
-  var head = el("div", "report-tags");
-  var label = el("span", "report-tags__label");
-  label.textContent = "Split by";
-  head.appendChild(label);
+  var head = el("div", "report-taghead");
 
-  // The list is bounded and scrolls: a plan with many tags makes it tall, and
-  // the table below has to stay on screen.
-  var list = el("div", "report-tags__list");
+  // The chips live in one bounded, scrolling list: a plan with many tags makes
+  // the tag row tall, and the table below has to stay exactly where it is.
+  var list = el("div", "report-taghead__list");
   list.setAttribute("role", "group");
   list.setAttribute("aria-label", "The tags the rows are");
   head.appendChild(list);
 
-  // Created last so a refusal reads under the ticks it belongs to, the way a
+  // Created last so a refusal reads under the chips it belongs to, the way a
   // panel's refusal reads under its form.
   var error = errorLine(head);
 
@@ -3982,54 +4004,40 @@ function reportTagSplit() {
       });
   }
 
-  // A tick wearing the form's own checkbox: one control treatment for the whole
-  // app, and part checked where a key holds some of its tags rather than all.
-  function tick(checked, indeterminate, name, onToggle) {
-    var box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = checked;
-    box.indeterminate = indeterminate;
-    box.setAttribute("aria-label", name);
-    box.addEventListener("change", onToggle);
-    return box;
+  // Both rows are the TAGS column's chip, given a state and a press. A key
+  // carries no colour of its own - the colours belong to its tags - so its fill
+  // is the app's own ink.
+  function choice(tag, slot, on, name, onPress) {
+    return reportTagChip(tag, slot, {
+      state: on,
+      name: name,
+      onClick: function () { save(onPress()); }
+    });
   }
 
-  tagGroups(data).forEach(function (group) {
-    var state = tagGroupState(group, selected);
-    var row = el("div", "report-tags__group");
-
-    var keyRow = el("div", "report-tags__key");
-    var keyLabel = el("label", "report-tags__keyname");
-    keyLabel.appendChild(tick(state.all, state.count > 0 && !state.all,
-      "Select or clear all " + group.label + " tags", function () {
-        save(tagToggled(selected, group.tags));
-      }));
-    var keyName = el("span");
-    keyName.textContent = group.label;
-    keyLabel.appendChild(keyName);
-    keyRow.appendChild(keyLabel);
-    // The count sits outside the tick's label so the tick is still named by the
-    // key alone, and it states a partly selected key as plainly as a full one.
-    var count = el("span", "report-tags__count");
-    count.textContent = state.count + " of " + state.total;
-    keyRow.appendChild(count);
-    row.appendChild(keyRow);
-
-    var chips = el("div", "chips");
-    group.tags.forEach(function (tag) {
-      var chip = el("label", "chip report-tags__tag");
-      chip.appendChild(tick(selected.indexOf(tag) !== -1, false,
-        "Split the rows by " + tag, function () {
-          save(tagToggled(selected, [tag]));
-        }));
-      var text = el("span", "chip__text");
-      text.textContent = tag;
-      chip.appendChild(text);
-      chips.appendChild(chip);
+  var keys = tagKeyGroups(data);
+  if (keys.length > 0) {
+    var keysRow = el("div", "report-tags report-tags--keys");
+    keys.forEach(function (group) {
+      var state = tagKeyState(group.tags, selected);
+      keysRow.appendChild(choice(group.key, null,
+        state.all ? "on" : state.some ? "some" : "off",
+        "Select or clear all " + group.key + " tags",
+        function () { return tagToggled(selected, group.tags); }));
     });
-    row.appendChild(chips);
-    list.appendChild(row);
-  });
+    list.appendChild(keysRow);
+  }
+
+  var tags = tagChoices(data);
+  if (tags.length > 0) {
+    var tagsRow = el("div", "report-tags report-tags--tags");
+    tags.forEach(function (tag) {
+      var slot = Object.prototype.hasOwnProperty.call(tagSlotMap, tag) ? tagSlotMap[tag] : null;
+      tagsRow.appendChild(choice(tag, slot, selected.indexOf(tag) !== -1 ? "on" : "off",
+        null, function () { return tagToggled(selected, [tag]); }));
+    });
+    list.appendChild(tagsRow);
+  }
 
   return head;
 }
@@ -4045,7 +4053,8 @@ function reportTagSection(model) {
     ]);
   var split = model.byTagSplit;
   var section = reportSection(reportViewLabel("by-tag"),
-    "Each project's days are split between its tags, so the totals fit the plan.");
+    "The rows are the tags you tick; ticking a key ticks all of its tags at once, " +
+    "and the tags you leave out are gathered under Other tags.");
   section.appendChild(reportTagSplit());
 
   if (!split) {
