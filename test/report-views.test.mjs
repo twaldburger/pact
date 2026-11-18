@@ -8,13 +8,14 @@ import {
   reportViewLabel
 } from "../public/lib/report-views.mjs";
 
-/* --- the six views ------------------------------------------------------- */
+/* --- the seven views ----------------------------------------------------- */
 
-test("a report has six views, in the panel's order, with the names the owner chose", () => {
+test("a report has seven views, in the panel's order, with the names the owner chose", () => {
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.label), [
     "FTE-days by project",
     "FTE-days by person",
     "FTE-days by tag",
+    "Allocation by project",
     "Allocation by person",
     "Allocation by tag",
     "Allocation against capacity"
@@ -23,27 +24,32 @@ test("a report has six views, in the panel's order, with the names the owner cho
     "by-project",
     "by-person",
     "by-tag",
+    "allocation-by-project",
     "allocation-by-person",
     "allocation-by-tag",
     "allocation"
   ]);
 });
 
-test("the views are grouped by what they measure, with the removed view's gap closed", () => {
+test("the views are grouped by measure, each group naming project, person, tag", () => {
   const index = (key) => REPORT_VIEWS.findIndex((entry) => entry.key === key);
   // The three FTE-days views first, in project, person, tag order...
   assert.deepEqual(REPORT_VIEWS.slice(0, 3).map((entry) => entry.key),
     ["by-project", "by-person", "by-tag"]);
-  // ...then the two Allocation views that exist, in the same order...
-  assert.deepEqual(REPORT_VIEWS.slice(3, 5).map((entry) => entry.key),
-    ["allocation-by-person", "allocation-by-tag"]);
+  // ...then the three Allocation views, opening on the same subject...
+  assert.deepEqual(REPORT_VIEWS.slice(3, 6).map((entry) => entry.key),
+    ["allocation-by-project", "allocation-by-person", "allocation-by-tag"]);
   // ...and Allocation against capacity last.
   assert.equal(REPORT_VIEWS[REPORT_VIEWS.length - 1].key, "allocation");
-  // Every FTE-days view precedes every Allocation view, and the removed view
-  // leaves no gap behind it in either list.
-  assert.ok(index("by-tag") < index("allocation-by-person"));
+  // Every FTE-days view precedes every Allocation view, and each group's order
+  // is the other's, so the two readings of one subject sit at the same distance
+  // apart in both.
+  ["project", "person", "tag"].forEach((subject) => {
+    assert.ok(index("by-" + subject) < index("allocation-by-" + subject), subject);
+  });
+  assert.ok(index("by-tag") < index("allocation-by-project"));
   assert.ok(index("allocation-by-tag") < index("allocation"));
-  assert.equal(REPORT_VIEWS.length, 6);
+  assert.equal(REPORT_VIEWS.length, 7);
 });
 
 test("every name says what the view shows, and no two say the same thing", () => {

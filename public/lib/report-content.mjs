@@ -16,6 +16,11 @@
  *     Total row. Each row carries its FTE-days as a share of the report total.
  *   - The by-person table carries the person's offered FTE-days beside the
  *     work, so the percentage of what they offer is readable.
+ *   - Allocation by project is the same one-denominator reading of the project
+ *     matrix: each project's FTE-days against the capacity the plan offers in
+ *     that bucket, and its days over the plan period against the whole offer.
+ *     Every row divides by the same figure, so the rows add up to the plan's
+ *     own utilisation - the figure the allocation chart plots.
  *   - Allocation by person reads that matrix as a share of what each person
  *     offers in the same stretch, so 100% is that person's own ceiling. A
  *     bucket they offer nothing in has no share at all, and reads as null.
@@ -571,6 +576,34 @@ export function reportContent(view, plan, options) {
     return capacityBuckets[i] > 0 ? value / capacityBuckets[i] : null;
   }
 
+  // --- allocation by project: each project over the plan's whole capacity ----
+  //
+  // Each project's own FTE-days read as a share of what the whole plan offers in
+  // the same bucket, and of everything it offers over the period in the Total
+  // column. One denominator for every row, as the tag view has it, so the rows
+  // add up to the plan's own utilisation rather than to 100%. The over-100%
+  // mark is carried even though a single project only reaches it by occupying
+  // more than the whole team together. A bucket the plan offers nothing in has
+  // no share to state, and is null.
+  const allocationByProject = {
+    rows: projectRows.map(function (r) {
+      return {
+        id: r.id,
+        name: r.name,
+        colour: r.colour,
+        cells: r.cells.map(shareOfCapacity),
+        total: offeredTotal > 0 ? r.total / offeredTotal : null
+      };
+    }),
+    // The plan's overall utilisation: the project pivot's own total over the
+    // capacity the plan offers, which is what the rows add up to and the figure
+    // the allocation chart plots.
+    total: {
+      cells: projectBuckets.map(shareOfCapacity),
+      total: offeredTotal > 0 ? planTotal / offeredTotal : null
+    }
+  };
+
   // --- allocation by person: each person's FTE-days over what they offer -----
   //
   // The by-person matrix read as shares: one denominator throughout, the same
@@ -653,6 +686,9 @@ export function reportContent(view, plan, options) {
       rows: personRows,
       total: byPersonTotal
     },
+    // Each project as a share of the capacity the plan offers, the same reading
+    // its person and tag counterparts carry.
+    allocationByProject: allocationByProject,
     allocationByPerson: {
       rows: allocationRows,
       // Everything allocated over everything offered, per bucket and over the

@@ -123,6 +123,7 @@ test("absences contribute no FTE-days to any pivot or chart", () => {
   const f = report(plan);
   // The absence Project is no row, and no tag on it becomes one.
   assert.equal(f.byProject.rows.some((r) => r.id === "leave"), false);
+  assert.equal(f.allocationByProject.rows.some((r) => r.id === "leave"), false);
   assert.equal(f.byTag.rows.some((r) => r.tag === "Absence" || r.label === "Annual Leave"), false);
   // And no bucket in the chart counts it.
   near(f.planTotal, 17);
@@ -434,6 +435,124 @@ test("the view keeps the rail's order and the Filter's narrowing", () => {
   // The filtered view still offers what the whole plan says a person offers,
   // because the offer is the Person's own.
   near(narrowed.allocationByPerson.rows[1].cells[0], 0.5);
+});
+
+/* --- allocation by project: the project matrix over the plan's capacity ---- */
+
+/*
+ * The same two months read by project instead of by tag. January offers 33
+ * FTE-days and February 30, 63 over the period.
+ *   - Atlas carries all of January's 22 FTE-days: two thirds of the capacity
+ *     offered that month, and 22 of the plan's 63 over the period.
+ *   - Borealis carries February's 20: two thirds of that month and 20 of 63.
+ */
+test("a project's cell is its FTE-days over the capacity the plan offers in that bucket", () => {
+  const plan = tagCapacityFixture();
+  const f = spread(plan);
+  assert.equal(f.buckets.map((b) => b.key).join(","), "2026-01,2026-02");
+  near(f.offeredTotal, 63);
+  assert.deepEqual(f.allocationByProject.rows.map((r) => r.name), ["Atlas", "Borealis"]);
+  const atlas = f.allocationByProject.rows[0];
+  const borealis = f.allocationByProject.rows[1];
+  near(atlas.cells[0], 22 / 33);
+  near(atlas.cells[1], 0);
+  near(borealis.cells[0], 0);
+  near(borealis.cells[1], 20 / 30);
+  // The Total column is the period's share - a project's days over everything
+  // the plan offers - not the sum of the two cells.
+  near(atlas.total, 22 / 63);
+  near(borealis.total, 20 / 63);
+  // Every figure is the by-project row's own FTE-days over the capacity the
+  // people offer in the same bucket, not a second computation.
+  f.allocationByProject.rows.forEach((row, i) => {
+    const days = f.byProject.rows[i];
+    assert.equal(row.cells.length, f.buckets.length);
+    row.cells.forEach((cell, b) => near(cell, days.cells[b] / offeredIn(f, b)));
+    near(row.total, days.total / f.offeredTotal);
+  });
+});
+
+test("the project rows add up to the plan's own utilisation, as the chart plots it", () => {
+  const plan = tagCapacityFixture();
+  const f = spread(plan);
+  const total = f.allocationByProject.total;
+  // January: 22 FTE-days over the 33 offered. February: 20 over 30. Over the
+  // period, 42 of 63 - the plan's overall utilisation.
+  near(total.cells[0], 22 / 33);
+  near(total.cells[1], 20 / 30);
+  near(total.total, 42 / 63);
+  near(total.total, f.planTotal / f.offeredTotal);
+  f.buckets.forEach((_, b) => {
+    // Percentages of one denominator add, so the rows reconcile with the row
+    // they sit under rather than with 100%.
+    near(f.allocationByProject.rows.reduce((s, r) => s + r.cells[b], 0), total.cells[b]);
+    // And the total row is the figure the allocation chart plots.
+    near(total.cells[b], f.chart[b].alloc / f.chart[b].capacity);
+  });
+  near(f.allocationByProject.rows.reduce((s, r) => s + r.total, 0), total.total);
+  // One plan, one utilisation: the person and the tag readings of the same
+  // figure, and the by-person total's own percentage, all agree.
+  near(total.total, f.allocationByPerson.total.total);
+  near(total.total, f.allocationByTag.total.total);
+  near(total.total, f.byPerson.total.pct);
+});
+
+test("a project carrying more than the whole plan offers reads over 100%", () => {
+  const plan = {
+    range: { start: "2026-01-01", end: "2026-01-31" },
+    people: [{ id: "anna", name: "Anna", availability: 100, tags: [] }],
+    projects: [{ id: "atlas", name: "Atlas", colour: 0, tags: [] }],
+    assignments: [
+      { id: "a1", projectId: "atlas", personId: "anna", start: "2026-01-01", end: "2026-01-31", share: 150, tags: [] }
+    ]
+  };
+  const f = spread(plan);
+  // 33 FTE-days over the 22 the one person offers: the project occupies half
+  // again as much as the whole team together, in its cell, its Total and the
+  // plan's own utilisation alike. Rare by construction, but carried all the
+  // same, so the mark is the view's rule rather than a figure's accident.
+  near(f.allocationByProject.rows[0].cells[0], 1.5);
+  near(f.allocationByProject.rows[0].total, 1.5);
+  near(f.allocationByProject.total.cells[0], 1.5);
+  near(f.allocationByProject.total.total, 1.5);
+  // Drawn as the whole 150% the app prints, past the 100% mark.
+  assert.equal(Math.round(f.allocationByProject.rows[0].cells[0] * 100), 150);
+});
+
+test("a bucket the plan offers nothing in shows a project no share", () => {
+  const plan = tagCapacityFixture();
+  // At Day zoom a Saturday offers no working day at all, so there is nothing to
+  // divide by: every project cell there is null, which the report draws as its
+  // missing figure.
+  const f = spread(plan, { zoom: "day" });
+  const saturday = f.buckets.findIndex((b) => b.key === "2026-01-03");
+  assert.notEqual(saturday, -1, "the fixture has a Saturday in it");
+  near(offeredIn(f, saturday), 0);
+  assert.equal(f.allocationByProject.rows[0].cells[saturday], null);
+  assert.equal(f.allocationByProject.total.cells[saturday], null);
+  // And nothing anywhere reads as Infinity or NaN.
+  const all = f.allocationByProject.rows.flatMap((r) => r.cells.concat([r.total]))
+    .concat(f.allocationByProject.total.cells, [f.allocationByProject.total.total]);
+  all.forEach((cell) => assert.ok(cell === null || Number.isFinite(cell), String(cell)));
+});
+
+test("the project rows keep the rail's order and the Filter's narrowing", () => {
+  const plan = tagCapacityFixture();
+  const view = wholeView(plan);
+  view.projects = plan.projects.slice().reverse();
+  const f = reportContent(view, plan, { zoom: "month" });
+  assert.deepEqual(f.allocationByProject.rows.map((r) => r.id), ["borealis", "atlas"]);
+  // The Filter hides Borealis: Atlas's own share is unchanged, because the
+  // denominator is what the people offer rather than what the rows add up to.
+  view.projects = plan.projects.filter((p) => p.id !== "borealis");
+  view.assignments = plan.assignments.filter((a) => a.projectId !== "borealis");
+  const narrowed = reportContent(view, plan, { zoom: "month" });
+  assert.deepEqual(narrowed.allocationByProject.rows.map((r) => r.id), ["atlas"]);
+  near(narrowed.allocationByProject.rows[0].cells[0], 22 / 33);
+  near(narrowed.allocationByProject.rows[0].cells[1], 0);
+  near(narrowed.allocationByProject.total.cells[0], 22 / 33);
+  near(narrowed.allocationByProject.total.cells[1], 0);
+  near(narrowed.allocationByProject.rows[0].total, narrowed.planTotal / narrowed.offeredTotal);
 });
 
 /* --- the tags the by-tag view splits by (issues #168 and #173) ------------ */

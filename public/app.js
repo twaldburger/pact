@@ -218,7 +218,7 @@ var zoomButtons = [];
 // on load. Separate, so moving the grid to Day never turns the report into
 // 365 columns; the four levels are the report's time buckets.
 var reportZoom = ZOOM_DEFAULT;
-// Which of the report's six views is showing, as the left panel's selection.
+// Which of the report's seven views is showing, as the left panel's selection.
 // One of the view settings kept in the config and restored on load; the report
 // draws this view alone. Never written to the plan.
 var reportView = REPORT_VIEW_DEFAULT;
@@ -3706,12 +3706,12 @@ function reportLegend(items) {
 
 /* --- the report page ----------------------------------------------------- */
 
-/* The report's own content: one of its six views at a time, from the plan the
+/* The report's own content: one of its seven views at a time, from the plan the
  * Filter and the rail's sort leave. The figures come from
  * public/lib/report-content.mjs, which reads the app's own working-day rule, so
  * the report and the grid agree by construction. The one thing the report
  * writes is the by-tag view's own split, which is the owner's choice stored in
- * the plan like the holidays. The rail is drawn beside it and lists those six
+ * the plan like the holidays. The rail is drawn beside it and lists those seven
  * views - the plan's own panel, folded by the same control and remembering the
  * same collapsed state. */
 function renderReport() {
@@ -3806,7 +3806,7 @@ function reportBucketWord() {
   return reportBucketLabel(reportZoom).toLowerCase();
 }
 
-/* --- the six views ------------------------------------------------------- */
+/* --- the seven views ----------------------------------------------------- */
 
 // The view the selection names. Each builder draws one section under the panel
 // entry's own label, so the panel and the content can never say different
@@ -3814,6 +3814,7 @@ function reportBucketWord() {
 function reportViewSection(model) {
   if (reportView === "by-person") return reportPersonSection(model);
   if (reportView === "by-tag") return reportTagSection(model);
+  if (reportView === "allocation-by-project") return reportAllocationProjectSection(model);
   if (reportView === "allocation-by-person") return reportAllocationPersonSection(model);
   if (reportView === "allocation-by-tag") return reportAllocationTagSection(model);
   if (reportView === "allocation") return reportAllocationSection(model);
@@ -3890,6 +3891,39 @@ function reportPersonSection(model) {
   rows.push({ cells: totalCells, cls: "report-row--total" });
   var section = reportSection(reportViewLabel("by-person"),
     "Of offer is against each person's own availability, so someone at 80% can reach 100%.");
+  section.appendChild(reportTable(headers, rows));
+  section.appendChild(reportAbsencesNote());
+  return section;
+}
+
+// Allocation by project: each project's FTE-days as a share of the capacity the
+// whole plan offers in the same bucket, and of everything it offers over the
+// period in the Total column. The same table as Allocation by tag with a project
+// in place of a tag: one denominator for every row, so the rows add up to the
+// plan's own utilisation - the Total row they sit under - rather than to 100%,
+// and no second percentage column sits beside it. Above 100% is a project
+// occupying more than the whole team together, marked as the person view marks
+// it; a project rarely reaches that, but the mark is the view's rule and not a
+// figure's accident.
+function reportAllocationProjectSection(model) {
+  var headers = [{ text: "Project", cls: "report-table__name" }]
+    .concat(reportBucketHeaders(model))
+    .concat([{ text: "Total", cls: REPORT_TOTAL_COL }]);
+  var rows = model.allocationByProject.rows.map(function (r) {
+    // Marked with the project's own palette colour, as the by-project table
+    // marks it, so the two readings of a project name it the same way.
+    var cells = [{ node: reportNameCell(r.name, r.colour), cls: "report-table__name" }];
+    r.cells.forEach(function (v) { cells.push(reportShareCell(v)); });
+    cells.push(reportShareCell(r.total, true));
+    return { cells: cells };
+  });
+  var totalCells = [{ text: "Total", cls: "report-table__name" }];
+  model.allocationByProject.total.cells.forEach(function (v) { totalCells.push(reportShareCell(v)); });
+  totalCells.push(reportShareCell(model.allocationByProject.total.total, true));
+  rows.push({ cells: totalCells, cls: "report-row--total" });
+  var section = reportSection(reportViewLabel("allocation-by-project"),
+    "Each project's FTE-days as a share of the capacity the plan offers in the " +
+    "same stretch of time; above 100% is over-allocation.");
   section.appendChild(reportTable(headers, rows));
   section.appendChild(reportAbsencesNote());
   return section;
