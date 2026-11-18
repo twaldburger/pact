@@ -148,7 +148,7 @@ function reportRenderSource() {
   return start >= 0 && end > start ? app.slice(start, end) : "";
 }
 
-test("the panel lists the six views and marks the one showing", () => {
+test("the panel lists the seven views and marks the one showing", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const nav = APP.slice(APP.indexOf("function drawReportNav() {"),
     APP.indexOf("function selectReportView("));
@@ -221,7 +221,7 @@ test("one view is drawn at a time, and the selection decides which", () => {
   const chooser = APP.slice(APP.indexOf("function reportViewSection(model) {"),
     APP.indexOf("// The bucket headings every matrix shares"));
   assert.ok(chooser.length > 0, "reportViewSection is missing");
-  ["by-person", "by-tag", "allocation-by-person", "allocation-by-tag",
+  ["by-person", "by-tag", "allocation-by-project", "allocation-by-person", "allocation-by-tag",
     "allocation"].forEach((key) => {
     assert.match(chooser, new RegExp(`reportView === "${key}"`), key + " has no section");
   });
@@ -253,6 +253,9 @@ test("each view's heading carries its own sentence, in the owner's words", () =>
       '"A project with two tags has its FTE-days split between them.")',
     byPerson: 'reportSection(reportViewLabel("by-person"), ' +
       '"Of offer is against each person\'s own availability, so someone at 80% can reach 100%.")',
+    allocationByProject: 'reportSection(reportViewLabel("allocation-by-project"), ' +
+      '"Each project\'s FTE-days as a share of the capacity the plan offers in the " + ' +
+      '"same stretch of time; above 100% is over-allocation.")',
     allocationByPerson: 'reportSection(reportViewLabel("allocation-by-person"), ' +
       '"Each person\'s FTE-days as a share of what they offer in the same stretch of time; ' +
       'above 100% is over-allocation.")',
@@ -275,14 +278,15 @@ test("each view's heading carries its own sentence, in the owner's words", () =>
 
 test("the line under the content says absences are left out, in every view", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
-  // One line, defined once, so the six views cannot drift apart on it.
+  // One line, defined once, so the seven views cannot drift apart on it.
   assert.equal((APP.match(/"Absences are left out\."/g) || []).length, 1,
     "the absences line is defined more than once or not at all");
-  // Appended where each view builds its body: the five tables, and the one
-  // chart's card. Below that body, never between it and the heading.
+  // Appended where each view builds its content: the six tables, and the chart
+  // card. Below that content, never between it and the heading.
   const body = {
     reportProjectSection: "reportTable(headers, rows)",
     reportPersonSection: "reportTable(headers, rows)",
+    reportAllocationProjectSection: "reportTable(headers, rows)",
     reportAllocationPersonSection: "reportTable(headers, rows)",
     reportTagSection: "reportTable(headers, rows)",
     reportAllocationTagSection: "reportTable(headers, rows)",
@@ -295,7 +299,7 @@ test("the line under the content says absences are left out, in every view", () 
     assert.ok(source.lastIndexOf("reportAbsencesNote()") > source.indexOf(body[name]),
       name + " puts the absences line above its content");
   });
-  assert.equal((APP.match(/section\.appendChild\(reportAbsencesNote\(\)\);/g) || []).length, 6,
+  assert.equal((APP.match(/section\.appendChild\(reportAbsencesNote\(\)\);/g) || []).length, 7,
     "a view appends the absences line twice, or one does not append it");
   // The line wears the sub line's quiet treatment rather than the browser's
   // default paragraph, and the sub keeps its own class for its own place.
@@ -381,22 +385,23 @@ test("all three tables head their share column Of plan", () => {
   assert.equal((APP.match(/"Of offer"/g) || []).length, 1, "Of offer appears outside the one head");
 });
 
-test("all four tables head their total column Total", () => {
+test("all six tables head their total column Total", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   // The owner's consistency pass: the by-person table named the unit where the
   // other two name the figure, so every copy of the old head is gone.
   assert.equal(APP.includes('{ text: "FTE-days", cls: REPORT_TOTAL_COL }'), false,
     "the by-person table still heads its total column with the unit");
   const tables = ["reportProjectSection", "reportPersonSection",
-    "reportAllocationPersonSection", "reportTagSection", "reportAllocationTagSection"];
+    "reportAllocationProjectSection", "reportAllocationPersonSection", "reportTagSection",
+    "reportAllocationTagSection"];
   tables.forEach((name) => {
     const pivot = functionSource(APP, name);
     assert.ok(pivot.length > 0, name + " is missing");
     assert.equal((pivot.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 1,
       name + " does not head its total column Total");
   });
-  // Five tables, five heads: no sixth table and no drift back to the unit.
-  assert.equal((APP.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 5);
+  // Six tables, six heads: no seventh table and no drift back to the unit.
+  assert.equal((APP.match(/\{ text: "Total", cls: REPORT_TOTAL_COL \}/g) || []).length, 6);
 });
 
 /* --- the by-tag head is two rows of chips (issue #175) -------------------- */
@@ -624,6 +629,48 @@ test("a bucket a person offers nothing in reads as the report's missing figure",
   assert.ok(cell.indexOf('text: "-"') < cell.indexOf("Math.round"), "the dash is decided after the rounding");
   // One missing figure in the report, not a second convention beside it.
   assert.match(APP, /function reportFigure\(value\) \{\n  if \(!isFinite\(value\)\) return "-";/);
+});
+
+/* --- allocation by project (issue #169) ---------------------------------- */
+
+test("the allocation-by-project table heads the buckets and Total, and no Of plan", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const table = functionSource(APP, "reportAllocationProjectSection");
+  assert.ok(table.length > 0, "reportAllocationProjectSection is missing");
+  const heads = table.match(/var headers = \[[\s\S]*?\n  var rows/);
+  assert.ok(heads, "the allocation-by-project table has no headers");
+  const head = heads[0];
+  // Project, the buckets, Total: the same table as the tag view with a project
+  // where a tag was, so Of plan - a share of delivered work - stays out of it.
+  assert.match(head, /\{ text: "Project", cls: "report-table__name" \}/);
+  assert.match(head, /\.concat\(reportBucketHeaders\(model\)\)/);
+  assert.match(head, /\{ text: "Total", cls: REPORT_TOTAL_COL \}/);
+  assert.equal((head.match(/\{ text: "([^"]*)"/g) || []).length, 2,
+    "the allocation-by-project table heads a column the rule does not name");
+  assert.doesNotMatch(table, /Of plan|Of offer|reportPercent/);
+  // Three tables head Of plan, unchanged: this view adds no fourth copy.
+  assert.equal((APP.match(/\{ text: "Of plan", cls: "report-table__num" \}/g) || []).length, 3);
+});
+
+test("a project's share wears the cell, the colour mark and the total its siblings do", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const table = functionSource(APP, "reportAllocationProjectSection");
+  assert.ok(table.length > 0, "reportAllocationProjectSection is missing");
+  // The very cell the person and tag views draw, in all four places a figure
+  // lands: the same whole-percentage rounding, the same signal mark past 100%,
+  // the same dash where the plan offers nothing. No second share style.
+  assert.equal((table.match(/reportShareCell\(/g) || []).length, 4,
+    "a project's figure is drawn by some other rule");
+  assert.match(table, /r\.cells\.forEach\(function \(v\) \{ cells\.push\(reportShareCell\(v\)\); \}\);/);
+  assert.match(table, /cells\.push\(reportShareCell\(r\.total, true\)\);/);
+  assert.match(table,
+    /model\.allocationByProject\.total\.cells\.forEach\(function \(v\) \{ totalCells\.push\(reportShareCell\(v\)\); \}\);/);
+  assert.match(table, /totalCells\.push\(reportShareCell\(model\.allocationByProject\.total\.total, true\)\);/);
+  // A project is marked as the by-project table marks it: its own palette
+  // colour, not a tag slot and not a person's resolved one.
+  assert.match(table, /reportNameCell\(r\.name, r\.colour\)/);
+  // And it draws no tag chooser: the rows are the projects, not a selection.
+  assert.doesNotMatch(table, /reportTagSplit|reportNothingSelected/);
 });
 
 /* --- allocation by tag (issue #170) --------------------------------------- */
