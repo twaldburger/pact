@@ -1158,8 +1158,8 @@ h1, h2, h3, p { margin: 0; }
   padding-right: var(--sp-2);
 }
 
-/* The two charts: hand-drawn SVG in the app's own tokens, one chart to a view,
-   each in its own card under the section the panel names. */
+/* The chart: hand-drawn SVG in the app's own tokens, in its own card under the
+   section the panel names. */
 .report-chartcard {
   display: flex;
   flex-direction: column;
@@ -1203,10 +1203,6 @@ h1, h2, h3, p { margin: 0; }
 .report-chart__dot-alloc { fill: var(--ink); }
 .report-chart__dot-cap { fill: var(--signal); }
 
-/* A tag the plan gives no colour slot draws in the neutral rule colour, so the
-   chart's structure stays in the app's tokens even without a colour key. */
-.report-chart__bar--neutral { fill: var(--rule-strong); }
-
 .report-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1228,7 +1224,6 @@ h1, h2, h3, p { margin: 0; }
   flex: none;
 }
 
-.report-legend__swatch--neutral { background: var(--rule-strong); }
 .report-legend__swatch--ink { background: var(--ink); }
 
 .report-legend__swatch--dashed {

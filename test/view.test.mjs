@@ -72,7 +72,7 @@ test("every key survives a normalise at a non-default value", () => {
   const stored = {
     zoom: "day",
     reportZoom: "week",
-    reportView: "by-tag-over-time",
+    reportView: "allocation-by-tag",
     rowHeight: 120,
     gridSpacing: { day: 48, week: 30, sprint: 2, month: 7 },
     weekends: true,
@@ -87,6 +87,20 @@ test("every key survives a normalise at a non-default value", () => {
     }
   };
   assert.deepEqual(normalizeView(stored), stored);
+});
+
+test("a stored view naming the removed report view opens on the default", () => {
+  // A config written before issue #171 removed FTE-days by tag over time still
+  // names it: the report opens on its first view rather than a blank panel, and
+  // the other keys keep the values the owner left.
+  const folded = normalizeView({
+    reportView: "by-tag-over-time",
+    reportZoom: "week",
+    stackCollapsed: true
+  });
+  assert.equal(folded.reportView, REPORT_VIEW_DEFAULT);
+  assert.equal(folded.reportZoom, "week");
+  assert.equal(folded.stackCollapsed, true);
 });
 
 test("the two sort lists carry their own key and direction", () => {

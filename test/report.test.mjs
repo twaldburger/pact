@@ -148,7 +148,7 @@ function reportRenderSource() {
   return start >= 0 && end > start ? app.slice(start, end) : "";
 }
 
-test("the panel lists the seven views and marks the one showing", () => {
+test("the panel lists the six views and marks the one showing", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const nav = APP.slice(APP.indexOf("function drawReportNav() {"),
     APP.indexOf("function selectReportView("));
@@ -221,8 +221,8 @@ test("one view is drawn at a time, and the selection decides which", () => {
   const chooser = APP.slice(APP.indexOf("function reportViewSection(model) {"),
     APP.indexOf("// The bucket headings every matrix shares"));
   assert.ok(chooser.length > 0, "reportViewSection is missing");
-  ["by-person", "allocation-by-person", "by-tag", "allocation-by-tag",
-    "by-tag-over-time", "allocation"].forEach((key) => {
+  ["by-person", "by-tag", "allocation-by-person", "allocation-by-tag",
+    "allocation"].forEach((key) => {
     assert.match(chooser, new RegExp(`reportView === "${key}"`), key + " has no section");
   });
   assert.match(chooser, /return reportProjectSection\(model\);/);
@@ -262,11 +262,9 @@ test("each view's heading carries its own sentence, in the owner's words", () =>
     byTag: 'reportSection(reportViewLabel("by-tag"), ' +
       '"The rows are the tags you tick; ticking a key ticks all of its tags at once, " + ' +
       '"and the tags you leave out are gathered under Other tags.")',
-    byTagOverTime: 'reportChartSection("by-tag-over-time", ' +
-      '"Colours follow the plan\'s colour keys.",',
     // The bucket stays the report's own zoom word, not a fixed "month".
-    allocation: 'reportChartSection("allocation", "What the plan offers each " + ' +
-      'reportBucketWord() + ", against what is allocated.",'
+    allocation: 'reportSection(reportViewLabel("allocation"), ' +
+      '"What the plan offers each " + reportBucketWord() + ", against what is allocated.")'
   };
   Object.keys(calls).forEach((view) => {
     assert.ok(APP.includes(calls[view]), view + " does not carry its own sentence");
@@ -277,19 +275,18 @@ test("each view's heading carries its own sentence, in the owner's words", () =>
 
 test("the line under the content says absences are left out, in every view", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
-  // One line, defined once, so the seven views cannot drift apart on it.
+  // One line, defined once, so the six views cannot drift apart on it.
   assert.equal((APP.match(/"Absences are left out\."/g) || []).length, 1,
     "the absences line is defined more than once or not at all");
-  // Appended where each view builds its body: the four tables, and the chart
-  // card both chart views share. Below that body, never between it and the
-  // heading.
+  // Appended where each view builds its body: the five tables, and the one
+  // chart's card. Below that body, never between it and the heading.
   const body = {
     reportProjectSection: "reportTable(headers, rows)",
     reportPersonSection: "reportTable(headers, rows)",
     reportAllocationPersonSection: "reportTable(headers, rows)",
     reportTagSection: "reportTable(headers, rows)",
     reportAllocationTagSection: "reportTable(headers, rows)",
-    reportChartSection: "appendChild(card)"
+    reportAllocationSection: "appendChild(card)"
   };
   Object.keys(body).forEach((name) => {
     const source = functionSource(APP, name);
@@ -761,7 +758,7 @@ test("all three tables order their columns the same way", () => {
 test("the report's outline closes up: the rail's h1, then the view's h2", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   const section = APP.slice(APP.indexOf("function reportSection(title, sub) {"),
-    APP.indexOf("/* --- the two charts"));
+    APP.indexOf("/* --- the chart,"));
   assert.ok(section.length > 0, "reportSection is missing");
   // The only heading the content draws is the section's own, one level under
   // the rail's h1: no h3 hangs beneath a title that is no longer there.
@@ -947,16 +944,18 @@ test("a report remembers which view it was on, beside the grid's fold", async ()
   const started = await startServer();
   servers.push(started.server);
   // The selection is stored like any other view setting.
-  const chosen = await post(started.base, "/api/view", { reportView: "by-tag-over-time" });
-  assert.equal(chosen.reportView, "by-tag-over-time");
+  const chosen = await post(started.base, "/api/view", { reportView: "allocation-by-tag" });
+  assert.equal(chosen.reportView, "allocation-by-tag");
   // One collapsed key for both pages: collapsing the report's panel is the same
   // setting the grid's rail reads.
   const folded = await post(started.base, "/api/view", { stackCollapsed: true });
-  assert.equal(folded.reportView, "by-tag-over-time");
+  assert.equal(folded.reportView, "allocation-by-tag");
   assert.equal(folded.stackCollapsed, true);
-  // A view that no longer exists falls back to the first one alone, leaving the
-  // fold as the owner left it.
-  const stale = await post(started.base, "/api/view", { reportView: "by-chart" });
-  assert.equal(stale.reportView, "by-project");
-  assert.equal(stale.stackCollapsed, true);
+  // A view that no longer exists opens the report on its default - the view
+  // removed in #171 included - and leaves the rest of the view alone.
+  for (const gone of ["by-chart", "by-tag-over-time"]) {
+    const stale = await post(started.base, "/api/view", { reportView: gone });
+    assert.equal(stale.reportView, "by-project", gone);
+    assert.equal(stale.stackCollapsed, true, gone);
+  }
 });

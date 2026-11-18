@@ -218,7 +218,7 @@ var zoomButtons = [];
 // on load. Separate, so moving the grid to Day never turns the report into
 // 365 columns; the four levels are the report's time buckets.
 var reportZoom = ZOOM_DEFAULT;
-// Which of the report's seven views is showing, as the left panel's selection.
+// Which of the report's six views is showing, as the left panel's selection.
 // One of the view settings kept in the config and restored on load; the report
 // draws this view alone. Never written to the plan.
 var reportView = REPORT_VIEW_DEFAULT;
@@ -3602,7 +3602,7 @@ function reportAbsencesNote() {
   return note;
 }
 
-/* --- the two charts, hand-drawn SVG in the app's own tokens ------------- */
+/* --- the chart, hand-drawn SVG in the app's own tokens ------------------ */
 
 function svgNode(tag, attrs, text) {
   var node = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -3657,49 +3657,11 @@ function reportChartLabels(svg, height, pad, geom, labels) {
   });
 }
 
-function buildStackedChart(model) {
-  var width = 780;
-  var height = 260;
-  var pad = { l: 46, r: 8, t: 12, b: 34 };
-  var stacked = model.charts.stacked;
-  var max = niceMax(stacked.reduce(function (m, b) {
-    return Math.max(m, b.segments.reduce(function (t, g) { return t + g.value; }, 0));
-  }, 0));
-  var geom = reportChartGeometry(width, height, pad, stacked.length, max);
-  var svg = svgNode("svg", {
-    viewBox: "0 0 " + width + " " + height,
-    class: "report-chart",
-    role: "img",
-    "aria-label": "Stacked bar per " + reportBucketLabel(reportZoom) + ", split by tag"
-  });
-  reportChartAxis(svg, width, height, pad, geom);
-  stacked.forEach(function (bucket, i) {
-    var yBase = pad.t + geom.plotH;
-    bucket.segments.forEach(function (seg) {
-      if (seg.value <= 0) return;
-      var h = (seg.value / geom.max) * geom.plotH;
-      // A tag the plan colours takes its palette fill; one it does not takes
-      // the app's neutral rule colour, so the chart never invents a colour.
-      var coloured = Number.isInteger(seg.slot) && seg.slot >= 0 && seg.slot < SLOT_COUNT;
-      var rect = svgNode("rect", {
-        x: pad.l + i * geom.bw + 1, y: yBase - h, width: Math.max(1, geom.bw - 2), height: h,
-        fill: coloured ? activeColour(seg.slot) : null,
-        class: coloured ? null : "report-chart__bar--neutral"
-      });
-      rect.appendChild(svgNode("title", {}, seg.label + ": " + reportFigure(seg.value) + " FTE-days"));
-      svg.appendChild(rect);
-      yBase -= h;
-    });
-  });
-  reportChartLabels(svg, height, pad, geom, stacked.map(function (b) { return b.label; }));
-  return svg;
-}
-
 function buildLineChart(model) {
   var width = 780;
   var height = 240;
   var pad = { l: 46, r: 8, t: 12, b: 34 };
-  var line = model.charts.line;
+  var line = model.chart;
   var max = niceMax(line.reduce(function (m, b) { return Math.max(m, b.capacity); }, 0));
   var geom = reportChartGeometry(width, height, pad, line.length, max);
   var svg = svgNode("svg", {
@@ -3735,11 +3697,7 @@ function reportLegend(items) {
   var legend = el("div", "report-legend");
   items.forEach(function (item) {
     var entry = el("span", "report-legend__item");
-    if (item.colour || item.swatchClass) {
-      var swatch = el("span", "report-legend__swatch" + (item.swatchClass ? " " + item.swatchClass : ""));
-      if (item.colour) swatch.style.background = item.colour;
-      entry.appendChild(swatch);
-    }
+    entry.appendChild(el("span", "report-legend__swatch " + item.swatchClass));
     entry.appendChild(document.createTextNode(item.label));
     legend.appendChild(entry);
   });
@@ -3748,12 +3706,12 @@ function reportLegend(items) {
 
 /* --- the report page ----------------------------------------------------- */
 
-/* The report's own content: one of its seven views at a time, from the plan the
+/* The report's own content: one of its six views at a time, from the plan the
  * Filter and the rail's sort leave. The figures come from
  * public/lib/report-content.mjs, which reads the app's own working-day rule, so
  * the report and the grid agree by construction. The one thing the report
  * writes is the by-tag view's own split, which is the owner's choice stored in
- * the plan like the holidays. The rail is drawn beside it and lists those seven
+ * the plan like the holidays. The rail is drawn beside it and lists those six
  * views - the plan's own panel, folded by the same control and remembering the
  * same collapsed state. */
 function renderReport() {
@@ -3848,17 +3806,16 @@ function reportBucketWord() {
   return reportBucketLabel(reportZoom).toLowerCase();
 }
 
-/* --- the seven views ------------------------------------------------------ */
+/* --- the six views ------------------------------------------------------- */
 
 // The view the selection names. Each builder draws one section under the panel
 // entry's own label, so the panel and the content can never say different
 // things.
 function reportViewSection(model) {
   if (reportView === "by-person") return reportPersonSection(model);
-  if (reportView === "allocation-by-person") return reportAllocationPersonSection(model);
   if (reportView === "by-tag") return reportTagSection(model);
+  if (reportView === "allocation-by-person") return reportAllocationPersonSection(model);
   if (reportView === "allocation-by-tag") return reportAllocationTagSection(model);
-  if (reportView === "by-tag-over-time") return reportTagTimeSection(model);
   if (reportView === "allocation") return reportAllocationSection(model);
   return reportProjectSection(model);
 }
@@ -4143,41 +4100,19 @@ function reportAllocationTagSection(model) {
   return section;
 }
 
-// One chart in its card, under the section the panel names.
-function reportChartSection(key, sub, chart, legend) {
-  var section = reportSection(reportViewLabel(key), sub);
+// Allocation against capacity: the line, per bucket, in the view's one card.
+function reportAllocationSection(model) {
+  var section = reportSection(reportViewLabel("allocation"),
+    "What the plan offers each " + reportBucketWord() + ", against what is allocated.");
   var card = el("div", "report-chartcard");
-  card.appendChild(chart);
-  card.appendChild(legend);
+  card.appendChild(buildLineChart(model));
+  card.appendChild(reportLegend([
+    { label: "Allocation", swatchClass: "report-legend__swatch--ink" },
+    { label: "Capacity", swatchClass: "report-legend__swatch--dashed" }
+  ]));
   section.appendChild(card);
   section.appendChild(reportAbsencesNote());
   return section;
-}
-
-// FTE-days by tag over time: the stacked bar, one bar per bucket.
-function reportTagTimeSection(model) {
-  return reportChartSection("by-tag-over-time",
-    "Colours follow the plan's colour keys.",
-    buildStackedChart(model),
-    reportLegend(model.byTag.rows.map(function (r) {
-      var coloured = Number.isInteger(r.slot) && r.slot >= 0 && r.slot < SLOT_COUNT;
-      return {
-        label: r.label,
-        colour: coloured ? activeColour(r.slot) : null,
-        swatchClass: coloured ? null : "report-legend__swatch--neutral"
-      };
-    })));
-}
-
-// Allocation against capacity: the line, per bucket.
-function reportAllocationSection(model) {
-  return reportChartSection("allocation",
-    "What the plan offers each " + reportBucketWord() + ", against what is allocated.",
-    buildLineChart(model),
-    reportLegend([
-      { label: "Allocation", swatchClass: "report-legend__swatch--ink" },
-      { label: "Capacity", swatchClass: "report-legend__swatch--dashed" }
-    ]));
 }
 
 function render(opts) {

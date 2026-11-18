@@ -8,43 +8,42 @@ import {
   reportViewLabel
 } from "../public/lib/report-views.mjs";
 
-/* --- the seven views ----------------------------------------------------- */
+/* --- the six views ------------------------------------------------------- */
 
-test("a report has seven views, in the panel's order, with the names the owner chose", () => {
+test("a report has six views, in the panel's order, with the names the owner chose", () => {
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.label), [
     "FTE-days by project",
     "FTE-days by person",
-    "Allocation by person",
     "FTE-days by tag",
+    "Allocation by person",
     "Allocation by tag",
-    "FTE-days by tag over time",
     "Allocation against capacity"
   ]);
-  // The absolute readings - by project, by person - then by person's own
-  // percentage counterpart, the split and its counterpart, and the two charts:
-  // the stacked bar per bucket, the line.
   assert.deepEqual(REPORT_VIEWS.map((entry) => entry.key), [
     "by-project",
     "by-person",
-    "allocation-by-person",
     "by-tag",
+    "allocation-by-person",
     "allocation-by-tag",
-    "by-tag-over-time",
     "allocation"
   ]);
 });
 
-test("each reading sits beside its own counterpart in the panel", () => {
+test("the views are grouped by what they measure, with the removed view's gap closed", () => {
   const index = (key) => REPORT_VIEWS.findIndex((entry) => entry.key === key);
-  // The absolute reading and its percentage counterpart are neighbours, so a
-  // Person's FTE-days and that same figure as a share of their offer read
-  // together. The pair the owner asked for, in the order he asked for it.
-  assert.equal(index("allocation-by-person"), index("by-person") + 1);
-  // The tag pair follows the same rule, so a tag's FTE-days and that same
-  // figure as a share of the plan's capacity read together.
-  assert.equal(index("allocation-by-tag"), index("by-tag") + 1);
-  // The share table is a seventh view, not a replacement for any of the six.
-  assert.equal(REPORT_VIEWS.length, 7);
+  // The three FTE-days views first, in project, person, tag order...
+  assert.deepEqual(REPORT_VIEWS.slice(0, 3).map((entry) => entry.key),
+    ["by-project", "by-person", "by-tag"]);
+  // ...then the two Allocation views that exist, in the same order...
+  assert.deepEqual(REPORT_VIEWS.slice(3, 5).map((entry) => entry.key),
+    ["allocation-by-person", "allocation-by-tag"]);
+  // ...and Allocation against capacity last.
+  assert.equal(REPORT_VIEWS[REPORT_VIEWS.length - 1].key, "allocation");
+  // Every FTE-days view precedes every Allocation view, and the removed view
+  // leaves no gap behind it in either list.
+  assert.ok(index("by-tag") < index("allocation-by-person"));
+  assert.ok(index("allocation-by-tag") < index("allocation"));
+  assert.equal(REPORT_VIEWS.length, 6);
 });
 
 test("every name says what the view shows, and no two say the same thing", () => {
@@ -75,6 +74,15 @@ test("a report opens on its first view", () => {
 test("a stored selection that names no view falls back on the default", () => {
   [undefined, null, "", "by-chart", "BY-PROJECT", 0, 42, true, [], {}, "allocation "]
     .forEach((raw) => assert.equal(normalizeReportView(raw), REPORT_VIEW_DEFAULT, String(raw)));
+});
+
+test("a stored selection naming the removed view falls back on the default", () => {
+  // Issue #171 removed FTE-days by tag over time. A config written before that
+  // still names it, and must open the report on its first view rather than a
+  // blank panel.
+  assert.equal(isReportViewKey("by-tag-over-time"), false);
+  assert.equal(normalizeReportView("by-tag-over-time"), REPORT_VIEW_DEFAULT);
+  assert.equal(reportViewLabel("by-tag-over-time"), REPORT_VIEWS[0].label);
 });
 
 test("every view survives a stored selection and is named by its own label", () => {

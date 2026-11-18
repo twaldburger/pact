@@ -1,13 +1,14 @@
 /*
- * PACT report views: the seven views a report shows one at a time, and the rule
+ * PACT report views: the six views a report shows one at a time, and the rule
  * for which one a stored selection names.
  *
- * The list is the report's navigation panel, in its order. Each label names
- * what the view shows - its subject and its measure - rather than the shape of
- * the chart or table that draws it, which is what makes the panel readable on
- * its own. The report draws only the selected view, and the selection is a view
- * setting kept in the config, so returning to the report resumes where the
- * owner left off.
+ * The list is the report's navigation panel, in its order: the views grouped by
+ * what they measure - the three FTE-days views, then the two Allocation views,
+ * then Allocation against capacity last. Each label names what the view shows -
+ * its subject and its measure - rather than the shape of the chart or table
+ * that draws it, which is what makes the panel readable on its own. The report
+ * draws only the selected view, and the selection is a view setting kept in the
+ * config, so returning to the report resumes where the owner left off.
  *
  * A plain ES module with no imports, so the browser (public/app.js), the view
  * state (public/lib/view.mjs) and `node --test` read the same source.
@@ -16,10 +17,9 @@
 export const REPORT_VIEWS = Object.freeze([
   Object.freeze({ key: "by-project", label: "FTE-days by project" }),
   Object.freeze({ key: "by-person", label: "FTE-days by person" }),
-  Object.freeze({ key: "allocation-by-person", label: "Allocation by person" }),
   Object.freeze({ key: "by-tag", label: "FTE-days by tag" }),
+  Object.freeze({ key: "allocation-by-person", label: "Allocation by person" }),
   Object.freeze({ key: "allocation-by-tag", label: "Allocation by tag" }),
-  Object.freeze({ key: "by-tag-over-time", label: "FTE-days by tag over time" }),
   Object.freeze({ key: "allocation", label: "Allocation against capacity" })
 ]);
 

@@ -1,7 +1,7 @@
 /*
  * PACT report content: the report's own figures - the three pivots, the
- * per-person share table and the two charts - derived from the plan with the
- * app's own rules.
+ * per-person share table and the chart - derived from the plan with the app's
+ * own rules.
  *
  * A plain ES module importing only the working-day rule, so the browser
  * (public/app.js) and `node --test` load exactly the same source. Every figure
@@ -376,7 +376,7 @@ export function tagSplitRows(rows, selected) {
 }
 
 /*
- * The whole report: the buckets, the three pivots and the two charts, from a
+ * The whole report: the buckets, the three pivots and the chart, from a
  * filtered view and the plan it was filtered from.
  *
  * `view` is `{ projects, people, assignments }`, each already in display order
@@ -632,25 +632,14 @@ export function reportContent(view, plan, options) {
     }
   } : null;
 
-  const charts = {
-    stacked: buckets.map(function (b, i) {
-      return {
-        key: b.key,
-        label: b.label,
-        segments: tagList.map(function (r) {
-          return { tag: r.tag, label: r.label, slot: r.slot, value: r.cells[i] };
-        })
-      };
-    }),
-    line: buckets.map(function (b, i) {
-      return {
-        key: b.key,
-        label: b.label,
-        alloc: projectBuckets[i],
-        capacity: capacityBuckets[i]
-      };
-    })
-  };
+  const chart = buckets.map(function (b, i) {
+    return {
+      key: b.key,
+      label: b.label,
+      alloc: projectBuckets[i],
+      capacity: capacityBuckets[i]
+    };
+  });
 
   return {
     buckets: buckets,
@@ -679,11 +668,12 @@ export function reportContent(view, plan, options) {
       total: { cells: tagBuckets, total: planTotal }
     },
     // The by-tag view's rows as the owner selected them, or null while nothing
-    // is ticked. The complete pivot above stays for the chart beside it.
+    // is ticked. The complete pivot above is what they are shaped from.
     byTagSplit: tagSplit,
     // The same rows as shares of the plan's own capacity, or null while nothing
     // is ticked. One selection, two readings.
     allocationByTag: allocationByTag,
-    charts: charts
+    // Allocation against capacity, per bucket: the report's one chart.
+    chart: chart
   };
 }
