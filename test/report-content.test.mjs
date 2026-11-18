@@ -124,10 +124,9 @@ test("absences contribute no FTE-days to any pivot or chart", () => {
   // The absence Project is no row, and no tag on it becomes one.
   assert.equal(f.byProject.rows.some((r) => r.id === "leave"), false);
   assert.equal(f.byTag.rows.some((r) => r.tag === "Absence" || r.label === "Annual Leave"), false);
-  // And no bucket in either chart counts it.
+  // And no bucket in the chart counts it.
   near(f.planTotal, 17);
-  near(f.charts.line.reduce((s, b) => s + b.alloc, 0), 17);
-  near(f.charts.stacked.reduce((s, b) => s + b.segments.reduce((t, g) => t + g.value, 0), 0), 17);
+  near(f.chart.reduce((s, b) => s + b.alloc, 0), 17);
 });
 
 test("a person's offer is read net of their time off", () => {
@@ -715,7 +714,7 @@ test("the rows and the residual add up to the plan's own utilisation", () => {
     // Percentages of one denominator add, so the rows reconcile with the row
     // they sit under rather than with 100%.
     near(drawn.reduce((s, r) => s + r.cells[i], 0), split.total.cells[i]);
-    near(split.total.cells[i], f.charts.line[i].alloc / f.charts.line[i].capacity);
+    near(split.total.cells[i], f.chart[i].alloc / f.chart[i].capacity);
   });
   near(drawn.reduce((s, r) => s + r.total, 0), split.total.total);
   // And the residual is what the selection does not carry: as FTE-days it is
