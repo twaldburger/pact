@@ -112,7 +112,7 @@ A single dated point in the plan that something is delivered or due by: it carri
 _Avoid_: deadline, checkpoint, gate, release, flag, marker
 
 **Milestone tag**:
-A short free-text label on a Milestone, for grouping and filtering milestones later. A new one can be typed, or one already in use on another Milestone chosen; milestones' tags, people's tags, projects' tags and assignments' tags are separate lists.
+A short free-text label on a Milestone, for grouping and for filtering Milestones, as in `milestone tag: api`. A new one can be typed, or one already in use on another Milestone chosen; milestones' tags, people's tags, projects' tags and assignments' tags are separate lists, so a bare `tag:` searches the rows' three and never the Milestones'.
 _Avoid_: label, keyword, category, or an unqualified "tag"
 
 **Marker**:
@@ -152,7 +152,7 @@ To step the plan back one change at a time, and Redo to step forward again, from
 _Avoid_: revert, roll back, history, snapshot
 
 **Filter**:
-The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `project tag:platform`, `people: tim` or `project notes: delayed`, with a bare `tag:` spanning all three kinds and `project tag:` narrowing to Projects. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. It is session-only and respects Show archived.
+The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `project tag:platform`, `people: tim` or `project notes: delayed`, with a bare `tag:` spanning the rows' three tag kinds and `project tag:` narrowing to Projects. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. The Filter also reaches Milestones, by name, tag and note (`milestone: api`, `milestone tag: delivery`, `milestone note: signed`): a term naming a milestone field narrows the Milestones alone and leaves the rows whole, because a Milestone is an annotation over the rows rather than one of them, and it still obeys the visibility rule that decides which Milestones are drawn. Milestone tags are their own fourth vocabulary, so a bare `tag:` never reaches them. It is session-only and respects Show archived.
 _Avoid_: search, find, search bar, query
 
 **Tag split**:

@@ -409,12 +409,14 @@ function indexData() {
   view.assignments.forEach(function (a) { shown[a.id] = true; });
   gridAssignments = assignments.filter(function (a) { return shown[a.id]; });
 
-  // The milestones the view leaves shown, one mark per date, read from the
-  // plan's own milestones through the model. A milestone related to a project
-  // the Filter left out is not marked, so the rules follow the visible
-  // projects rather than the whole plan.
+  // The milestones the view leaves shown, one mark per date, read through the
+  // model. A milestone term narrows this list, and the visibility rule still
+  // decides what is drawn: one related to a project the Filter left out is not
+  // marked, so the rules follow the visible projects rather than the whole
+  // plan. The Show milestones toggle is the last word - it is not read here,
+  // because milestonesDrawn gates the drawing.
   milestoneMarkList = milestoneMarks(
-    data.milestones,
+    view.milestones,
     data.projects,
     gridProjects.map(function (project) { return project.id; }),
     data.range.start,
