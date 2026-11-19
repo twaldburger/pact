@@ -902,7 +902,7 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
   ["archived", "palette", "range", "step", "sprints", "plan-file"].forEach((key) => {
     assert.equal(reportDisabledOptionKeys().includes(key), false, key + " must stay live");
   });
-  // Show milestones acts on a report too: its chart draws the rules, so the row
+  // Milestones acts on a report too: its chart draws the rules, so the row
   // stays live there and the one switch governs the chart and the grid alike.
   assert.equal(reportDisabledOptionKeys().includes("milestones"), false,
     "a report can no longer switch the milestones it draws");
@@ -925,7 +925,7 @@ test("the chart is the only report view that shows a milestone", () => {
   assert.doesNotMatch(content, /milestone/i, "the report's figures count a milestone");
 });
 
-test("the chart and the grid read one stored Show milestones switch", () => {
+test("the chart and the grid read one stored Milestones switch", () => {
   const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
   // One setting, restored on load and stored back, for both pages: the report
   // page adopts the same key the grid does rather than keeping a second one.

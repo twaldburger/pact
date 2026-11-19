@@ -18,9 +18,9 @@ import { tagKeys, tagColourSlots } from "./tags.mjs";
 export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
-    { key: "weekends", label: "Highlight weekends", checked: !!highlightWeekends },
-    { key: "holidays", label: "Highlight holidays", checked: !!highlightHolidays },
-    { key: "milestones", label: "Show milestones", checked: !!milestoneRules },
+    { key: "weekends", label: "Weekends", checked: !!highlightWeekends },
+    { key: "holidays", label: "Holidays", checked: !!highlightHolidays },
+    { key: "milestones", label: "Milestones", checked: !!milestoneRules },
     { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
     { key: "minimap", label: "Minimap", checked: !!minimap },
     { key: "marker", label: "Marker", checked: !!markerVisible }
@@ -58,7 +58,7 @@ export function optionDividerKeys(items) {
  * toggles (the weekend band, the holiday band, the Grid dividers, the Minimap
  * and the Marker) and Reset view. A report page draws no grid and makes no plan
  * writes, so these are disabled rather than moved or hidden; the plan-facing
- * entries, the Set of archived records and Show milestones stay live, since a
+ * entries, the Set of archived records and Milestones stay live, since a
  * report's chart draws the milestone rules and takes the same switch the grid
  * does. Expressed here, beside the menu's own items, so the menu and the report
  * cannot disagree about which rows act.

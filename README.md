@@ -42,15 +42,15 @@ Projects rail down the side, which folds away from the chevron in its header.
 deployment, a deadline - carrying a name, a palette colour, its own tags and
 notes, and the Projects it relates to. Milestones travel with the plan and are
 listed and edited in the Milestones panel from the Options menu, which counts
-them. The Show milestones toggle in that menu draws each one as a vertical rule
+them. The Milestones toggle in that menu draws each one as a vertical rule
 through the rows, in its own colour, naming it and its date in the axis band: a
 Milestone related to Projects is drawn while one of them is in view, and one
 related to none is plan-wide. The Filter finds them by their own terms -
 `milestone: api`, `milestone tag: delivery`, `milestone note: signed` - and the
-same Show milestones switch rules the report's Allocation against capacity
-chart, where each is a vertical rule at its own date and every other view
-leaves them out. They are annotations, so no total, share or over-allocation
-check counts them.
+same Milestones switch rules the report's Allocation against capacity chart,
+where each is a vertical rule at its own date and every other view leaves them
+out. They are annotations, so no total, share or over-allocation check counts
+them.
 - **Filter.** One field hides everything on the grid that does not match. By
   default it looks in People, Projects and Assignments, and a scope control
   states how many areas it is searching and switches each. A plain term is a
@@ -68,11 +68,11 @@ check counts them.
   Today scrolls back to it. The Minimap, off by default, is an overview strip of
   the whole period that doubles as a scrollbar. The two lists can each be sorted
   by name, dates, location or load, as display order only.
-- **Display toggles.** Highlight weekends, Highlight holidays, Show milestones,
-  Grid dividers, the Minimap and the Marker sit in the Options menu; the
-  Marker's own entry draws or hides the line, and a hidden Marker still sets the
-  date the per-person totals are read at. The Colour palette group switches the
-  block fills between Paired and Set3.
+- **Display toggles.** Weekends, Holidays, Milestones, Grid dividers, the
+  Minimap and the Marker sit in the Options menu; the Marker's own entry draws
+  or hides the line, and a hidden Marker still sets the date the per-person
+  totals are read at. The Colour palette group switches the block fills between
+  Paired and Set3.
 - **Undo and redo.** Two controls step the plan back and forward one change at a
   time, the last 100 changes held in the running server's memory. The save
   status beside the wordmark reads Saved, Saving... or Not saved as writes land.

@@ -4,14 +4,14 @@ import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeContro
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
 
-test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Show milestones, Grid dividers, Minimap and Marker", () => {
+test("the options menu holds Show archived, Weekends, Holidays, Milestones, Grid dividers, Minimap and Marker", () => {
   const items = optionsItems(false, true, false);
   assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "marker"]);
   assert.deepEqual(items.map((item) => item.label), [
     "Show archived",
-    "Highlight weekends",
-    "Highlight holidays",
-    "Show milestones",
+    "Weekends",
+    "Holidays",
+    "Milestones",
     "Grid dividers",
     "Minimap",
     "Marker"
@@ -39,7 +39,7 @@ test("a fresh session opens with the weekend band, holiday band and milestone ru
   assert.equal(items[6].checked, true);
 });
 
-test("Show milestones is checked exactly while the milestone rules are drawn", () => {
+test("Milestones is checked exactly while the milestone rules are drawn", () => {
   const milestones = (on) => optionsItems(false, false, false, false, false, on)[3].checked;
   assert.equal(milestones(true), true);
   assert.equal(milestones(false), false);
@@ -63,7 +63,7 @@ test("Marker is checked exactly while the line is drawn", () => {
   assert.equal(marker(undefined), false);
 });
 
-test("Highlight holidays is checked exactly while its band is drawn", () => {
+test("Holidays is checked exactly while its band is drawn", () => {
   const holidays = (on) => optionsItems(false, false, false, false, on)[2].checked;
   assert.equal(holidays(true), true);
   assert.equal(holidays(false), false);
@@ -71,7 +71,7 @@ test("Highlight holidays is checked exactly while its band is drawn", () => {
   assert.equal(holidays(undefined), false);
 });
 
-test("Highlight weekends is checked exactly while the band is drawn", () => {
+test("Weekends is checked exactly while the band is drawn", () => {
   const weekends = (on) => optionsItems(false, on, false)[1].checked;
   assert.equal(weekends(true), true);
   assert.equal(weekends(false), false);

@@ -420,7 +420,7 @@ test("the readout's words are announced, not only drawn", () => {
     "the legend still names a dashed capacity");
 });
 
-test("the chart draws the grid's own marks, through the one Show milestones switch", () => {
+test("the chart draws the grid's own marks, through the one Milestones switch", () => {
   const helper = functionSource(APP, "reportChartMilestones");
   assert.ok(helper.length > 0, "reportChartMilestones is missing");
   // The marks are the grid's own list, read through the chart module's rule,

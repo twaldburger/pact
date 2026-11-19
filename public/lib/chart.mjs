@@ -163,7 +163,7 @@ function chartDateX(iso, buckets, geom) {
 }
 
 // The milestone rules a chart draws: one per mark, at the x of that mark's own
-// date, or none at all while the Show milestones switch is off. `marks` are the
+// date, or none at all while the Milestones switch is off. `marks` are the
 // milestones' own visible dates (public/lib/milestones.mjs), so which dates are
 // shown - and one rule per date, however many milestones share it - is that
 // module's rule rather than a second copy here. A mark the plot does not hold is

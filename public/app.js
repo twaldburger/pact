@@ -419,7 +419,7 @@ function indexData() {
   // model. A milestone term narrows this list, and the visibility rule still
   // decides what is drawn: one related to a project the Filter left out is not
   // marked, so the rules follow the visible projects rather than the whole
-  // plan. The Show milestones toggle is the last word - it is not read here,
+  // plan. The Milestones toggle is the last word - it is not read here,
   // because milestonesDrawn gates the drawing.
   milestoneMarkList = milestoneMarks(
     view.milestones,
@@ -3942,7 +3942,7 @@ function svgNode(tag, attrs, text) {
 // The milestones on the chart: one quiet vertical rule at each date the view
 // leaves a milestone on, in that milestone's own palette colour. The marks are
 // the grid's own (milestoneMarkList, one per visible date and none off the
-// plan period), and the one Show milestones switch decides whether either
+// plan period), and the one Milestones switch decides whether either
 // surface draws them, so the chart and the rows cannot disagree about which
 // milestones are shown. A date the plot does not hold draws nothing.
 //
