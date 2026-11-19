@@ -70,6 +70,14 @@ test("the keys the view owns are the keys it normalises", () => {
   assert.deepEqual(Object.keys(normalizeView({})).sort(), VIEW_KEYS.slice().sort());
 });
 
+test("Show archived is not a view setting, so a stored one is dropped", () => {
+  // The owner's decision: archived work is the exception, shown deliberately
+  // each session. A view carrying the key saves and reloads without it.
+  assert.equal(VIEW_KEYS.includes("archived"), false);
+  assert.equal("archived" in normalizeView({ archived: true }), false);
+  assert.deepEqual(normalizeView({ archived: true }), normalizeView({}));
+});
+
 /* --- each key round-trips ------------------------------------------------- */
 
 test("every key survives a normalise at a non-default value", () => {

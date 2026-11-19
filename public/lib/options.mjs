@@ -15,6 +15,12 @@ import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 import { cadenceFrom, sprintsFor } from "./sprints.mjs";
 import { tagKeys, tagColourSlots } from "./tags.mjs";
 
+/*
+ * The menu's checkable rows, Show archived first. It is a toggle like the rest,
+ * but not a view toggle: it decides which records are included rather than how
+ * they are drawn, it is session-only and Reset view leaves it alone, so
+ * optionGroups below gives it a group of its own.
+ */
 export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
@@ -28,16 +34,24 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
 }
 
 /*
- * The Options menu, group by group, top to bottom: the view, the plan and the
- * app. `items` is optionsItems' own list, so a future toggle joins the view
- * group without a second edit; the palette and Reset view follow them. The
- * plan group's "holidays" and "milestones" are the actions that open their
+ * The Options menu, group by group, top to bottom: what is drawn, what is
+ * included, the plan and the app. `items` is optionsItems' own list minus Show
+ * archived, so a future view toggle joins the view group without a second
+ * edit; the palette and Reset view follow them. Show archived is alone in the
+ * second group, because it changes which records are included rather than what
+ * is drawn - the owner's decision, and the reason Reset view leaves it alone.
+ * The plan group's "holidays" and "milestones" are the actions that open their
  * panels, not the toggles of the same keys above. This is the one place the
  * menu's shape is stated; public/app.js appends its rows in this order.
  */
 export function optionGroups(items) {
+  const view = items
+    .map(function (item) { return item.key; })
+    .filter(function (key) { return key !== "archived"; })
+    .concat(["palette", "reset-view"]);
   return [
-    items.map(function (item) { return item.key; }).concat(["palette", "reset-view"]),
+    view,
+    ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
     ["plan-file"]
   ];
@@ -58,9 +72,10 @@ export function optionDividerKeys(items) {
  * toggles (the weekend band, the holiday band, the Grid dividers, the Minimap
  * and the Marker) and Reset view. A report page draws no grid and makes no plan
  * writes, so these are disabled rather than moved or hidden; the plan-facing
- * entries, the Set of archived records and Milestones stay live, since a
- * report's chart draws the milestone rules and takes the same switch the grid
- * does. Expressed here, beside the menu's own items, so the menu and the report
+ * entries, Show archived - which decides which records a report includes, so
+ * it is a group of its own - and Milestones stay live, since a report's chart
+ * draws the milestone rules and takes the same switch the grid does.
+ * Expressed here, beside the menu's own items, so the menu and the report
  * cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
