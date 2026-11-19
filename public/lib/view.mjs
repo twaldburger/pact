@@ -2,11 +2,11 @@
  * PACT view state: the whole of what the interface draws the plan with rather
  * than what the plan holds - the Zoom and the row height, the report's own
  * zoom and which of its views is showing, the weekend band, the holiday band,
- * the milestone rules and the Grid dividers, the Minimap, the Colour palette,
- * whether the Stack rail is folded, and the two sort keys. It lives in
- * `data/config.json` beside the active plan file, so it survives a reload; the
- * Filter and the Marker do not, being a query and a cursor rather than
- * settings.
+ * the milestone rules, the Grid dividers, the Minimap and the Marker's own
+ * visibility, the Colour palette, whether the Stack rail is folded, and the two
+ * sort keys. It lives in `data/config.json` beside the active plan file, so it
+ * survives a reload; the Filter and the Marker's date do not, being a query and
+ * a cursor rather than settings.
  *
  * A plain ES module with no DOM and no server, so the browser (public/app.js),
  * the server (lib/config.mjs) and `node --test` all read exactly the same
@@ -52,6 +52,9 @@ export const VIEW_DEFAULTS = Object.freeze({
   milestones: false,
   dividers: true,
   minimap: MINIMAP_DEFAULT,
+  // The Marker - the line the totals are read at - is drawn by default, which
+  // is how the grid opened while its visibility was not a setting.
+  marker: true,
   palette: PALETTE_DEFAULT,
   stackCollapsed: STACK_COLLAPSED_DEFAULT,
   sort: Object.freeze({ projects: null, people: null })
@@ -69,6 +72,7 @@ export const VIEW_KEYS = Object.freeze([
   "milestones",
   "dividers",
   "minimap",
+  "marker",
   "palette",
   "stackCollapsed",
   "sort"
@@ -137,6 +141,7 @@ export function normalizeView(raw) {
     milestones: booleanOr(source.milestones, VIEW_DEFAULTS.milestones),
     dividers: booleanOr(source.dividers, VIEW_DEFAULTS.dividers),
     minimap: booleanOr(source.minimap, VIEW_DEFAULTS.minimap),
+    marker: booleanOr(source.marker, VIEW_DEFAULTS.marker),
     palette: isPalette(source.palette) ? source.palette : VIEW_DEFAULTS.palette,
     stackCollapsed: booleanOr(source.stackCollapsed, VIEW_DEFAULTS.stackCollapsed),
     sort: {

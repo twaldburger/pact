@@ -15,14 +15,15 @@ import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 import { cadenceFrom, sprintsFor } from "./sprints.mjs";
 import { tagKeys, tagColourSlots } from "./tags.mjs";
 
-export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
     { key: "weekends", label: "Highlight weekends", checked: !!highlightWeekends },
     { key: "holidays", label: "Highlight holidays", checked: !!highlightHolidays },
     { key: "milestones", label: "Show milestones", checked: !!milestoneRules },
     { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
-    { key: "minimap", label: "Minimap", checked: !!minimap }
+    { key: "minimap", label: "Minimap", checked: !!minimap },
+    { key: "marker", label: "Marker", checked: !!markerVisible }
   ];
 }
 
@@ -55,14 +56,14 @@ export function optionDividerKeys(items) {
 /*
  * The menu entries a report cannot act on, by key: the grid's own display
  * toggles (the weekend band, the holiday band, the milestone rules, the Grid
- * dividers and the Minimap) and Reset view. A report page draws no grid and
- * makes no plan writes, so these are disabled rather than moved or hidden; the
- * plan-facing entries and the Set of archived records stay live. Expressed
- * here, beside the menu's own items, so the menu and the report cannot
- * disagree about which rows act.
+ * dividers, the Minimap and the Marker) and Reset view. A report page draws no
+ * grid and makes no plan writes, so these are disabled rather than moved or
+ * hidden; the plan-facing entries and the Set of archived records stay live.
+ * Expressed here, beside the menu's own items, so the menu and the report
+ * cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
-  return ["weekends", "holidays", "milestones", "dividers", "minimap", "reset-view"];
+  return ["weekends", "holidays", "milestones", "dividers", "minimap", "marker", "reset-view"];
 }
 
 /*

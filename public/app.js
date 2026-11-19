@@ -220,6 +220,11 @@ var assignments = [];
 var markerIndex = 0;
 var marker = null;
 var markerDate = null;
+// Whether the Marker is drawn, as restored from the config. Its index is kept
+// either way: the Marker sets the date the per-person totals are read at, so
+// hiding it hides the line, never the reading. Hiding it also takes the date
+// chip out of the axis, so no invisible handle is left to catch a pointer.
+var markerVisible = VIEW_DEFAULTS.marker;
 // The sticky axis band the date chip is anchored to, so it stays in the
 // header while the rows scroll under it.
 var axisEl = null;
@@ -1173,7 +1178,10 @@ function onMarkerDown(e) {
 // A click on the date chip is the chip's own: it is the header's drag handle,
 // so it keeps the band underneath from placing the Marker under the chip's
 // width rather than on the day the chip names.
+// A hidden Marker is not placed this way either: with no line on screen, the
+// click would move the date the totals are read at with nothing to show it.
 function onAxisClick(e) {
+  if (!markerVisible) return;
   if (e.target.closest(".marker__date")) return;
   setMarker(indexFromClientX(e.clientX));
 }
@@ -1213,11 +1221,17 @@ function onMarkerKey(e) {
 function setMarker(i) {
   markerIndex = clamp(Math.round(i), 0, DAYS - 1);
   var date = addDays(rangeStart, markerIndex);
-  marker.style.setProperty("--i", markerIndex);
-  markerDate.style.setProperty("--i", markerIndex);
-  markerDate.textContent = fmtDay(date);
-  marker.setAttribute("aria-valuenow", String(markerIndex));
-  marker.setAttribute("aria-valuetext", fmtDayLong(date));
+  // A hidden Marker has nothing drawn to move; its index has moved all the
+  // same, so the figures below still read the day it stands on.
+  if (marker) {
+    marker.style.setProperty("--i", markerIndex);
+    marker.setAttribute("aria-valuenow", String(markerIndex));
+    marker.setAttribute("aria-valuetext", fmtDayLong(date));
+  }
+  if (markerDate) {
+    markerDate.style.setProperty("--i", markerIndex);
+    markerDate.textContent = fmtDay(date);
+  }
   updateFigures();
   // A load or free-capacity order reads the Marker, but a drag must not
   // recompute it: the rows
@@ -4613,7 +4627,14 @@ function render(opts) {
   tl.appendChild(drawAxis());
   tl.appendChild(rows.heads);
   tl.appendChild(rows.body);
-  tl.appendChild(drawMarker());
+  if (markerVisible) {
+    tl.appendChild(drawMarker());
+  } else {
+    // No line and no chip, so nothing on screen to drag or to press. The index
+    // stays where it is, which is what keeps the figures reading today.
+    marker = null;
+    markerDate = null;
+  }
 
   drawStack();
 
@@ -5116,6 +5137,7 @@ function currentView() {
     milestones: milestoneRules,
     dividers: gridDividers,
     minimap: minimapEnabled,
+    marker: markerVisible,
     palette: activePalette,
     stackCollapsed: stackCollapsed,
     sort: { projects: sortState.projects, people: sortState.people }
@@ -5124,8 +5146,8 @@ function currentView() {
 
 // Put a stored view into the interface's own state, normalising it first so a
 // malformed key falls back on its own. Only the state the next draw reads is
-// set here; the caller redraws. The Marker and the Filter are deliberately not
-// part of the view.
+// set here; the caller redraws. The Filter is deliberately not part of the
+// view, and neither is the Marker's date - only whether it is drawn.
 function adoptView(view) {
   var v = normalizeView(view);
   activePalette = v.palette;
@@ -5144,6 +5166,7 @@ function adoptView(view) {
   milestoneRules = v.milestones;
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
+  markerVisible = v.marker;
   stackCollapsed = v.stackCollapsed;
   sortState = { projects: v.sort.projects, people: v.sort.people };
   // Apply the stored width now, before the caller's first draw, so a spacing
@@ -5167,8 +5190,9 @@ function persistView() {
 }
 
 // Reset view: every view setting back to the default the app ships with, in
-// one action. The plan path, the Filter and the Marker are deliberately left
-// alone - which is why the owner named it Reset view rather than Reset config.
+// one action. The plan path and the Filter are deliberately left alone, and so
+// is the Marker's date - only its visibility is a view setting - which is why
+// the owner named it Reset view rather than Reset config.
 function resetView() {
   adoptView(VIEW_DEFAULTS);
   applyZoom(root.getAttribute("data-zoom"));
@@ -5247,7 +5271,8 @@ var OPTION_ACTIONS = {
   holidays: function () { setHighlightHolidays(!highlightHolidays); },
   milestones: function () { setMilestoneRules(!milestoneRules); },
   dividers: function () { setGridDividers(!gridDividers); },
-  minimap: function () { setMinimapEnabled(!minimapEnabled); }
+  minimap: function () { setMinimapEnabled(!minimapEnabled); },
+  marker: function () { setMarkerVisible(!markerVisible); }
 };
 
 function setShowArchived(on) {
@@ -5301,8 +5326,19 @@ function setMinimapEnabled(on) {
   persistView();
 }
 
+// The Marker's visibility is a view change in the same shape: it draws or
+// removes the line and its date chip, and stores the new view. The Marker's
+// date is not a view setting, so the figures go on reading the day it sits on
+// whether or not the line is drawn.
+function setMarkerVisible(on) {
+  markerVisible = on === true;
+  updateOptionsMenu();
+  render();
+  persistView();
+}
+
 function updateOptionsMenu() {
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -5338,7 +5374,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules);
+  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible);
   optionGroupDividers = optionDividerKeys(items);
   items.forEach(function (item) {
     var btn = el("button", optionRowClass(item.key));
@@ -5419,7 +5455,7 @@ function setDisclosureDetail(key, text) {
 
 /* The Reset view entry: an action, not a toggle. It returns every view
  * setting to its default in one press and leaves the plan path, the Filter and
- * the Marker alone. */
+ * the Marker's date alone. */
 function buildResetViewItem() {
   var btn = el("button", optionRowClass("reset-view") + " options__item--action");
   btn.type = "button";
