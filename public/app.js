@@ -5405,25 +5405,17 @@ function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
   var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible);
   optionGroupDividers = optionDividerKeys(items);
+  // Show archived is drawn after the view group rather than in this pass: it
+  // is a group of its own, because it decides which records are included
+  // rather than how they are drawn. optionGroups states that shape.
   items.forEach(function (item) {
-    var btn = el("button", optionRowClass(item.key));
-    btn.type = "button";
-    btn.id = "option-" + item.key;
-    btn.setAttribute("role", "menuitemcheckbox");
-    btn.setAttribute("aria-checked", item.checked ? "true" : "false");
-    var tick = el("span", "options__tick");
-    tick.setAttribute("aria-hidden", "true");
-    btn.appendChild(tick);
-    btn.appendChild(document.createTextNode(item.label));
-    btn.addEventListener("click", function () {
-      var action = OPTION_ACTIONS[item.key];
-      if (action) action();
-    });
-    optionButtons[item.key] = btn;
-    optionsMenu.appendChild(btn);
+    if (item.key === "archived") return;
+    optionsMenu.appendChild(buildOptionToggle(item));
   });
   buildDisclosureRow(paletteControl(activePalette), buildPaletteControl());
   optionsMenu.appendChild(buildResetViewItem());
+  var archivedItem = items.filter(function (item) { return item.key === "archived"; })[0];
+  optionsMenu.appendChild(buildOptionToggle(archivedItem));
   buildDisclosureRow(rangeControl(data && data.range), buildRangeControl());
   buildDisclosureRow(stepControl(data && data.step), buildStepControl());
   optionsMenu.appendChild(buildSprintsItem());
@@ -5431,6 +5423,26 @@ function buildOptionsMenu() {
   optionsMenu.appendChild(buildTagsItem());
   optionsMenu.appendChild(buildMilestonesItem());
   optionsMenu.appendChild(buildPlanFileItem());
+}
+
+// One checkable row: a tick, a label and what it does. updateOptionsMenu reads
+// the same items back to keep each row's aria-checked state in step.
+function buildOptionToggle(item) {
+  var btn = el("button", optionRowClass(item.key));
+  btn.type = "button";
+  btn.id = "option-" + item.key;
+  btn.setAttribute("role", "menuitemcheckbox");
+  btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+  var tick = el("span", "options__tick");
+  tick.setAttribute("aria-hidden", "true");
+  btn.appendChild(tick);
+  btn.appendChild(document.createTextNode(item.label));
+  btn.addEventListener("click", function () {
+    var action = OPTION_ACTIONS[item.key];
+    if (action) action();
+  });
+  optionButtons[item.key] = btn;
+  return btn;
 }
 
 /* A disclosure row: a label and the value it currently holds, opening its own

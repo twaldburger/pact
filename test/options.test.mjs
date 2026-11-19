@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem } from "../public/lib/options.mjs";
+import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem } from "../public/lib/options.mjs";
+import { VIEW_KEYS } from "../public/lib/view.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
 
@@ -256,26 +257,47 @@ test("the palette, period and step are each one collapsed row, not a group", () 
   assert.equal(stepControl(10).label, "Percentage step");
 });
 
-test("the menu reads as three groups in order: the view, the plan and the app", () => {
+test("the menu reads as four groups in order: what is drawn, what is included, the plan and the app", () => {
   const items = optionsItems(false, false, true, false, false);
   assert.deepEqual(optionGroups(items), [
-    ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "marker", "palette", "reset-view"],
+    ["weekends", "holidays", "milestones", "dividers", "minimap", "marker", "palette", "reset-view"],
+    ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
     ["plan-file"]
   ]);
-  // A future toggle joins the view group by being in optionsItems alone.
+  // A future view toggle joins the view group by being in optionsItems alone;
+  // Show archived is the one row there that is not a view toggle.
   const added = items.concat([{ key: "noise", label: "X" }]);
-  assert.deepEqual(optionGroups(added)[0], ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "marker", "noise", "palette", "reset-view"]);
+  assert.deepEqual(optionGroups(added)[0], ["weekends", "holidays", "milestones", "dividers", "minimap", "marker", "noise", "palette", "reset-view"]);
+  assert.deepEqual(optionGroups(added)[1], ["archived"]);
 });
 
-test("two dividers are drawn, each on a group boundary", () => {
+test("three dividers are drawn, each on a group boundary", () => {
   const items = optionsItems(false, false, true, false, false);
   const dividers = optionDividerKeys(items);
-  assert.deepEqual(dividers, ["range", "plan-file"]);
-  assert.equal(dividers.length, 2);
+  // Exactly one line above Show archived and one above the plan period, which
+  // together box the archived group in, plus the one above Plan file.
+  assert.deepEqual(dividers, ["archived", "range", "plan-file"]);
+  assert.equal(dividers.filter((key) => key === "archived").length, 1);
+  assert.equal(dividers.filter((key) => key === "range").length, 1);
   // Each divider sits on the first row of a group after the menu's first.
   const groups = optionGroups(items);
   dividers.forEach((key) => assert.equal(groups.slice(1).some((group) => group[0] === key), true));
+  // And no view row carries one: the view group opens the menu undeclared.
+  optionGroups(items)[0].forEach((key) => assert.equal(dividers.includes(key), false, key));
+});
+
+test("Show archived keeps its place outside the view, its value outside the view settings", () => {
+  const items = optionsItems(false, false, true, false, false);
+  // Grouped on its own, not among the toggles the reset restores.
+  assert.equal(optionGroups(items)[1].includes("archived"), true);
+  assert.equal(optionGroups(items)[0].includes("archived"), false);
+  // Session-only: the view's own keys never hold it, so a reload starts with
+  // archived records hidden again.
+  assert.equal(VIEW_KEYS.includes("archived"), false);
+  assert.equal(VIEW_KEYS.includes("showArchived"), false);
+  // A report includes records the same way, so its menu offers the row.
+  assert.equal(reportDisabledOptionKeys().includes("archived"), false);
 });
 
 test("no row is divided because it is an action", () => {
