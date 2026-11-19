@@ -489,3 +489,119 @@ test("a selected chip's swatch keeps its colour, ringed where it would vanish", 
   assert.ok(contrast(tokenHex("--canvas"), ink) >= 4.5,
     "the ring reads at " + contrast(tokenHex("--canvas"), ink).toFixed(2));
 });
+
+/* --- the capacity band and the chart's ruler ------------------------------ */
+
+// The chart's marks, the ruler's sweep and the readout's paper, lifted from the
+// stylesheet so the tests track what the browser is handed.
+const CHART_BAND = STYLE.match(/\.report-chart__band\s*\{([^}]*)\}/);
+const CHART_CAP = STYLE.match(/(^|\n)\.report-chart__cap\s*\{([^}]*)\}/);
+const CHART_ALLOC = STYLE.match(/(^|\n)\.report-chart__alloc\s*\{([^}]*)\}/);
+const CHART_RULE = STYLE.match(/\.report-chart__rule\s*\{([^}]*)\}/);
+const CHART_BOX = STYLE.match(/\.report-chart__readout-box\s*\{([^}]*)\}/);
+const CHART_WORDS = STYLE.match(/\.report-chart__readout-text\s*\{([^}]*)\}/);
+const CHART_HIDDEN = STYLE.match(/\.report-chart__rule,\s*\.report-chart__readout\s*\{([^}]*)\}/);
+const CHART_SHOWN = STYLE.match(
+  /\.report-chart\.is-reading \.report-chart__rule,\s*\.report-chart\.is-reading \.report-chart__readout\s*\{([^}]*)\}/
+);
+const CHART_FOCUS = STYLE.match(/\.report-chart:focus-visible\s*\{([^}]*)\}/);
+const CHART_LIVE = STYLE.match(/\.report-chart__live\s*\{([^}]*)\}/);
+const LEGEND_BAND = STYLE.match(/\.report-legend__swatch--band\s*\{([^}]*)\}/);
+
+test("the capacity is a band under a solid edge, and no dash remains", () => {
+  assert.ok(CHART_BAND, "the capacity band has no rule");
+  assert.ok(CHART_CAP, "the capacity edge has no rule");
+  assert.ok(CHART_ALLOC, "the allocation line has no rule");
+  // The dashed mark the owner called an accident is gone from the chart: no
+  // stroke anywhere is dashed, and the capacity carries no dot markers of its
+  // own any more. (Other marks in the app keep their own dashes - a part day's
+  // edge, a hollow drop target - so only the chart's rules are read here.)
+  assert.equal(/stroke-dasharray/.test(STYLE), false, "a dashed stroke remains");
+  [CHART_BAND[1], CHART_CAP[2], CHART_ALLOC[2]].forEach((rule) => {
+    assert.doesNotMatch(rule, /dash/, "a chart mark is still dashed");
+  });
+  assert.equal(/report-chart__dot-cap/.test(STYLE), false, "the capacity still has dot markers");
+  // The band is a fill and its edge a solid stroke of the capacity's own colour.
+  assert.equal(declaration(CHART_BAND[1], "fill"), "var(--off)");
+  assert.equal(declaration(CHART_CAP[2], "fill"), "none");
+  assert.equal(declaration(CHART_CAP[2], "stroke"), "var(--signal)");
+  assert.equal(declaration(CHART_CAP[2], "stroke-linejoin"), "round");
+  // The allocation is a solid line over it, at the heavier weight: the roof is
+  // there to be seen, the line is there to be read.
+  assert.equal(declaration(CHART_ALLOC[2], "stroke"), "var(--ink)");
+  const capWidth = Number(declaration(CHART_CAP[2], "stroke-width"));
+  const allocWidth = Number(declaration(CHART_ALLOC[2], "stroke-width"));
+  assert.ok(capWidth > 0 && capWidth < allocWidth,
+    "the capacity edge is " + capWidth + " and the allocation line " + allocWidth);
+});
+
+test("the band's one fixed neutral is the same under both palette schemes", () => {
+  // Palette independence is structural: the band reads only --off, and --off
+  // lives on :root while the two palette blocks change nothing but --proj-*.
+  assert.doesNotMatch(CHART_BAND[1], /--proj-/);
+  assert.doesNotMatch(CHART_CAP[2], /--proj-/);
+  const blocks = [...STYLE.matchAll(/\[data-palette="([a-z0-9]+)"\]\s*\{([^}]*)\}/g)];
+  assert.deepEqual(blocks.map((m) => m[1]).sort(), Object.keys(PALETTES).sort(),
+    "the stylesheet no longer styles both palette schemes");
+  for (const block of blocks) {
+    assert.doesNotMatch(block[2], /--off\s*:/, block[1] + " redefines the band's fill");
+    assert.match(block[2], /--proj-0:/, block[1] + " no longer sets the project fills");
+  }
+});
+
+test("the band is quiet on the paper and costs the ink nothing", () => {
+  const ink = tokenHex("--ink");
+  const canvas = tokenHex("--canvas");
+  const off = tokenHex("--off");
+  const signal = tokenHex("--signal");
+  assert.equal(declaration(CHART_BAND[1], "fill"), "var(--off)");
+  // The allocation's ink - the line and its dots - reads at the same strength
+  // on the band as on the paper: nothing is lost to the fill.
+  assert.ok(contrast(ink, off) >= 4.5,
+    "the allocation's ink reads at " + contrast(ink, off).toFixed(2) + " on the band");
+  assert.ok(contrast(ink, off) >= contrast(ink, canvas) * 0.9,
+    "the band costs the ink more than a tenth of its contrast");
+  // And the band is a step off the paper rather than a second figure: it reads
+  // as background, so the eye lands on the line.
+  const step = contrast(off, canvas);
+  assert.ok(step >= 1.05 && step <= 1.25, "the band's step is " + step.toFixed(3));
+  // Its own edge is legible over that fill.
+  assert.ok(contrast(signal, off) >= 3,
+    "the capacity's edge reads at " + contrast(signal, off).toFixed(2) + " on its band");
+});
+
+test("the ruler and its readout are put away until the chart is read", () => {
+  assert.ok(CHART_HIDDEN, "the ruler has no resting rule");
+  assert.ok(CHART_SHOWN, "the ruler has no reading rule");
+  assert.equal(declaration(CHART_HIDDEN[1], "display"), "none");
+  assert.equal(declaration(CHART_SHOWN[1], "display"), "block");
+  // The words read over a paper box, so the bucket being read is never lost
+  // under the lines it crosses; the ruler itself reads over the band.
+  assert.ok(CHART_BOX, "the readout has no paper");
+  assert.ok(CHART_WORDS, "the readout has no type");
+  assert.ok(CHART_RULE, "the ruler has no rule");
+  assert.equal(declaration(CHART_BOX[1], "fill"), "var(--canvas)");
+  assert.equal(declaration(CHART_WORDS[1], "fill"), "var(--ink)");
+  assert.equal(declaration(CHART_RULE[1], "stroke"), "var(--ink-soft)");
+  assert.ok(contrast(tokenHex("--ink-soft"), tokenHex("--off")) >= 3,
+    "the ruler reads at " + contrast(tokenHex("--ink-soft"), tokenHex("--off")).toFixed(2) + " on the band");
+});
+
+test("the chart's focus is drawn, and its readout is announced off screen", () => {
+  assert.ok(CHART_FOCUS, "the chart has no focus rule");
+  assert.equal(declaration(CHART_FOCUS[1], "outline"), "2px solid var(--ink)");
+  assert.equal(declaration(CHART_FOCUS[1], "outline-offset"), "2px");
+  // The live region takes no room and draws nothing, but stays in the
+  // accessibility tree: announced, never seen.
+  assert.ok(CHART_LIVE, "the readout has no live region rule");
+  assert.equal(declaration(CHART_LIVE[1], "position"), "absolute");
+  assert.equal(declaration(CHART_LIVE[1], "overflow"), "hidden");
+  assert.equal(declaration(CHART_LIVE[1], "clip-path"), "inset(50%)");
+});
+
+test("the legend's capacity swatch draws the band, not a dash", () => {
+  assert.ok(LEGEND_BAND, "the capacity swatch has no rule");
+  assert.equal(declaration(LEGEND_BAND[1], "background"), "var(--off)");
+  assert.equal(declaration(LEGEND_BAND[1], "border-top"), "1.5px solid var(--signal)");
+  assert.doesNotMatch(LEGEND_BAND[1], /dash/);
+});

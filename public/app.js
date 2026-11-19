@@ -34,6 +34,18 @@ import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, r
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
 import { REPORT_VIEWS, REPORT_VIEW_DEFAULT, normalizeReportView, reportViewLabel } from "./lib/report-views.mjs";
+import {
+  chartCeiling,
+  chartGeometry,
+  chartX,
+  chartY,
+  chartInPlot,
+  chartNearestIndex,
+  chartLinePath,
+  chartBandPath,
+  chartReadout,
+  chartKeyIndex
+} from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   PALETTES,
@@ -3613,83 +3625,145 @@ function svgNode(tag, attrs, text) {
   return node;
 }
 
-// A whole-number ceiling a chart can divide cleanly: the smallest of the
-// friendly steps above the largest value.
-function niceMax(value) {
-  if (!isFinite(value) || value <= 0) return 1;
-  var magnitude = Math.pow(10, Math.floor(Math.log10(value)));
-  var steps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
-  var scaled = value / magnitude;
-  for (var i = 0; i < steps.length; i++) {
-    if (scaled <= steps[i]) return steps[i] * magnitude;
-  }
-  return 10 * magnitude;
-}
+// A whole-number ceiling a chart can divide cleanly is the module's own rule
+// (public/lib/chart.mjs), beside the geometry, the paths and the ruler.
 
-function reportChartGeometry(width, height, pad, count, max) {
-  var plotW = width - pad.l - pad.r;
-  var plotH = height - pad.t - pad.b;
-  return { plotW: plotW, plotH: plotH, bw: plotW / Math.max(1, count), max: max };
-}
-
-function reportChartAxis(svg, width, height, pad, geom) {
+function reportChartAxis(svg, width, height, geom) {
   [0, geom.max / 2, geom.max].forEach(function (v) {
-    var y = pad.t + geom.plotH - (v / geom.max) * geom.plotH;
+    var y = chartY(v, geom);
     svg.appendChild(svgNode("line", {
-      x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: "report-chart__grid"
+      x1: geom.left, x2: geom.left + geom.plotW, y1: y, y2: y, class: "report-chart__grid"
     }));
     svg.appendChild(svgNode("text", {
-      x: pad.l - 6, y: y + 3, "text-anchor": "end", class: "report-chart__tick"
+      x: geom.left - 6, y: y + 3, "text-anchor": "end", class: "report-chart__tick"
     }, String(Math.round(v))));
   });
   svg.appendChild(svgNode("line", {
-    x1: pad.l, x2: width - pad.r, y1: pad.t + geom.plotH, y2: pad.t + geom.plotH, class: "report-chart__axis"
+    x1: geom.left, x2: geom.left + geom.plotW,
+    y1: geom.top + geom.plotH, y2: geom.top + geom.plotH, class: "report-chart__axis"
   }));
 }
 
-function reportChartLabels(svg, height, pad, geom, labels) {
+function reportChartLabels(svg, height, geom, labels) {
   var every = Math.max(1, Math.ceil(labels.length / 16));
   labels.forEach(function (label, i) {
     if (i % every !== 0 && i !== labels.length - 1) return;
     svg.appendChild(svgNode("text", {
-      x: pad.l + i * geom.bw + geom.bw / 2, y: height - 10, "text-anchor": "middle", class: "report-chart__tick"
+      x: chartX(i, geom), y: height - 10, "text-anchor": "middle", class: "report-chart__tick"
     }, label));
   });
 }
 
-function buildLineChart(model) {
+// The chart itself: one SVG in the app's own tokens. The capacity is a quiet
+// band under a solid edge, painted below the grid so the horizontal guides
+// still read through the roof; the allocation line and its dots ride over it,
+// which is where the eye lands. The band's fill is the quiet neutral --off, so
+// it is one fixed colour whatever palette scheme the plan is read in.
+//
+// Reading it is the ruler's job, over the pointer or the keyboard: it snaps to
+// the nearest bucket's centre and a readout fixed in the plot's top corner
+// states that bucket's label, its two figures and the share between them. Both
+// are put away when the pointer leaves the plot or the chart loses focus, and
+// the readout's words are announced through the caller's live region.
+function buildLineChart(model, live) {
   var width = 780;
   var height = 240;
   var pad = { l: 46, r: 8, t: 12, b: 34 };
   var line = model.chart;
-  var max = niceMax(line.reduce(function (m, b) { return Math.max(m, b.capacity); }, 0));
-  var geom = reportChartGeometry(width, height, pad, line.length, max);
+  var max = chartCeiling(line.reduce(function (m, b) { return Math.max(m, b.capacity); }, 0));
+  var geom = chartGeometry(width, height, pad, line.length, max);
   var svg = svgNode("svg", {
     viewBox: "0 0 " + width + " " + height,
     class: "report-chart",
-    role: "img",
+    role: "group",
+    tabindex: "0",
     "aria-label": "Allocation against capacity over " + reportBucketLabel(reportZoom).toLowerCase()
   });
-  reportChartAxis(svg, width, height, pad, geom);
-  function pathOf(key) {
-    return line.map(function (b, i) {
-      var x = pad.l + i * geom.bw + geom.bw / 2;
-      var y = pad.t + geom.plotH - (b[key] / geom.max) * geom.plotH;
-      return (i === 0 ? "M" : "L") + x + " " + y;
-    }).join(" ");
-  }
-  svg.appendChild(svgNode("path", { d: pathOf("capacity"), class: "report-chart__cap" }));
-  svg.appendChild(svgNode("path", { d: pathOf("alloc"), class: "report-chart__alloc" }));
+
+  svg.appendChild(svgNode("path", { d: chartBandPath(line, geom), class: "report-chart__band" }));
+  reportChartAxis(svg, width, height, geom);
+  svg.appendChild(svgNode("path", {
+    d: chartLinePath(line, geom, "capacity"), class: "report-chart__cap"
+  }));
+  svg.appendChild(svgNode("path", {
+    d: chartLinePath(line, geom, "alloc"), class: "report-chart__alloc"
+  }));
+  // The allocation keeps its dots; the capacity's went with the dashes, since
+  // the band's solid edge is the line now.
   line.forEach(function (b, i) {
-    var x = pad.l + i * geom.bw + geom.bw / 2;
     svg.appendChild(svgNode("circle", {
-      cx: x, cy: pad.t + geom.plotH - (b.alloc / geom.max) * geom.plotH, r: 2.4, class: "report-chart__dot-alloc"
-    }));
-    svg.appendChild(svgNode("circle", {
-      cx: x, cy: pad.t + geom.plotH - (b.capacity / geom.max) * geom.plotH, r: 2.4, class: "report-chart__dot-cap"
+      cx: chartX(i, geom), cy: chartY(b.alloc, geom), r: 2.4, class: "report-chart__dot-alloc"
     }));
   });
-  reportChartLabels(svg, height, pad, geom, line.map(function (b) { return b.label; }));
+  reportChartLabels(svg, height, geom, line.map(function (b) { return b.label; }));
+
+  // The ruler and its readout: drawn once, shown by a class on the chart while
+  // someone is reading. The readout is a group of its own in the plot's top
+  // corner - fixed there, so it never covers the bucket being read and never
+  // flickers between two positions.
+  var rule = svgNode("line", {
+    class: "report-chart__rule", y1: geom.top, y2: geom.top + geom.plotH
+  });
+  // Inset from the corner so the paper reads as sitting inside the plot rather
+  // than hanging off its top edge.
+  var readout = svgNode("g", {
+    class: "report-chart__readout",
+    transform: "translate(" + (geom.left + 4) + " " + (geom.top + 4) + ")"
+  });
+  var box = svgNode("rect", { class: "report-chart__readout-box" });
+  var words = svgNode("text", { class: "report-chart__readout-text", x: 6, y: 13 });
+  readout.appendChild(box);
+  readout.appendChild(words);
+  svg.appendChild(rule);
+  svg.appendChild(readout);
+
+  var index = null;
+  function show(i) {
+    if (i < 0 || i >= line.length) return hide();
+    index = i;
+    var x = chartX(i, geom);
+    rule.setAttribute("x1", x);
+    rule.setAttribute("x2", x);
+    svg.classList.add("is-reading");
+    words.textContent = chartReadout(line[i]);
+    // The box takes the words' own size, so a long bucket label is never
+    // clipped and the paper never ends short of the text.
+    var ink = words.getBBox();
+    box.setAttribute("x", ink.x - 6);
+    box.setAttribute("y", ink.y - 4);
+    box.setAttribute("width", ink.width + 12);
+    box.setAttribute("height", ink.height + 8);
+    if (live) live.textContent = words.textContent;
+  }
+  function hide() {
+    index = null;
+    svg.classList.remove("is-reading");
+    if (live) live.textContent = "";
+  }
+
+  // A pointer's position arrives in screen pixels and is converted to the
+  // SVG's own units, which is where the geometry lives.
+  svg.addEventListener("pointermove", function (ev) {
+    var frame = svg.getBoundingClientRect();
+    if (!frame.width || !frame.height) return;
+    var x = (ev.clientX - frame.left) * (width / frame.width);
+    var y = (ev.clientY - frame.top) * (height / frame.height);
+    if (!chartInPlot(x, y, geom)) return hide();
+    show(chartNearestIndex(x, geom));
+  });
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("blur", hide);
+  // Focus is an invitation: the keyboard lands on the first bucket's readout
+  // without having to press an arrow to find out the chart can speak.
+  svg.addEventListener("focus", function () { if (index === null && line.length) show(0); });
+  svg.addEventListener("keydown", function (ev) {
+    var i = chartKeyIndex(ev.key, index, line.length);
+    if (i === null) return;
+    // The arrows and the ends are the chart's while it holds focus; the page
+    // must not scroll under them.
+    ev.preventDefault();
+    show(i);
+  });
   return svg;
 }
 
@@ -4139,10 +4213,16 @@ function reportAllocationSection(model) {
   var section = reportSection(reportViewLabel("allocation"),
     "What the plan offers each " + reportBucketWord() + ", against what is allocated.");
   var card = el("div", "report-chartcard");
-  card.appendChild(buildLineChart(model));
+  // The readout is drawn in the plot's corner, out of the reading order, so the
+  // same words are announced here whenever they change.
+  var live = el("p", "report-chart__live");
+  live.setAttribute("role", "status");
+  live.setAttribute("aria-live", "polite");
+  card.appendChild(buildLineChart(model, live));
+  card.appendChild(live);
   card.appendChild(reportLegend([
     { label: "Allocation", swatchClass: "report-legend__swatch--ink" },
-    { label: "Capacity", swatchClass: "report-legend__swatch--dashed" }
+    { label: "Capacity", swatchClass: "report-legend__swatch--band" }
   ]));
   section.appendChild(card);
   section.appendChild(reportAbsencesNote());

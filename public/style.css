@@ -1160,7 +1160,11 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* The chart: hand-drawn SVG in the app's own tokens, in its own card under the
-   section the panel names. */
+   section the panel names. The capacity is a quiet band under a solid top
+   edge; the allocation is a line riding over it, which is where the eye lands.
+   The band's fill is the one neutral --off, so it is the same colour whichever
+   palette scheme is active and can never be read as a project's fill. It is
+   painted under the grid, so the guides still read through the roof. */
 .report-chartcard {
   display: flex;
   flex-direction: column;
@@ -1177,6 +1181,14 @@ h1, h2, h3, p { margin: 0; }
   height: auto;
 }
 
+/* The chart answers the keyboard, so its focus is drawn as clearly as any other
+   control's: the app's one ring, at the chart's own edge. */
+.report-chart:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
 .report-chart__grid { stroke: var(--rule); stroke-width: 1; }
 .report-chart__axis { stroke: var(--rule-strong); stroke-width: 1; }
 
@@ -1186,6 +1198,19 @@ h1, h2, h3, p { margin: 0; }
   font-size: 10px;
 }
 
+/* The roof: one fixed neutral, quiet against the paper and 11.8:1 under the
+   allocation's ink, so neither the line nor its dots loses any contrast to it. */
+.report-chart__band { fill: var(--off); }
+
+/* The capacity's edge is a hair lighter than the allocation line: the roof is
+   there to be seen, the line is there to be read. */
+.report-chart__cap {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
 .report-chart__alloc {
   fill: none;
   stroke: var(--ink);
@@ -1193,16 +1218,47 @@ h1, h2, h3, p { margin: 0; }
   stroke-linejoin: round;
 }
 
-.report-chart__cap {
-  fill: none;
-  stroke: var(--signal);
-  stroke-width: 2;
-  stroke-dasharray: 4 3;
-  stroke-linejoin: round;
+.report-chart__dot-alloc { fill: var(--ink); }
+
+/* The ruler, the readout in the plot's corner and the paper under it: drawn but
+   put away until the chart is being read, over the pointer or the keyboard. */
+.report-chart__rule,
+.report-chart__readout { display: none; }
+
+.report-chart.is-reading .report-chart__rule,
+.report-chart.is-reading .report-chart__readout { display: block; }
+
+.report-chart__rule {
+  stroke: var(--ink-soft);
+  stroke-width: 1;
 }
 
-.report-chart__dot-alloc { fill: var(--ink); }
-.report-chart__dot-cap { fill: var(--signal); }
+.report-chart__readout-box {
+  fill: var(--canvas);
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.report-chart__readout-text {
+  fill: var(--ink);
+  font-family: var(--font);
+  font-size: 10px;
+}
+
+/* The readout's words, announced when they change rather than only drawn: off
+   screen, so the plot keeps its corner and the reading order keeps its one
+   sentence. */
+.report-chart__live {
+  position: absolute;
+  width: var(--base);
+  height: var(--base);
+  margin: calc(var(--base) * -1);
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 .report-legend {
   display: flex;
@@ -1227,12 +1283,13 @@ h1, h2, h3, p { margin: 0; }
 
 .report-legend__swatch--ink { background: var(--ink); }
 
-.report-legend__swatch--dashed {
+/* The capacity's swatch is what the chart draws: the quiet band's fill under
+   its solid edge, not a dashed line that no longer exists. */
+.report-legend__swatch--band {
   width: 0.875rem;
-  height: 0;
   border-radius: 0;
-  background: none !important;
-  border-top: 2px dashed var(--signal);
+  background: var(--off);
+  border-top: 1.5px solid var(--signal);
 }
 
 /* Board --------------------------------------------------------------------- */
