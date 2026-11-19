@@ -3030,32 +3030,110 @@ down to the last row and no further. */
 .milestone-row__links,
 .milestone-row__tags { grid-column: 2 / -1; }
 
-/* The related-projects picker: one checkbox per project, so a milestone may
-   relate to none, one or many. */
-.milestone-projects {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
+/* The related projects field: a summary button that opens a bounded, scrollable
+   list of checkboxes with its own search field. Every Project as a chip in the
+   row made the dialog grow past its footer on a plan with many Projects, so
+   the list holds them instead and the row keeps one height. */
+.milestone-picker { position: relative; }
 
-.milestone-project {
+.milestone-picker__btn {
+  appearance: none;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  text-align: left;
+  cursor: pointer;
+}
+
+.milestone-picker__btn:hover { border-color: var(--rule-strong); }
+
+.milestone-picker__btn[aria-expanded="true"] {
+  border-color: var(--rule-strong);
+}
+
+/* One line whatever the choice is: a long Project name ellipsises rather than
+   widening the row. */
+.milestone-picker__summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.milestone-picker__btn[aria-expanded="true"] .options__chevron {
+  transform: rotate(90deg);
+}
+
+/* Placed against its trigger like the bar's popovers, so the panel's own
+   scroll cannot clip it. */
+.milestone-picker__popup {
+  position: fixed;
+  z-index: 120;
+  width: 16rem;
+  padding: var(--sp-2);
+  background: var(--canvas);
+  border: 1px solid var(--rule-strong);
+}
+
+.milestone-picker__popup[hidden] { display: none; }
+
+.milestone-picker__search {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+/* The bound: the list scrolls inside the popup, so the control's height is the
+   same for a plan of three Projects and one of thirty. */
+.milestone-picker__list {
+  max-height: 12rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.milestone-picker__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--base) var(--sp-1);
+  border-radius: var(--radius);
   font-size: var(--fs-data);
   cursor: pointer;
 }
 
-.milestone-project input[type="checkbox"] {
-  width: auto;
-  margin: 0;
-  accent-color: var(--ink);
+.milestone-picker__item:hover {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
 }
 
-.milestone-projects__empty {
+/* A row the search filtered out: the flex display above would otherwise beat
+   the browser's own [hidden] rule and leave it on screen. */
+.milestone-picker__item[hidden] { display: none; }
+
+.milestone-picker__none {
+  margin: 0;
+  padding: var(--sp-1);
   font-size: var(--fs-data);
   color: var(--ink-soft);
 }
+
+.milestone-picker__none[hidden] { display: none; }
 
 .noscript {
   margin: var(--sp-6);
