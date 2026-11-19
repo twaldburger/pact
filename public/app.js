@@ -155,6 +155,11 @@ import {
 import { sprintDaysFigure } from "./lib/sprint-days.mjs";
 import { milestoneMarks, milestoneAxisSlots, milestoneLabel, milestoneProjects } from "./lib/milestones.mjs";
 import {
+  milestoneProjectChoices,
+  filterProjectChoices,
+  projectPickerSummary
+} from "./lib/milestone-projects.mjs";
+import {
   HOLIDAY_KINDS,
   HOLIDAY_KIND_DEFAULT,
   HOLIDAY_KIND_LABELS,
@@ -3255,6 +3260,162 @@ function openMilestonesPanel(trigger) {
   openPanel(node, trigger);
 }
 
+/* The Related projects control: one summary row that opens a bounded,
+ * scrollable list of checkboxes with its own search field, rather than a
+ * checkbox per Project in the form - a plan with twenty-five Projects ran the
+ * dialog past its footer. What is offered, how the row reads and how the
+ * search narrows it are public/lib/milestone-projects.mjs' rules; this builds
+ * the control, holds the choice and keeps the keyboard path whole.
+ *
+ * The popup is placed against its trigger like the bar's own popovers, so the
+ * panel's scroll cannot clip it, and it closes when focus leaves it so Tab
+ * never walks away from a list left floating.
+ */
+function milestoneProjectPicker(choices, chosen) {
+  var wrap = el("div", "milestone-picker");
+
+  var btn = el("button", "milestone-picker__btn");
+  btn.type = "button";
+  btn.setAttribute("aria-haspopup", "true");
+  btn.setAttribute("aria-expanded", "false");
+  var summary = el("span", "milestone-picker__summary");
+  btn.appendChild(summary);
+  // The Options menu's own disclosure marker, so the row reads as the same
+  // kind of control as the ones in that menu.
+  var chevron = el("span", "options__chevron");
+  chevron.setAttribute("aria-hidden", "true");
+  btn.appendChild(chevron);
+
+  var popup = el("div", "milestone-picker__popup");
+  popup.setAttribute("role", "group");
+  popup.setAttribute("aria-label", "Related projects");
+  popup.hidden = true;
+
+  var search = document.createElement("input");
+  search.type = "search";
+  search.className = "milestone-picker__search";
+  search.setAttribute("placeholder", "Search projects");
+  search.setAttribute("aria-label", "Search projects");
+  popup.appendChild(search);
+
+  var list = el("div", "milestone-picker__list");
+  popup.appendChild(list);
+
+  var noMatch = el("p", "milestone-picker__none");
+  noMatch.textContent = choices.length ? "No project matches that search." : "No projects yet.";
+  noMatch.hidden = true;
+  popup.appendChild(noMatch);
+
+  wrap.appendChild(btn);
+  wrap.appendChild(popup);
+
+  var items = choices.map(function (choice) {
+    var item = el("label", "milestone-picker__item");
+    var box = document.createElement("input");
+    box.type = "checkbox";
+    box.className = "milestone-picker__box";
+    box.checked = !!chosen[choice.id];
+    box.setAttribute("data-project", choice.id);
+    box.addEventListener("change", function () {
+      if (box.checked) chosen[choice.id] = true;
+      else delete chosen[choice.id];
+      renderSummary();
+    });
+    item.appendChild(box);
+    item.appendChild(document.createTextNode(choice.label));
+    list.appendChild(item);
+    return { choice: choice, item: item, box: box };
+  });
+
+  function renderSummary() {
+    var text = projectPickerSummary(choices, Object.keys(chosen));
+    summary.textContent = text;
+    btn.setAttribute("aria-label", "Related projects: " + text);
+  }
+
+  // The checkboxes the search left visible, in list order: the arrows walk
+  // these and nothing that is hidden.
+  function visibleBoxes() {
+    return items.filter(function (entry) { return !entry.item.hidden; })
+      .map(function (entry) { return entry.box; });
+  }
+
+  function applySearch() {
+    var shown = filterProjectChoices(choices, search.value);
+    var kept = {};
+    shown.forEach(function (choice) { kept[choice.id] = true; });
+    items.forEach(function (entry) { entry.item.hidden = !kept[entry.choice.id]; });
+    noMatch.hidden = shown.length > 0;
+  }
+
+  function openPicker() {
+    search.value = "";
+    applySearch();
+    popup.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    placePopover(popup, btn, "left");
+    search.focus();
+  }
+
+  function closePicker(focusButton) {
+    popup.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+    if (focusButton) btn.focus();
+  }
+
+  btn.addEventListener("click", function () {
+    if (popup.hidden) openPicker();
+    else closePicker(true);
+  });
+  btn.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { openPicker(); e.preventDefault(); }
+  });
+
+  popup.addEventListener("input", applySearch);
+
+  popup.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      // The list is the closer level: the document's own Escape closes the
+      // panel, so this stops here, closes the list and hands focus back with
+      // the choice as it was.
+      e.preventDefault();
+      e.stopPropagation();
+      closePicker(true);
+      return;
+    }
+    if (e.key === "Enter" && e.target === search) {
+      // Enter belongs to the form, which would save on it. In the search field
+      // it moves into the list instead.
+      var first = visibleBoxes()[0];
+      e.preventDefault();
+      if (first) first.focus();
+      return;
+    }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    var stops = [search].concat(visibleBoxes());
+    var at = stops.indexOf(document.activeElement);
+    if (at === -1) at = 0;
+    var next = e.key === "ArrowDown" ? at + 1 : at - 1;
+    if (next < 0 || next >= stops.length) return;
+    e.preventDefault();
+    stops[next].focus();
+  });
+
+  // Focus leaving the control - Tab, or a press on anything else in the form -
+  // puts the list away rather than leaving it floating over the panel.
+  wrap.addEventListener("focusout", function (e) {
+    if (popup.hidden) return;
+    if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
+    closePicker(false);
+  });
+
+  renderSummary();
+  return {
+    node: wrap,
+    close: function () { closePicker(false); }
+  };
+}
+
 // One Milestone's editor, on top of the list. It returns to the list after a
 // save or a delete, so a run of milestones can be written in one sitting.
 function openMilestonePanel(milestone, trigger) {
@@ -3273,43 +3434,20 @@ function openMilestonePanel(milestone, trigger) {
   var colour = colourPicker(editing ? milestone.colour : leastUsedSlot(data.milestones || []));
   form.appendChild(formRow("Colour", colour.node));
 
-  // Related projects: none, one or many, so each Project is its own checkbox.
-  // The Milestone's stored ids are the starting state, and one the plan no
-  // longer offers - an archived Project while Show archived is off, or one
-  // deleted since - is listed by its id rather than dropped, so an unrelated
-  // edit never silently unlinks a Milestone and a stale link can still be
-  // unticked.
+  // Related projects: none, one or many, so the control's own list holds each
+  // Project as a checkbox behind a summary row and a search field. The
+  // Milestone's stored ids are the starting state, and one the plan no longer
+  // offers - an archived Project while Show archived is off, or one deleted
+  // since - is listed by its id rather than dropped, so an unrelated edit never
+  // silently unlinks a Milestone and a stale link can still be unticked
+  // (public/lib/milestone-projects.mjs owns what is offered and the summary).
   var chosen = {};
   ((editing && milestone.projectIds) || []).forEach(function (id) { chosen[id] = true; });
-  var choices = data.projects.map(function (project) {
-    return { id: project.id, label: project.name };
-  });
-  var offered = {};
-  choices.forEach(function (choice) { offered[choice.id] = true; });
-  Object.keys(chosen).forEach(function (id) {
-    if (!offered[id]) choices.push({ id: id, label: id + " \u00b7 not in this view" });
-  });
-
-  var picker = el("div", "milestone-projects");
-  if (!choices.length) {
-    var none = el("p", "milestone-projects__empty");
-    none.textContent = "No projects yet.";
-    picker.appendChild(none);
-  }
-  choices.forEach(function (choice) {
-    var option = el("label", "milestone-project");
-    var box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = !!chosen[choice.id];
-    box.addEventListener("change", function () {
-      if (box.checked) chosen[choice.id] = true;
-      else delete chosen[choice.id];
-    });
-    option.appendChild(box);
-    option.appendChild(document.createTextNode(choice.label));
-    picker.appendChild(option);
-  });
-  form.appendChild(formRow("Related projects", picker));
+  var picker = milestoneProjectPicker(milestoneProjectChoices(data, Object.keys(chosen)), chosen);
+  form.appendChild(formRow("Related projects", picker.node));
+  // The popup is fixed beside its trigger, so the panel scrolling under it
+  // would leave it pointing at the wrong place: it closes instead.
+  node.addEventListener("scroll", picker.close);
 
   // Milestone tags are their own vocabulary: offered from the other Milestones
   // only, never from People, Projects or Assignments.
