@@ -17,6 +17,7 @@ import {
   suggestProjectTags,
   suggestPersonLocations,
   suggestAssignmentTags,
+  suggestMilestoneTags,
   withTag,
   withoutTag,
   archivedPersonRefusal,
@@ -29,7 +30,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
@@ -151,6 +152,7 @@ import {
   NAME_NUMBER_DEFAULT
 } from "./lib/sprints.mjs";
 import { sprintDaysFigure } from "./lib/sprint-days.mjs";
+import { milestoneProjects } from "./lib/milestones.mjs";
 import {
   HOLIDAY_KINDS,
   HOLIDAY_KIND_DEFAULT,
@@ -2264,6 +2266,32 @@ function suggestedInput(value, suggest) {
   return { node: wrap, input: i };
 }
 
+// The palette picker: the ten slots, exactly one pressed. One control serves
+// the Project and Milestone forms, so both offer the same colours and the same
+// way of choosing one.
+function colourPicker(initial) {
+  var slot = Number.isInteger(initial) ? initial : 0;
+  var wrap = el("span", "swatches");
+  var buttons = [];
+  for (var i = 0; i < SLOT_COUNT; i++) {
+    var sw = el("button", "swatch");
+    sw.type = "button";
+    sw.style.setProperty("--pick", "var(--proj-" + i + ")");
+    sw.setAttribute("aria-label", "Colour " + (i + 1));
+    sw.setAttribute("aria-pressed", i === slot ? "true" : "false");
+    sw.dataset.slot = String(i);
+    sw.addEventListener("click", function () {
+      slot = Number(this.dataset.slot);
+      buttons.forEach(function (b) {
+        b.setAttribute("aria-pressed", Number(b.dataset.slot) === slot ? "true" : "false");
+      });
+    });
+    wrap.appendChild(sw);
+    buttons.push(sw);
+  }
+  return { node: wrap, value: function () { return slot; } };
+}
+
 function openPersonPanel(person, trigger) {
   var editing = !!person;
   var node = panelShell(editing ? "Person" : "Add person",
@@ -2345,27 +2373,8 @@ function openProjectPanel(project, trigger) {
   var nameInput = input(editing ? project.name : "");
   form.appendChild(formRow("Name", nameInput));
 
-  var colour = editing ? project.colour : leastUsedSlot(data.projects);
-  var swatches = el("span", "swatches");
-  var buttons = [];
-  for (var i = 0; i < SLOT_COUNT; i++) {
-    var sw = el("button", "swatch");
-    sw.type = "button";
-    sw.style.setProperty("--pick", "var(--proj-" + i + ")");
-    sw.setAttribute("aria-label", "Colour " + (i + 1));
-    sw.setAttribute("aria-pressed", i === colour ? "true" : "false");
-    sw.dataset.slot = String(i);
-    sw.addEventListener("click", function () {
-      var slot = Number(this.dataset.slot);
-      colour = slot;
-      buttons.forEach(function (b) {
-        b.setAttribute("aria-pressed", Number(b.dataset.slot) === slot ? "true" : "false");
-      });
-    });
-    swatches.appendChild(sw);
-    buttons.push(sw);
-  }
-  form.appendChild(formRow("Colour", swatches));
+  var colour = colourPicker(editing ? project.colour : leastUsedSlot(data.projects));
+  form.appendChild(formRow("Colour", colour.node));
 
   // Project tags are offered from other Projects only; Person tags and
   // Assignment tags are separate vocabularies and are never suggested here.
@@ -2403,7 +2412,7 @@ function openProjectPanel(project, trigger) {
   var save = saveButton(editing ? "Save" : "Add project", function () {
     var name = nameInput.value.trim();
     if (!name) { error.set("A project needs a name."); nameInput.focus(); return; }
-    var body = { name: name, colour: colour, notes: notes.value, tags: tags.tags(), absence: absence.value() };
+    var body = { name: name, colour: colour.value(), notes: notes.value, tags: tags.tags(), absence: absence.value() };
     submitPanel(node, error, function () {
       return editing
         ? api("PATCH", "/api/projects/" + encodeURIComponent(project.id), body)
@@ -3064,6 +3073,193 @@ function openTagsPanel(trigger) {
   working.colours = assignTagSlots(working.keys, allTypedTags(), working.colours);
   renderList();
   openPanel(node, trigger);
+}
+
+/* --- Milestones panel ---------------------------------------------------- */
+
+// The Milestones panel: the plan's dated points, listed beside the Sprints,
+// Holidays and Tags panels. A row opens the editor; Add opens an empty one.
+// Every write goes through /api/milestones, the route the other collections
+// already have, so creating, editing and deleting one is each an atomic save
+// and its own undo step.
+function openMilestonesPanel(trigger) {
+  var node = panelShell("Milestones",
+    "A milestone is one dated point in the plan - a delivery, a deployment, a deadline. They travel with the plan.");
+  node.classList.add("panel--milestones");
+
+  var listWrap = el("div", "milestone-list");
+  node.appendChild(listWrap);
+
+  var milestones = data.milestones || [];
+  if (!milestones.length) {
+    var empty = el("p", "milestone-list__empty");
+    empty.textContent = "No milestones yet.";
+    listWrap.appendChild(empty);
+  }
+
+  milestones.forEach(function (milestone) {
+    var row = el("button", "milestone-row");
+    row.type = "button";
+    row.setAttribute("data-milestone", milestone.id);
+
+    var swatch = el("span", "milestone-row__swatch");
+    swatch.style.setProperty("--pick", "var(--proj-" + milestone.colour + ")");
+    row.appendChild(swatch);
+
+    var name = el("span", "milestone-row__name");
+    name.textContent = milestone.name;
+    row.appendChild(name);
+
+    var date = el("span", "milestone-row__date");
+    date.textContent = milestone.date;
+    row.appendChild(date);
+
+    // The Projects it relates to, by name. None that resolve reads as the
+    // plan-wide milestone it is, whether it named none or named ones since
+    // deleted (public/lib/milestones.mjs owns that rule).
+    var links = milestoneProjects(milestone, data.projects);
+    var related = el("span", "milestone-row__links");
+    related.textContent = links.length
+      ? links.map(function (project) { return project.name; }).join(", ")
+      : "All projects";
+    row.appendChild(related);
+
+    if (Array.isArray(milestone.tags) && milestone.tags.length) {
+      var tags = el("span", "milestone-row__tags");
+      tags.textContent = milestone.tags.join(", ");
+      row.appendChild(tags);
+    }
+
+    row.addEventListener("click", function () { openMilestonePanel(milestone, trigger); });
+    listWrap.appendChild(row);
+  });
+
+  var foot = el("div", "panel__foot");
+  foot.appendChild(el("span", "panel__spacer"));
+  foot.appendChild(saveButton("Add milestone", function () { openMilestonePanel(null, trigger); }));
+  node.appendChild(foot);
+
+  openPanel(node, trigger);
+}
+
+// One Milestone's editor, on top of the list. It returns to the list after a
+// save or a delete, so a run of milestones can be written in one sitting.
+function openMilestonePanel(milestone, trigger) {
+  var editing = !!milestone;
+  var node = panelShell(editing ? "Milestone" : "Add milestone",
+    "One date, a colour, its own tags and the projects it relates to.");
+  node.classList.add("panel--milestones");
+  var form = el("form", "form");
+
+  var nameInput = input(editing ? milestone.name : "");
+  form.appendChild(formRow("Name", nameInput));
+
+  var date = dateField(editing ? milestone.date : (data.today || ""), "Milestone date");
+  form.appendChild(formRow("Date", date));
+
+  var colour = colourPicker(editing ? milestone.colour : leastUsedSlot(data.milestones || []));
+  form.appendChild(formRow("Colour", colour.node));
+
+  // Related projects: none, one or many, so each Project is its own checkbox.
+  // The Milestone's stored ids are the starting state, and one the plan no
+  // longer offers - an archived Project while Show archived is off, or one
+  // deleted since - is listed by its id rather than dropped, so an unrelated
+  // edit never silently unlinks a Milestone and a stale link can still be
+  // unticked.
+  var chosen = {};
+  ((editing && milestone.projectIds) || []).forEach(function (id) { chosen[id] = true; });
+  var choices = data.projects.map(function (project) {
+    return { id: project.id, label: project.name };
+  });
+  var offered = {};
+  choices.forEach(function (choice) { offered[choice.id] = true; });
+  Object.keys(chosen).forEach(function (id) {
+    if (!offered[id]) choices.push({ id: id, label: id + " \u00b7 not in this view" });
+  });
+
+  var picker = el("div", "milestone-projects");
+  if (!choices.length) {
+    var none = el("p", "milestone-projects__empty");
+    none.textContent = "No projects yet.";
+    picker.appendChild(none);
+  }
+  choices.forEach(function (choice) {
+    var option = el("label", "milestone-project");
+    var box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = !!chosen[choice.id];
+    box.addEventListener("change", function () {
+      if (box.checked) chosen[choice.id] = true;
+      else delete chosen[choice.id];
+    });
+    option.appendChild(box);
+    option.appendChild(document.createTextNode(choice.label));
+    picker.appendChild(option);
+  });
+  form.appendChild(formRow("Related projects", picker));
+
+  // Milestone tags are their own vocabulary: offered from the other Milestones
+  // only, never from People, Projects or Assignments.
+  var tags = tagEditor(editing ? milestone.tags : [], function () {
+    return suggestMilestoneTags(data.milestones, editing ? milestone.id : null);
+  });
+  form.appendChild(formRow("Tags", tags.node));
+
+  var notes = textarea(editing ? milestone.notes : "");
+  form.appendChild(formRow("Notes", notes));
+
+  node.appendChild(form);
+  var error = errorLine(node);
+
+  var foot = el("div", "panel__foot");
+  if (editing) {
+    foot.appendChild(button("btn-danger", "Delete milestone", function () {
+      error.clear();
+      api("DELETE", "/api/milestones/" + encodeURIComponent(milestone.id) + "/destroy")
+        .then(refresh)
+        .then(function () {
+          updateMilestonesItem();
+          openMilestonesPanel(trigger);
+        })
+        .catch(showError);
+    }));
+  }
+  foot.appendChild(button("btn-ghost", "Cancel", function () { openMilestonesPanel(trigger); }));
+  foot.appendChild(el("span", "panel__spacer"));
+  var save = saveButton(editing ? "Save milestone" : "Add milestone", function () {
+    var name = nameInput.value.trim();
+    if (!name) { error.set("A milestone needs a name."); nameInput.focus(); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date.value)) {
+      error.set("A milestone needs a valid date.");
+      date.focus();
+      return;
+    }
+    var body = {
+      name: name,
+      date: date.value,
+      colour: colour.value(),
+      // The stored order first, so an edit keeps the links as they were; a
+      // newly ticked Project joins at the end.
+      projectIds: Object.keys(chosen),
+      tags: tags.tags(),
+      notes: notes.value
+    };
+    submitPanel(node, error, function () {
+      return editing
+        ? api("PATCH", "/api/milestones/" + encodeURIComponent(milestone.id), body)
+        : api("POST", "/api/milestones", body);
+    }, function () {
+      updateMilestonesItem();
+      openMilestonesPanel(trigger);
+    });
+  });
+  foot.appendChild(save);
+  node.appendChild(foot);
+
+  form.addEventListener("submit", function (e) { e.preventDefault(); save.click(); });
+
+  openPanel(node, trigger);
+  nameInput.focus();
 }
 
 /* --- zoom ---------------------------------------------------------------- */
@@ -4893,6 +5089,7 @@ var stepError = null;
 var sprintsOptionDetail = null;
 var holidaysOptionDetail = null;
 var tagsOptionDetail = null;
+var milestonesOptionDetail = null;
 var planFileState = null;
 var planFileOptionDetail = null;
 
@@ -5046,6 +5243,7 @@ function buildOptionsMenu() {
   optionsMenu.appendChild(buildSprintsItem());
   optionsMenu.appendChild(buildHolidaysItem());
   optionsMenu.appendChild(buildTagsItem());
+  optionsMenu.appendChild(buildMilestonesItem());
   optionsMenu.appendChild(buildPlanFileItem());
 }
 
@@ -5182,6 +5380,31 @@ function buildTagsItem() {
 function updateTagsItem() {
   if (!tagsOptionDetail) return;
   tagsOptionDetail.textContent = tagsItem(data && data.tagColours).detail;
+}
+
+/* The Milestones entry: an action, not a toggle. It opens the Milestones panel,
+ * where the plan's dated points are listed and edited, and its detail counts
+ * them so a plan carrying milestones is not silent about them. */
+function buildMilestonesItem() {
+  var item = milestonesItem(data && data.milestones);
+  var btn = el("button", optionRowClass("milestones") + " options__item--action");
+  btn.type = "button";
+  btn.id = "option-milestones";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  milestonesOptionDetail = el("span", "options__item-detail");
+  milestonesOptionDetail.textContent = item.detail;
+  btn.appendChild(milestonesOptionDetail);
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openMilestonesPanel(btn);
+  });
+  return btn;
+}
+
+function updateMilestonesItem() {
+  if (!milestonesOptionDetail) return;
+  milestonesOptionDetail.textContent = milestonesItem(data && data.milestones).detail;
 }
 
 /* The Plan file entry: an action, not a toggle. It opens the Plan file panel
@@ -5550,6 +5773,7 @@ function openOptions(open) {
     updateSprintsItem();
     updateHolidaysItem();
     updateTagsItem();
+    updateMilestonesItem();
     loadPlanFileState();
   } else {
     closeDisclosure();

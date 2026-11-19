@@ -38,7 +38,10 @@ const MIME = {
 const COLLECTIONS = {
   people: { create: "createPerson", update: "updatePerson", archive: "archivePerson", destroy: "destroyPerson" },
   projects: { create: "createProject", update: "updateProject", archive: "archiveProject", destroy: "destroyProject" },
-  assignments: { create: "createAssignment", update: "updateAssignment", archive: "archiveAssignment", destroy: "destroyAssignment" }
+  assignments: { create: "createAssignment", update: "updateAssignment", archive: "archiveAssignment", destroy: "destroyAssignment" },
+  // A Milestone has no archived state: it either exists or it is gone, so the
+  // collection takes every route but the archive one, which stays a refusal.
+  milestones: { create: "createMilestone", update: "updateMilestone", destroy: "destroyMilestone" }
 };
 
 function sendJSON(res, status, body) {
@@ -78,6 +81,10 @@ function planForClient(store, includeArchived) {
     // Absent until holidays are configured, so a plan without them reaches the
     // client exactly as it always has.
     holidays: plan.holidays,
+    // The Milestones the plan marks, passed through as stored, with whatever
+    // Project ids they still name. Absent until one is created, so a plan that
+    // never had one reaches the client exactly as it always has.
+    milestones: plan.milestones,
     // The typed tags' colour-by-key choices and value colours, passed through
     // as stored. Absent until configured, so a plan without them reaches the
     // client exactly as it always has.
@@ -114,7 +121,7 @@ async function readBody(req) {
 }
 
 function matchApi(pathname) {
-  const match = /^\/api\/(people|projects|assignments)(?:\/([^/]+))?(\/destroy)?$/.exec(pathname);
+  const match = /^\/api\/(people|projects|assignments|milestones)(?:\/([^/]+))?(\/destroy)?$/.exec(pathname);
   if (!match) return null;
   return { collection: match[1], id: match[2] || null, destroy: match[3] === "/destroy" };
 }
@@ -132,7 +139,10 @@ async function handleApi(req, res, store, route) {
     return sendJSON(res, 201, store[ops.create](await readBody(req)));
   }
   if (req.method === "PATCH") return sendJSON(res, 200, store[ops.update](route.id, await readBody(req)));
-  if (req.method === "DELETE") return sendJSON(res, 200, store[ops.archive](route.id));
+  if (req.method === "DELETE") {
+    if (!ops.archive) return sendError(res, 405, "method not allowed");
+    return sendJSON(res, 200, store[ops.archive](route.id));
+  }
   return sendError(res, 405, "method not allowed");
 }
 

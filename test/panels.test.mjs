@@ -7,6 +7,7 @@ import {
   suggestProjectTags,
   suggestPersonLocations,
   suggestAssignmentTags,
+  suggestMilestoneTags,
   sortTags,
   hasTag,
   withTag,
@@ -104,6 +105,37 @@ test("Project tags are suggested from other Projects only", () => {
   // A Project's own tags never appear, and Person or Assignment tags are never
   // part of this vocabulary.
   assert.equal(suggestProjectTags([{ id: "solo", tags: ["Atlas"] }], "solo").length, 0);
+});
+
+test("Milestone tags are suggested from other Milestones only", () => {
+  const milestones = [
+    { id: "launch", tags: ["Release", "comms"] },
+    { id: "audit", tags: ["compliance", "release"] },
+    { id: "close", tags: [] }
+  ];
+  // The other Milestones' tags, de-duplicated case-insensitively: a spelling
+  // already in this Milestone's own list is not offered back, and the rest are
+  // alphabetical.
+  assert.deepEqual(suggestMilestoneTags(milestones, "launch"), ["compliance"]);
+  assert.deepEqual(suggestMilestoneTags(milestones, "audit"), ["comms"]);
+  // A new Milestone is offered every tag in this vocabulary.
+  assert.deepEqual(suggestMilestoneTags(milestones, null), ["comms", "compliance", "Release"]);
+
+  // The fourth vocabulary is separate in both directions. Tags on People,
+  // Projects and Assignments are never offered to a Milestone, even where no
+  // other Milestone carries a tag at all.
+  const otherPlan = [
+    { id: "anna", tags: ["lead"] },
+    { id: "atlas", tags: ["Platform"] },
+    { id: "a1", tags: ["React"] }
+  ];
+  assert.deepEqual(suggestMilestoneTags([], null), []);
+  assert.deepEqual(suggestMilestoneTags([{ id: "solo", tags: ["Atlas"] }], "solo"), []);
+  assert.deepEqual(suggestMilestoneTags(otherPlan, "anna"), ["Platform", "React"]);
+  // And Milestone tags are never offered to People, Projects or Assignments.
+  assert.deepEqual(suggestPersonTags([{ id: "anna", tags: ["lead"] }], null), ["lead"]);
+  assert.deepEqual(suggestProjectTags([{ id: "atlas", tags: ["Platform"] }], null), ["Platform"]);
+  assert.deepEqual(suggestAssignmentTags([{ id: "a1", projectId: "atlas", tags: ["React"] }], "atlas", null), ["React"]);
 });
 
 test("Locations are suggested from other People only, one per Person", () => {

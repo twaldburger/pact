@@ -38,6 +38,11 @@ Projects rail down the side, which folds away from the chevron in its header.
   Show archived view to bring it back; deleting is permanent and takes its
   Assignments with it. Both sit in the panels, and an Assignment can also be
   deleted with the Delete key over its block.
+- **Milestones.** A Milestone is one dated point in the plan - a delivery, a
+deployment, a deadline - carrying a name, a palette colour, its own tags and
+notes, and the Projects it relates to. Milestones travel with the plan and are
+listed and edited in the Milestones panel from the Options menu, which counts
+them.
 - **Filter.** One field hides everything on the grid that does not match. By
   default it looks in People, Projects and Assignments, and a scope control
   states how many areas it is searching and switches each. A plain term is a
