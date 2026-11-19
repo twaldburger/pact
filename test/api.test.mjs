@@ -1,10 +1,11 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { createStore, fromISO, toISO, todayISO } from "../lib/plan.mjs";
 import { createServer } from "../server.mjs";
+import { scratch } from "../test-support/scratch.mjs";
+
+const tempDir = scratch("api");
 
 // A day offset from today, inside the seeded period whatever the run date is.
 function day(n) {
@@ -14,7 +15,7 @@ function day(n) {
 }
 
 function startServer() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-api-"));
+  const dir = tempDir();
   const store = createStore(path.join(dir, "pact.json"));
   const server = createServer(store);
   return new Promise((resolve) => {

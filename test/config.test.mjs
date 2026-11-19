@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import {
   CONFIG_FILENAME,
@@ -16,10 +15,9 @@ import {
   resolvePlanFile
 } from "../lib/config.mjs";
 import { VIEW_DEFAULTS } from "../public/lib/view.mjs";
+import { scratch } from "../test-support/scratch.mjs";
 
-function tempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "pact-config-"));
-}
+const tempDir = scratch("config");
 
 /* --- the settings file ---------------------------------------------------- */
 

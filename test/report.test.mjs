@@ -1,7 +1,6 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStore } from "../lib/plan.mjs";
@@ -25,6 +24,9 @@ import {
   FILTER_HANDOFF_KEY
 } from "../public/lib/report.mjs";
 import { normalizeView, VIEW_DEFAULTS } from "../public/lib/view.mjs";
+import { scratch } from "../test-support/scratch.mjs";
+
+const tempDir = scratch("report");
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(HERE, "..", "public");
@@ -991,7 +993,7 @@ test("a missing or malformed carried Filter reads as none, not an error", () => 
 /* --- the pages load at their own paths ------------------------------------ */
 
 function startServer() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-report-"));
+  const dir = tempDir();
   const store = createStore(path.join(dir, "default.pact.json"));
   const server = createServer(store, { configPath: path.join(dir, "config.json") });
   return new Promise((resolve) => {

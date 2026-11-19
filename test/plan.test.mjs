@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import {
   createStore,
@@ -17,10 +16,12 @@ import {
   NotFoundError,
   PlanFileError
 } from "../lib/plan.mjs";
+import { scratch } from "../test-support/scratch.mjs";
+
+const tempDir = scratch("plan");
 
 function tempFile() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-plan-"));
-  return path.join(dir, "pact.json");
+  return path.join(tempDir(), "pact.json");
 }
 
 // A day offset from today. The seeded period always holds today with room on
@@ -457,7 +458,7 @@ test("the plan file is rewritten atomically", () => {
 });
 
 test("a failed atomic write leaves the previous file intact", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-atomic-"));
+  const dir = tempDir();
   const file = path.join(dir, "plan.json");
   fs.writeFileSync(file, "ORIGINAL");
   fs.chmodSync(dir, 0o555);
@@ -470,7 +471,7 @@ test("a failed atomic write leaves the previous file intact", () => {
 });
 
 test("a store write that fails keeps memory and file consistent", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-store-fail-"));
+  const dir = tempDir();
   const file = path.join(dir, "plan.json");
   const store = createStore(file);
   const before = store.get();
@@ -607,7 +608,7 @@ test("a refused write records no history step", () => {
 });
 
 test("a failed write records no history step", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-history-fail-"));
+  const dir = tempDir();
   const file = path.join(dir, "plan.json");
   const store = createStore(file);
   const before = store.get();
@@ -633,7 +634,7 @@ test("undo and redo refuse at the ends of the history", () => {
 });
 
 test("a failed undo leaves the file, the plan and the history unchanged", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-undo-fail-"));
+  const dir = tempDir();
   const file = path.join(dir, "plan.json");
   const store = createStore(file);
   store.createPerson({ name: "Dana Vo", availability: 90 });
@@ -1021,7 +1022,7 @@ test("an empty plan is valid, has no content, and keeps a period", () => {
 });
 
 test("the store opens an existing plan file and switches to it", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-open-"));
+  const dir = tempDir();
   const first = path.join(dir, "first.pact.json");
   const second = path.join(dir, "second.pact.json");
   const store = createStore(first);
@@ -1040,7 +1041,7 @@ test("the store opens an existing plan file and switches to it", () => {
 });
 
 test("a missing plan file is refused and never created", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-missing-"));
+  const dir = tempDir();
   const active = path.join(dir, "default.pact.json");
   const store = createStore(active);
   const before = store.get();
@@ -1054,7 +1055,7 @@ test("a missing plan file is refused and never created", () => {
 });
 
 test("a read-only plan file is refused plainly", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-ro-"));
+  const dir = tempDir();
   const writable = path.join(dir, "writable.pact.json");
   const store = createStore(writable);
   const readOnly = path.join(dir, "readonly.pact.json");
@@ -1069,7 +1070,7 @@ test("a read-only plan file is refused plainly", () => {
 });
 
 test("a new plan is created truly empty and never over an existing file", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-new-"));
+  const dir = tempDir();
   const store = createStore(path.join(dir, "default.pact.json"));
   const fresh = path.join(dir, "fresh.pact.json");
 
