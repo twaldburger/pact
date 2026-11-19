@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem } from "../public/lib/options.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
+import { sprintsFor } from "../public/lib/sprints.mjs";
 
 test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Grid dividers and Minimap", () => {
   const items = optionsItems(false, true, false);
@@ -90,13 +91,41 @@ test("every zoom has a divider unit", () => {
   });
 });
 
-test("the Sprints entry states whether a cadence exists yet", () => {
-  assert.equal(sprintsItem(false).key, "sprints");
-  assert.equal(sprintsItem(false).label, "Sprints...");
-  assert.equal(sprintsItem(false).detail, "Not defined yet");
-  assert.equal(sprintsItem(true).detail, "Cadence defined");
-  assert.equal(sprintsItem(1).detail, "Cadence defined");
+test("the Sprints entry counts the sprints the panel lists", () => {
+  const period = { start: "2026-01-01", end: "2026-02-28" };
+  const cadence = { start: "2026-01-01", length: 14, namePrefix: "Sprint ", nameNumber: 24 };
+  assert.equal(sprintsItem(undefined).key, "sprints");
+  assert.equal(sprintsItem(undefined).label, "Sprints...");
+
+  // The entry states the count the panel's own heading states: one rule,
+  // sprintsFor, counted here exactly as the panel counts it.
+  const chain = sprintsFor(cadence, [], period);
+  assert.equal(chain.length, 5);
+  assert.equal(sprintsItem(cadence, [], period).detail, chain.length + " sprints");
+
+  // One sprint reads singular.
+  const one = { start: "2026-01-01", end: "2026-01-10" };
+  assert.equal(sprintsFor(cadence, [], one).length, 1);
+  assert.equal(sprintsItem(cadence, [], one).detail, "1 sprint");
+
+  // A longer plan period lengthens the chain, so the count follows it.
+  const longer = { start: "2026-01-01", end: "2026-04-30" };
+  assert.ok(sprintsFor(cadence, [], longer).length > chain.length);
+  assert.equal(sprintsItem(cadence, [], longer).detail,
+    sprintsFor(cadence, [], longer).length + " sprints");
+
+  // A per-sprint adjustment is part of the same derivation: a longer sprint
+  // re-flows the chain and the entry counts the longer chain.
+  const adjusted = sprintsFor(cadence, [{ index: 2, length: 35 }], period);
+  assert.notEqual(adjusted.length, chain.length);
+  assert.equal(sprintsItem(cadence, [{ index: 2, length: 35 }], period).detail,
+    adjusted.length + " sprints");
+
+  // No cadence claims no count at all rather than "0 sprints".
+  assert.equal(sprintsItem(null, [], period).detail, "Not defined yet");
   assert.equal(sprintsItem(undefined).detail, "Not defined yet");
+  assert.equal(sprintsItem(undefined, undefined, undefined).detail, "Not defined yet");
+  assert.equal(sprintsItem({ start: "not-a-date" }, [], period).detail, "Not defined yet");
 });
 
 test("the Holidays entry counts the configured dates", () => {

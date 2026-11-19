@@ -12,6 +12,7 @@ import {
   isPalette
 } from "./palette.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
+import { cadenceFrom, sprintsFor } from "./sprints.mjs";
 import { tagKeys, tagColourSlots } from "./tags.mjs";
 
 export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays) {
@@ -94,14 +95,20 @@ export function paletteItems(active) {
 
 /*
  * The Sprints entry in the Options menu. Unlike the toggles it is an action,
- * not a checked state: opening it opens the Sprints panel. The detail states
- * whether a cadence exists yet, so the menu says what opening it will find.
+ * not a checked state: opening it opens the Sprints panel. The detail counts
+ * the sprints that panel lists, by the panel's own rule (sprintsFor over the
+ * cadence, the adjustments and the plan period), so the entry states the count
+ * opening it will find rather than counting a second way. A plan with no
+ * cadence has no chain to count and says so, rather than "0 sprints".
  */
-export function sprintsItem(hasCadence) {
+export function sprintsItem(cadence, adjustments, period) {
+  const count = sprintsFor(cadence, adjustments, period).length;
   return {
     key: "sprints",
     label: "Sprints...",
-    detail: hasCadence ? "Cadence defined" : "Not defined yet"
+    detail: cadenceFrom({ cadence: cadence }) === null
+      ? "Not defined yet"
+      : count + (count === 1 ? " sprint" : " sprints")
   };
 }
 
