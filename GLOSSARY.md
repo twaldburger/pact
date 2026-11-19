@@ -107,9 +107,17 @@ _Avoid_: preference, option, display state
 The plan's granularity for Availability and Allocation: one whole number of per cent from 1 to 100, stored in the plan beside its period and defaulting to 10 when absent. One step is also the floor, and the ceiling stays 100, so a 10% step floors at 10% and a 1% step at 1%. The interface snaps its steppers, panels and vertical drag by it; the server never enforces it, so changing the step leaves every stored value exactly as it was.
 _Avoid_: increments, resolution, granularity
 
+**Milestone**:
+A single dated point in the plan that something is delivered or due by: it carries a name, a colour, its own tags and an optional note, and optionally the Projects it relates to. It belongs to the plan rather than to a view, and its one date is not a span, so nothing is measured between two of them; it never compares itself to the work around it and never warns, being an annotation the Filter understands rather than an alarm. It is drawn as a vertical rule through the rows when milestones are switched on: one related to Projects appears only while at least one of them is in view, and one related to none is plan-wide.
+_Avoid_: deadline, checkpoint, gate, release, flag, marker
+
+**Milestone tag**:
+A short free-text label on a Milestone, for grouping and filtering milestones later. A new one can be typed, or one already in use on another Milestone chosen; milestones' tags, people's tags, projects' tags and assignments' tags are separate lists.
+_Avoid_: label, keyword, category, or an unqualified "tag"
+
 **Marker**:
-The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at.
-_Avoid_: today line, now line, cursor, playhead, reference line
+The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at. It is the reading cursor, not a Milestone: a Milestone is a dated point in the plan, while the Marker only sets the date the plan is read at.
+_Avoid_: today line, now line, cursor, playhead, reference line, milestone
 
 **Minimap**:
 An overview strip of the Timeline, off by default and turned on under the Options glyph, fixed at the board's bottom-right. Its height is how much of the shown rows' available capacity is used on each day rather than an absolute assigned share, and a day past full is over-allocation, drawn at the top of that scale in the signal colour. It follows the Filter and Show archived as the grid does and shows an empty map when the Filter leaves nothing, and it highlights the stretch of the period the grid currently shows, which can be dragged - or the strip clicked - to scroll the Timeline. It is a view setting, kept in the Config and restored on load like Zoom and Row height, and is independent of the collapsible Stack.
