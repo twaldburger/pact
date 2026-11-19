@@ -29,6 +29,7 @@ test("the defaults are exactly what the app shipped with", () => {
     milestones: false,
     dividers: true,
     minimap: false,
+    marker: true,
     palette: "paired",
     stackCollapsed: false,
     sort: { projects: null, people: null }
@@ -57,6 +58,7 @@ test("an absent view, or any non-object, reads as every default", () => {
       milestones: false,
       dividers: true,
       minimap: false,
+      marker: true,
       palette: "paired",
       stackCollapsed: false,
       sort: { projects: null, people: null }
@@ -82,6 +84,7 @@ test("every key survives a normalise at a non-default value", () => {
     milestones: true,
     dividers: false,
     minimap: true,
+    marker: false,
     palette: "set3",
     stackCollapsed: true,
     sort: {
@@ -129,6 +132,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     milestones: "yes",
     dividers: 1,
     minimap: "on",
+    marker: "yes",
     palette: "neon",
     stackCollapsed: "true",
     sort: { projects: { key: "nonsense" }, people: null }
@@ -144,6 +148,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     milestones: false,
     dividers: true,
     minimap: false,
+    marker: true,
     palette: "paired",
     stackCollapsed: false,
     sort: { projects: null, people: null }
@@ -215,6 +220,21 @@ test("the milestone rules start off, are restored on load, and Reset view return
   // Only a boolean is a stored value; anything else is the default.
   [1, "yes", null, [], {}].forEach((raw) => {
     assert.equal(normalizeView({ milestones: raw }).milestones, false);
+  });
+});
+
+test("the Marker starts drawn, is restored on load, and Reset view returns it to drawn", () => {
+  // Shown on a first run and in any config that never stored it: that is how
+  // the grid opened while its visibility was not a setting.
+  assert.equal(VIEW_DEFAULTS.marker, true);
+  assert.equal(normalizeView({}).marker, true);
+  // Switched off, the stored view brings it back hidden.
+  assert.equal(normalizeView({ marker: false }).marker, false);
+  // Reset view writes the defaults whole, so the toggle comes back on.
+  assert.equal(normalizeView(VIEW_DEFAULTS).marker, true);
+  // Only a boolean is a stored value; anything else is the default.
+  [1, 0, "yes", null, [], {}].forEach((raw) => {
+    assert.equal(normalizeView({ marker: raw }).marker, true);
   });
 });
 

@@ -4,16 +4,17 @@ import { optionsItems, optionGroups, optionDividerKeys, dividerUnit, rangeContro
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
 
-test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Show milestones, Grid dividers and Minimap", () => {
+test("the options menu holds Show archived, Highlight weekends, Highlight holidays, Show milestones, Grid dividers, Minimap and Marker", () => {
   const items = optionsItems(false, true, false);
-  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "holidays", "milestones", "dividers", "minimap"]);
+  assert.deepEqual(items.map((item) => item.key), ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "marker"]);
   assert.deepEqual(items.map((item) => item.label), [
     "Show archived",
     "Highlight weekends",
     "Highlight holidays",
     "Show milestones",
     "Grid dividers",
-    "Minimap"
+    "Minimap",
+    "Marker"
   ]);
 });
 
@@ -25,16 +26,17 @@ test("Show archived is checked exactly while archived things are shown", () => {
   assert.equal(optionsItems(undefined)[0].checked, false);
 });
 
-test("a fresh session opens with the weekend band, holiday band and milestone rules off, dividers on and Minimap off", () => {
+test("a fresh session opens with the weekend band, holiday band and milestone rules off, dividers on, Minimap off and the Marker drawn", () => {
   // The session's own defaults, handed to the menu as app.js hands them: the
-  // two highlight bands and the milestone rules are off, the dividers are on
-  // and the Minimap is off.
-  const items = optionsItems(false, false, true);
+  // two highlight bands and the milestone rules are off, the dividers are on,
+  // the Minimap is off and the Marker is drawn.
+  const items = optionsItems(false, false, true, false, false, false, true);
   assert.equal(items[1].checked, false);
   assert.equal(items[2].checked, false);
   assert.equal(items[3].checked, false);
   assert.equal(items[4].checked, true);
   assert.equal(items[5].checked, false);
+  assert.equal(items[6].checked, true);
 });
 
 test("Show milestones is checked exactly while the milestone rules are drawn", () => {
@@ -51,6 +53,14 @@ test("Minimap is checked exactly while its toggle is on", () => {
   assert.equal(minimap(false), false);
   assert.equal(minimap(1), true);
   assert.equal(minimap(undefined), false);
+});
+
+test("Marker is checked exactly while the line is drawn", () => {
+  const marker = (on) => optionsItems(false, true, false, false, false, false, on)[6].checked;
+  assert.equal(marker(true), true);
+  assert.equal(marker(false), false);
+  assert.equal(marker(1), true);
+  assert.equal(marker(undefined), false);
 });
 
 test("Highlight holidays is checked exactly while its band is drawn", () => {
@@ -79,9 +89,9 @@ test("Grid dividers is checked exactly while the rules are drawn", () => {
 
 test("the items are independent of one another", () => {
   const items = optionsItems(true, false, true, false, true);
-  assert.deepEqual(items.map((item) => item.checked), [true, false, true, false, true, false]);
-  const all = optionsItems(true, true, true, true, true, true);
-  assert.deepEqual(all.map((item) => item.checked), [true, true, true, true, true, true]);
+  assert.deepEqual(items.map((item) => item.checked), [true, false, true, false, true, false, false]);
+  const all = optionsItems(true, true, true, true, true, true, true);
+  assert.deepEqual(all.map((item) => item.checked), [true, true, true, true, true, true, true]);
 });
 
 test("the grid divider follows the zoom, falling back to the coarsest", () => {
@@ -249,13 +259,13 @@ test("the palette, period and step are each one collapsed row, not a group", () 
 test("the menu reads as three groups in order: the view, the plan and the app", () => {
   const items = optionsItems(false, false, true, false, false);
   assert.deepEqual(optionGroups(items), [
-    ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "palette", "reset-view"],
+    ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "marker", "palette", "reset-view"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
     ["plan-file"]
   ]);
   // A future toggle joins the view group by being in optionsItems alone.
   const added = items.concat([{ key: "noise", label: "X" }]);
-  assert.deepEqual(optionGroups(added)[0], ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "noise", "palette", "reset-view"]);
+  assert.deepEqual(optionGroups(added)[0], ["archived", "weekends", "holidays", "milestones", "dividers", "minimap", "marker", "noise", "palette", "reset-view"]);
 });
 
 test("two dividers are drawn, each on a group boundary", () => {
