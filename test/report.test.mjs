@@ -58,6 +58,25 @@ test("the switch opens the instruments, before the Filter, in both views", () =>
   });
 });
 
+test("the switch gives its two links equal columns, sized by the longer label", () => {
+  // The links once took their width from their own text, so Plan and Report
+  // rendered at different widths. Two equal tracks on a container left to its
+  // content put both at the wider label's width, and keep them equal when a
+  // label grows, which a pinned px width would not.
+  const style = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const nav = style.match(/\.viewswitch\s*\{([^}]*)\}/);
+  assert.ok(nav, "the .viewswitch rule is missing");
+  assert.match(nav[1], /display:\s*grid;/);
+  assert.match(nav[1], /grid-template-columns:\s*1fr 1fr;/);
+  // The bar's height and border are the switch's own, unchanged.
+  assert.match(nav[1], /height:\s*var\(--control-h\);/);
+  assert.match(nav[1], /border:\s*1px solid var\(--rule\);/);
+  // No button pins a width of its own; the columns are the only width rule.
+  const btn = style.match(/\.viewswitch__btn\s*\{([^}]*)\}/);
+  assert.ok(btn, "the .viewswitch__btn rule is missing");
+  assert.doesNotMatch(btn[1], /(^|[;{\s])(min-|max-)?width\s*:/);
+});
+
 test("the switch moves between the report's own path and the plan's", () => {
   assert.equal(PLAN_PATH, "/");
   assert.equal(REPORT_PATH, "/report.html");

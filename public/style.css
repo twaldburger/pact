@@ -209,9 +209,13 @@ h1, h2, h3, p { margin: 0; }
 /* The Plan/Report switch: one segmented control opening the instruments,
    immediately before the Filter, in the bar's shared control language. It is a
    pair of real links, so the move to a view is a navigation to that view's own
-   page, and the page showing marks itself with aria-current. */
+   page, and the page showing marks itself with aria-current. Two equal columns
+   keep the pair square whatever the labels say, so a longer word in one does
+   not make the pair lopsided: with the container's width left to its content,
+   each 1fr track settles at the wider label's width. */
 .viewswitch {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   align-items: stretch;
   height: var(--control-h);
   border: 1px solid var(--rule);
@@ -222,6 +226,7 @@ h1, h2, h3, p { margin: 0; }
 .viewswitch__btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 0 var(--sp-4);
   border-right: 1px solid var(--rule);
   color: var(--ink-soft);
