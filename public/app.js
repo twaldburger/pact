@@ -5310,9 +5310,9 @@ function buildResetViewItem() {
 }
 
 /* The Sprints entry: an action, not a toggle. It opens the Sprints panel and
- * its detail states whether a cadence exists yet. */
+ * its detail counts the sprints that panel lists. */
 function buildSprintsItem() {
-  var item = sprintsItem(!!sprintCadence);
+  var item = sprintsItem(sprintCadence, data.sprints, data.range);
   var btn = el("button", optionRowClass(item.key) + " options__item--action");
   btn.type = "button";
   btn.id = "option-sprints";
@@ -5330,7 +5330,7 @@ function buildSprintsItem() {
 
 function updateSprintsItem() {
   if (!sprintsOptionDetail) return;
-  sprintsOptionDetail.textContent = sprintsItem(!!sprintCadence).detail;
+  sprintsOptionDetail.textContent = sprintsItem(sprintCadence, data.sprints, data.range).detail;
 }
 
 /* The Holidays entry: an action, not a toggle. It opens the Holidays panel and
