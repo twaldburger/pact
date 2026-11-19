@@ -1769,9 +1769,10 @@ h1, h2, h3, p { margin: 0; }
 
 /* The milestone rules: one full-height rule down the rows at each date the view
    leaves a milestone on, in that milestone's own palette colour. The layer is a
-   sibling of the weekend band and the Grid dividers, appended after them at the
-   same stacking level, so a rule paints above the shading and the dividers and
-   under the blocks. It stops at the rows: the axis names the date in its own
+   sibling of the weekend band, the Grid dividers and the rows at the same
+   stacking level; it is appended after the rows, so a rule paints above the
+   shading, the dividers and the blocks it crosses, while the Marker keeps its
+   own higher layer. It stops at the rows: the axis names the date in its own
    band, so a rule never runs twice through the same date. */
 .milestone-rules {
   grid-column: 2;
@@ -1786,7 +1787,9 @@ h1, h2, h3, p { margin: 0; }
   top: 0;
   bottom: 0;
   left: calc(var(--i) * var(--day-w));
-  width: 1px;
+  /* Two pixels of the milestone's own colour at full strength: enough to read
+     over an assignment it crosses, not a stripe that hides it. */
+  width: 2px;
   background: var(--milestone);
 }
 
@@ -2980,6 +2983,15 @@ down to the last row and no further. */
    button that opens the editor. The swatch is a Project panel swatch, so a
    milestone's colour is read the same way a project's is. */
 .panel--milestones { width: 26rem; }
+
+/* The milestone's date is a plain date field, not a form field stretched across
+   the panel: it takes the holiday row's own width and padding, so the two
+   dialogs show a date on one and the same control. */
+.panel--milestones .form input[type="date"] {
+  width: 8.5rem;
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2);
+}
 
 .milestone-list { margin-top: var(--sp-4); }
 

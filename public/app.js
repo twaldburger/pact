@@ -604,8 +604,9 @@ function milestonesDrawn() {
 
 // The milestone overlay: one full-height rule down the rows at each visible
 // date, in the milestone's own palette colour. It is a sibling of the weekend
-// band and the Grid dividers, appended after them at the same stacking level,
-// so it paints above the shading and behind the blocks.
+// band, the Grid dividers and the rows at the same stacking level, drawn last
+// of them: a rule paints above the shading, the dividers and the blocks it
+// crosses, while the Marker keeps its own higher layer.
 function buildMilestoneRules() {
   var layer = el("div", "milestone-rules");
   milestoneMarkList.forEach(function (mark) {
@@ -4785,15 +4786,16 @@ function render(opts) {
 
   if (overlay) tl.appendChild(overlay);
   // After the weekend band and before the rows, at the same stacking level:
-  // that is what puts a rule above the shading and behind the blocks. The
-  // milestone rules are appended after the dividers, so a date's own rule
-  // paints over a grid divider it happens to share.
+  // that is what puts a divider above the shading and behind the blocks.
   if (rules) tl.appendChild(rules);
-  if (milestoneOverlay) tl.appendChild(milestoneOverlay);
   tl.appendChild(corner);
   tl.appendChild(drawAxis());
   tl.appendChild(rows.heads);
   tl.appendChild(rows.body);
+  // The milestone rules follow the rows, so a rule paints over the block it
+  // crosses. They also follow the dividers at the same stacking level, so a
+  // date's own rule still paints over a grid divider it happens to share.
+  if (milestoneOverlay) tl.appendChild(milestoneOverlay);
   if (markerVisible) {
     tl.appendChild(drawMarker());
   } else {
