@@ -1,17 +1,19 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { createStore } from "../lib/plan.mjs";
 import { createServer } from "../server.mjs";
 import { readConfig } from "../lib/config.mjs";
 import { VIEW_DEFAULTS } from "../public/lib/view.mjs";
+import { scratch } from "../test-support/scratch.mjs";
+
+const tempDir = scratch("view-api");
 
 // One server over a temp data directory, with the plan file and its config
 // where the real app keeps them - the two settings that share the one file.
 function startServer() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pact-view-api-"));
+  const dir = tempDir();
   const planFile = path.join(dir, "default.pact.json");
   const configFile = path.join(dir, "config.json");
   const store = createStore(planFile);
