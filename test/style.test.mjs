@@ -629,7 +629,7 @@ test("the legend's capacity swatch draws the band, not a dash", () => {
 
 // The milestone rules are drawn the way the weekend band and the Grid dividers
 // are: a sibling layer inside the grid, at the same stacking level, each rule
-// an absolutely positioned hairline on the date's own day boundary. These
+// an absolutely positioned line on the date's own day boundary. These
 // assertions pin that, and the axis band the dates are named in, so the rules
 // cannot drift onto a layer or a geometry of their own.
 const MILESTONE_RULES = STYLE.match(/\.milestone-rules\s*\{([^}]*)\}/);
@@ -652,13 +652,54 @@ test("the milestone rules sit on the rows at the Grid dividers' own level", () =
   assert.equal(declaration(MILESTONE_RULES[1], "pointer-events"), "none");
 });
 
-test("a milestone rule is a hairline on the date's own day boundary, in its colour", () => {
+test("a milestone rule is a two-pixel line on the date's own day boundary, in its colour", () => {
   assert.ok(MILESTONE_RULE, "the .milestone-rule rule is missing");
   assert.ok(DIVIDER_RULE, "the .rule rule is missing");
   // The same column a Grid divider sits on: the day's own left edge.
   assert.equal(declaration(MILESTONE_RULE[1], "left"), declaration(DIVIDER_RULE[1], "left"));
-  assert.equal(declaration(MILESTONE_RULE[1], "width"), "1px");
+  // Wide enough to read over an assignment it crosses, and fully opaque: a
+  // block never shows through the rule.
+  assert.equal(declaration(MILESTONE_RULE[1], "width"), "2px");
+  const opacity = MILESTONE_RULE[1].match(/opacity:\s*([^;]+);/);
+  assert.ok(!opacity || opacity[1].trim() === "1", "the rule is drawn at less than full opacity");
   assert.equal(declaration(MILESTONE_RULE[1], "background"), "var(--milestone)");
+});
+
+test("the rules paint over the blocks, and the marker paints over the rules", () => {
+  const app = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  const dividers = app.indexOf("if (rules) tl.appendChild(rules);");
+  const rows = app.indexOf("tl.appendChild(rows.body);");
+  const over = app.indexOf("if (milestoneOverlay) tl.appendChild(milestoneOverlay);");
+  const marker = app.indexOf("tl.appendChild(drawMarker());");
+  assert.ok(dividers >= 0 && rows >= 0 && over >= 0 && marker >= 0, "the draw order is not in the source");
+  // A divider stays behind the blocks; the milestone rules follow the rows.
+  assert.ok(dividers < rows, "the Grid dividers are drawn over the blocks");
+  assert.ok(rows < over, "the milestone rules are still drawn under the blocks");
+  assert.ok(over < marker, "the milestone rules are drawn after the marker");
+  // The marker keeps its own higher layer, so the rule cannot cover it.
+  const markerLayer = STYLE.match(/\n\.marker-layer\s*\{([^}]*)\}/);
+  assert.ok(markerLayer, "the .marker-layer rule is missing");
+  assert.ok(
+    Number(declaration(markerLayer[1], "z-index")) > Number(declaration(MILESTONE_RULES[1], "z-index")),
+    "the marker is not painted above the milestone rules"
+  );
+});
+
+test("the milestone date field is sized like a holiday row's", () => {
+  const dateField = STYLE.match(/\.panel--milestones \.form input\[type="date"\]\s*\{([^}]*)\}/);
+  const holidayRow = STYLE.match(/\n\.holiday-row\s*\{([^}]*)\}/);
+  const holidayInput = STYLE.match(/\.holiday-group input,\s*\.holiday-group select\s*\{([^}]*)\}/);
+  assert.ok(dateField, "the milestone date field's rule is missing");
+  assert.ok(holidayRow, "the .holiday-row rule is missing");
+  assert.ok(holidayInput, "the holiday field's rule is missing");
+  // The holiday row gives its date the first grid column; the milestone's own
+  // field takes that same width rather than stretching the form's column.
+  assert.equal(declaration(holidayRow[1], "grid-template-columns").split(" ")[0], "8.5rem");
+  assert.equal(declaration(dateField[1], "width"), "8.5rem");
+  // The padding is the holiday field's, so the two controls stand the same
+  // height and put the native date in the same place.
+  assert.equal(declaration(dateField[1], "padding"), declaration(holidayInput[1], "padding"));
+  assert.equal(declaration(dateField[1], "min-width"), declaration(holidayInput[1], "min-width"));
 });
 
 test("the chart's milestone rule is a hairline in the milestone's own colour", () => {
