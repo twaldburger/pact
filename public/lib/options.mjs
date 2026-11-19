@@ -15,11 +15,12 @@ import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 import { cadenceFrom, sprintsFor } from "./sprints.mjs";
 import { tagKeys, tagColourSlots } from "./tags.mjs";
 
-export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
     { key: "weekends", label: "Highlight weekends", checked: !!highlightWeekends },
     { key: "holidays", label: "Highlight holidays", checked: !!highlightHolidays },
+    { key: "milestones", label: "Show milestones", checked: !!milestoneRules },
     { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
     { key: "minimap", label: "Minimap", checked: !!minimap }
   ];
@@ -29,9 +30,9 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
  * The Options menu, group by group, top to bottom: the view, the plan and the
  * app. `items` is optionsItems' own list, so a future toggle joins the view
  * group without a second edit; the palette and Reset view follow them. The
- * plan group's "holidays" is the action that opens the Holidays panel, not the
- * highlight toggle of the same key above. This is the one place the menu's
- * shape is stated; public/app.js appends its rows in this order.
+ * plan group's "holidays" and "milestones" are the actions that open their
+ * panels, not the toggles of the same keys above. This is the one place the
+ * menu's shape is stated; public/app.js appends its rows in this order.
  */
 export function optionGroups(items) {
   return [
@@ -53,14 +54,15 @@ export function optionDividerKeys(items) {
 
 /*
  * The menu entries a report cannot act on, by key: the grid's own display
- * toggles (the weekend band, the holiday band, the Grid dividers and the
- * Minimap) and Reset view. A report draws no grid and makes no plan writes, so
- * these are disabled rather than moved or hidden; the plan-facing entries and
- * the Set of archived records stay live. Expressed here, beside the menu's own
- * items, so the menu and the report cannot disagree about which rows act.
+ * toggles (the weekend band, the holiday band, the milestone rules, the Grid
+ * dividers and the Minimap) and Reset view. A report page draws no grid and
+ * makes no plan writes, so these are disabled rather than moved or hidden; the
+ * plan-facing entries and the Set of archived records stay live. Expressed
+ * here, beside the menu's own items, so the menu and the report cannot
+ * disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
-  return ["weekends", "holidays", "dividers", "minimap", "reset-view"];
+  return ["weekends", "holidays", "milestones", "dividers", "minimap", "reset-view"];
 }
 
 /*

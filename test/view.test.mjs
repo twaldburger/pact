@@ -26,6 +26,7 @@ test("the defaults are exactly what the app shipped with", () => {
     gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
     weekends: false,
     holidays: false,
+    milestones: false,
     dividers: true,
     minimap: false,
     palette: "paired",
@@ -53,6 +54,7 @@ test("an absent view, or any non-object, reads as every default", () => {
       gridSpacing: { day: 44, week: 16, sprint: 8, month: 5 },
       weekends: false,
       holidays: false,
+      milestones: false,
       dividers: true,
       minimap: false,
       palette: "paired",
@@ -77,6 +79,7 @@ test("every key survives a normalise at a non-default value", () => {
     gridSpacing: { day: 48, week: 30, sprint: 2, month: 7 },
     weekends: true,
     holidays: true,
+    milestones: true,
     dividers: false,
     minimap: true,
     palette: "set3",
@@ -123,6 +126,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     gridSpacing: { day: "wide", week: 30, sprint: null, month: 7 },
     weekends: "yes",
     holidays: "yes",
+    milestones: "yes",
     dividers: 1,
     minimap: "on",
     palette: "neon",
@@ -137,6 +141,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     gridSpacing: { day: 44, week: 30, sprint: 8, month: 7 },
     weekends: false,
     holidays: false,
+    milestones: false,
     dividers: true,
     minimap: false,
     palette: "paired",
@@ -197,6 +202,20 @@ test("a spacing is clamped to 2..48 and stepped in twos", () => {
   assert.equal(stepGridSpacing(2, -1), GRID_SPACING_MIN);
   assert.equal(stepGridSpacing(48, 1), GRID_SPACING_MAX);
   assert.equal(stepGridSpacing("wide", 1), null);
+});
+
+test("the milestone rules start off, are restored on load, and Reset view returns them to off", () => {
+  // Off on a first run and in any config that never stored it.
+  assert.equal(VIEW_DEFAULTS.milestones, false);
+  assert.equal(normalizeView({}).milestones, false);
+  // Switched on, the stored view brings them back.
+  assert.equal(normalizeView({ milestones: true }).milestones, true);
+  // Reset view writes the defaults whole, so the toggle comes back off.
+  assert.equal(VIEW_DEFAULTS.milestones, false);
+  // Only a boolean is a stored value; anything else is the default.
+  [1, "yes", null, [], {}].forEach((raw) => {
+    assert.equal(normalizeView({ milestones: raw }).milestones, false);
+  });
 });
 
 test("normalise returns a fresh object every time", () => {

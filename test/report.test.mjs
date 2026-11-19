@@ -891,6 +891,7 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
   assert.deepEqual(reportDisabledOptionKeys(), [
     "weekends",
     "holidays",
+    "milestones",
     "dividers",
     "minimap",
     "reset-view"

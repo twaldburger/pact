@@ -53,6 +53,10 @@
   --head-w: 10.5rem;
   --band-month-h: 1.75rem;
   --band-day-h: 1.5rem;
+  /* What the milestone band adds to the axis while the milestone rules are
+     switched on. The axis grows by it rather than letting a band of names
+     overhang the rows. */
+  --axis-extra: 0rem;
   --control-h: 1.75rem;   /* one height for every control in the top bar */
   /* The scope button's fixed width: the longest of the three labels it can
      show ("in no areas"), with room for the button's own padding, so the
@@ -101,12 +105,16 @@
 
   /* Zoom - the drawn width of one day ---------------------------------------- */
   --day-w: 2.75rem;   /* day: 44px */
-  --axis-h: calc(var(--band-month-h) + var(--band-day-h));
+  --axis-h: calc(var(--band-month-h) + var(--band-day-h) + var(--axis-extra));
 }
 
 [data-zoom="week"]  { --day-w: 1rem; }        /* 16px */
 [data-zoom="sprint"] { --day-w: 0.5rem; }      /* 8px - half the week's, so a 14-day sprint spans a week's width */
-[data-zoom="month"] { --day-w: 0.3125rem; --axis-h: var(--band-month-h); } /* 5px, month band only */
+[data-zoom="month"] { --day-w: 0.3125rem; --axis-h: calc(var(--band-month-h) + var(--axis-extra)); } /* 5px, month band only */
+
+/* The milestone rules being switched on add their band to the axis at every
+   zoom, so a named date never shortens the rows it sits above. */
+.is-milestones { --axis-extra: var(--band-day-h); }
 
 /* Project fills - the active palette's ten colours as slots 0..9. A Project's
    colour is a slot into whichever palette is active, so swapping data-palette
@@ -1749,6 +1757,29 @@ h1, h2, h3, p { margin: 0; }
 
 [data-zoom="day"] .rule { background: var(--rule); }
 
+/* The milestone rules: one full-height rule down the rows at each date the view
+   leaves a milestone on, in that milestone's own palette colour. The layer is a
+   sibling of the weekend band and the Grid dividers, appended after them at the
+   same stacking level, so a rule paints above the shading and the dividers and
+   under the blocks. It stops at the rows: the axis names the date in its own
+   band, so a rule never runs twice through the same date. */
+.milestone-rules {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.milestone-rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--i) * var(--day-w));
+  width: 1px;
+  background: var(--milestone);
+}
+
 /* Axis ---------------------------------------------------------------------- */
 
 .tl__axis {
@@ -1790,6 +1821,55 @@ h1, h2, h3, p { margin: 0; }
 .axis__sprints {
   height: var(--band-day-h);
   border-bottom: 1px solid var(--rule);
+  display: none;
+}
+
+/* The milestone band: one slot per date a milestone sits on, naming it and its
+   date. It is drawn after the others, so a band of its own carries those names
+   at every zoom rather than sharing a line with the zoom's own. The slots are
+   laid at their dates, as the weekend band and the rules are, so they are
+   positioned rather than packed into a run of day cells; the band keeps the
+   axis' full width for its rule whatever it contains. */
+.axis__milestones {
+  position: relative;
+  width: calc(var(--days) * var(--day-w));
+  height: var(--band-day-h);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* A slot: its own date's column, with the label running on from there. The text
+   is never clipped to its column; the fit rule keeps it clear of the next date
+   instead, and withdraws it where it cannot be. */
+.ax-milestone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--i) * var(--day-w));
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  padding-left: var(--sp-2);
+  font-size: var(--fs-axis);
+  color: var(--ink-soft);
+}
+
+/* The tick is drawn on the slot's left edge - the date's own column, where the
+   rule through the rows sits - in the milestone's palette colour, so the two
+   meet on one date. */
+.ax-milestone::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--milestone);
+}
+
+/* A date with no room beside it for its own name: the slot keeps the tick and
+   withdraws the text, rather than overlapping the next date's. The fit is
+   decided from the drawn widths, never here. */
+.ax-milestone.is-tick .ax-milestone__label {
   display: none;
 }
 

@@ -152,7 +152,7 @@ import {
   NAME_NUMBER_DEFAULT
 } from "./lib/sprints.mjs";
 import { sprintDaysFigure } from "./lib/sprint-days.mjs";
-import { milestoneProjects } from "./lib/milestones.mjs";
+import { milestoneMarks, milestoneAxisSlots, milestoneLabel, milestoneProjects } from "./lib/milestones.mjs";
 import {
   HOLIDAY_KINDS,
   HOLIDAY_KIND_DEFAULT,
@@ -263,6 +263,15 @@ var highlightWeekends = false;
 // off their own Location has configured. Kept in the config and restored on
 // load, like the weekend band - never written to the plan.
 var highlightHolidays = false;
+// Whether the milestones are drawn: off by default, and a view change in the
+// shape of the weekend band - kept in the config and restored on load, never
+// written to the plan. When on, each visible date carries a rule down the rows
+// and its milestone's name and date in the axis.
+var milestoneRules = false;
+// The dates those rules sit on, one mark per date, read from the plan's
+// milestones once per draw by indexData and read by the rules, the axis band
+// and the axis's own fit pass alike.
+var milestoneMarkList = [];
 var gridDividers = true;
 // The Stack rail's folded state: one of the view settings kept in the config
 // and restored on load, like Zoom and Row height; never written to the plan.
@@ -399,6 +408,18 @@ function indexData() {
   var shown = {};
   view.assignments.forEach(function (a) { shown[a.id] = true; });
   gridAssignments = assignments.filter(function (a) { return shown[a.id]; });
+
+  // The milestones the view leaves shown, one mark per date, read from the
+  // plan's own milestones through the model. A milestone related to a project
+  // the Filter left out is not marked, so the rules follow the visible
+  // projects rather than the whole plan.
+  milestoneMarkList = milestoneMarks(
+    data.milestones,
+    data.projects,
+    gridProjects.map(function (project) { return project.id; }),
+    data.range.start,
+    DAYS
+  );
 }
 
 /* --- tiny DOM helpers ---------------------------------------------------- */
@@ -461,6 +482,10 @@ function applyGridSpacing() {
   var up = document.getElementById("spacing-increase");
   if (down) down.disabled = value <= GRID_SPACING_MIN;
   if (up) up.disabled = value >= GRID_SPACING_MAX;
+  // A wider or narrower day changes the room between two milestone dates, so
+  // the band's labels are re-decided. Before the first draw there is no band
+  // to decide, and the pass does nothing.
+  fitMilestoneAxis();
   syncReportControls();
 }
 
@@ -554,6 +579,73 @@ function updateDividerRules() {
   if (body) tl.insertBefore(buildRules(), body);
 }
 
+/* --- drawing: milestones ------------------------------------------------- */
+
+// Whether the grid draws milestones at all: switched on, and something to name.
+// The rules, the axis band and the band's own height all follow this one
+// answer, so a switched-on plan with nothing in the period draws no empty band.
+function milestonesDrawn() {
+  return milestoneRules && milestoneMarkList.length > 0;
+}
+
+// The milestone overlay: one full-height rule down the rows at each visible
+// date, in the milestone's own palette colour. It is a sibling of the weekend
+// band and the Grid dividers, appended after them at the same stacking level,
+// so it paints above the shading and behind the blocks.
+function buildMilestoneRules() {
+  var layer = el("div", "milestone-rules");
+  milestoneMarkList.forEach(function (mark) {
+    var rule = set(el("span", "milestone-rule"), mark.i, 1);
+    rule.style.setProperty("--milestone", "var(--proj-" + mark.colour + ")");
+    layer.appendChild(rule);
+  });
+  return layer;
+}
+
+// The axis band's slots: one per visible date, carrying the milestone's name
+// and its date. Each slot is laid at its own date's column, the way a rule and
+// the weekend band are, and its label runs on from there, so the fit is decided
+// afterwards from the room the zoom leaves to the next date (fitMilestoneAxis)
+// rather than from the number of slots.
+function buildMilestoneBand() {
+  var band = el("div", "axis__band axis__milestones");
+  milestoneMarkList.forEach(function (mark) {
+    var cell = el("div", "ax-milestone");
+    cell.style.setProperty("--milestone", "var(--proj-" + mark.colour + ")");
+    var label = el("span", "ax-milestone__label");
+    label.textContent = milestoneLabel(mark);
+    cell.appendChild(label);
+    band.appendChild(set(cell, mark.i, 1));
+  });
+  return band;
+}
+
+// A label wider than the room to the next date is withdrawn and its slot keeps
+// the bare tick. milestones.mjs owns that rule; this is the measuring around it,
+// in the band's own font and its own inset, so a wider day, a longer name or a
+// tighter inset moves the decision. Re-run wherever a label's room changes - a
+// draw, the zoom, the spacing, the reader's text size, the bundled font
+// arriving.
+function fitMilestoneAxis() {
+  var cells = tl.querySelectorAll(".ax-milestone");
+  if (!cells.length) return;
+  var label = cells[0].querySelector(".ax-milestone__label");
+  if (!label) return;
+  var style = window.getComputedStyle(label);
+  var cellStyle = window.getComputedStyle(cells[0]);
+  var measure = labelMeasurer(style.fontWeight + " " + style.fontSize + " " + style.fontFamily);
+  var zoom = root.getAttribute("data-zoom");
+  var slots = milestoneAxisSlots(milestoneMarkList, {
+    dayWidth: gridSpacing[isZoom(zoom) ? zoom : ZOOM_DEFAULT],
+    dayCount: DAYS,
+    inset: parseFloat(cellStyle.paddingLeft) || 0,
+    widthOf: measure
+  });
+  slots.forEach(function (slot, index) {
+    if (cells[index]) cells[index].classList.toggle("is-tick", !slot.labelled);
+  });
+}
+
 /* --- drawing: axis ------------------------------------------------------- */
 
 function drawAxis() {
@@ -610,6 +702,9 @@ function drawAxis() {
   axis.appendChild(dayBand);
   axis.appendChild(weekBand);
   axis.appendChild(sprintBand);
+  // The milestone band is drawn with the others and shown only while the rules
+  // are switched on, so switching them on never rebuilds the axis by hand.
+  if (milestonesDrawn()) axis.appendChild(buildMilestoneBand());
   return axis;
 }
 
@@ -4457,6 +4552,8 @@ function render(opts) {
     assignments: gridAssignments
   })) {
     tl.classList.add("is-empty");
+    // An empty grid draws no axis, so it takes no milestone band either.
+    root.classList.remove("is-milestones");
     tl.appendChild(buildEmptyState());
     drawStack();
     marker = null;
@@ -4467,6 +4564,9 @@ function render(opts) {
   }
   tl.classList.remove("is-empty");
   tl.style.setProperty("--days", DAYS);
+  // The milestone band is part of the axis, so the axis's own height has to
+  // know whether it is there before the rows are laid out under it.
+  root.classList.toggle("is-milestones", milestonesDrawn());
 
   var overlay = null;
   if (highlightWeekends) {
@@ -4477,6 +4577,7 @@ function render(opts) {
   }
 
   var rules = gridDividers ? buildRules() : null;
+  var milestoneOverlay = milestonesDrawn() ? buildMilestoneRules() : null;
 
   var corner = el("div", "tl__corner");
   var cornerLabel = el("span", "tl__corner-label");
@@ -4501,8 +4602,11 @@ function render(opts) {
 
   if (overlay) tl.appendChild(overlay);
   // After the weekend band and before the rows, at the same stacking level:
-  // that is what puts a rule above the shading and behind the blocks.
+  // that is what puts a rule above the shading and behind the blocks. The
+  // milestone rules are appended after the dividers, so a date's own rule
+  // paints over a grid divider it happens to share.
   if (rules) tl.appendChild(rules);
+  if (milestoneOverlay) tl.appendChild(milestoneOverlay);
   tl.appendChild(corner);
   tl.appendChild(drawAxis());
   tl.appendChild(rows.heads);
@@ -4516,6 +4620,7 @@ function render(opts) {
 
   scroller.scrollLeft = scrollLeft;
   drawBlockLabels();
+  fitMilestoneAxis();
   syncStackToggle();
   syncMinimap();
   // A held copy outlives the redraw, so the tint and the ghost are put back
@@ -4575,16 +4680,18 @@ function bindChrome() {
   if (topbar) topbar.addEventListener("scroll", repositionPopovers);
   window.addEventListener("resize", function () {
     // The reader's text size can change here, which moves the row height at
-    // which the row header's two lines stop fitting.
+    // which the row header's two lines stop fitting, and the axis label's own
+    // width with it.
     applyRowHeight();
     queueBlockLabels();
+    fitMilestoneAxis();
     updateMinimapWindow();
   });
   tl.addEventListener("transitionend", function (e) {
     if (e.propertyName === "width") queueBlockLabels();
   });
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(function () { drawBlockLabels(); });
+    document.fonts.ready.then(function () { drawBlockLabels(); fitMilestoneAxis(); });
   }
 }
 
@@ -5004,6 +5111,7 @@ function currentView() {
     },
     weekends: highlightWeekends,
     holidays: highlightHolidays,
+    milestones: milestoneRules,
     dividers: gridDividers,
     minimap: minimapEnabled,
     palette: activePalette,
@@ -5031,6 +5139,7 @@ function adoptView(view) {
   gridSpacing = Object.assign({}, v.gridSpacing);
   highlightWeekends = v.weekends;
   highlightHolidays = v.holidays;
+  milestoneRules = v.milestones;
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
   stackCollapsed = v.stackCollapsed;
@@ -5134,6 +5243,7 @@ var OPTION_ACTIONS = {
   archived: function () { setShowArchived(!showArchived); },
   weekends: function () { setHighlightWeekends(!highlightWeekends); },
   holidays: function () { setHighlightHolidays(!highlightHolidays); },
+  milestones: function () { setMilestoneRules(!milestoneRules); },
   dividers: function () { setGridDividers(!gridDividers); },
   minimap: function () { setMinimapEnabled(!minimapEnabled); }
 };
@@ -5163,6 +5273,15 @@ function setHighlightHolidays(on) {
   persistView();
 }
 
+// The milestone rules are a view change in the same shape: they update the
+// menu, redraw, and store the new view. The plan file is untouched.
+function setMilestoneRules(on) {
+  milestoneRules = on;
+  updateOptionsMenu();
+  render();
+  persistView();
+}
+
 function setGridDividers(on) {
   gridDividers = on;
   updateOptionsMenu();
@@ -5181,7 +5300,7 @@ function setMinimapEnabled(on) {
 }
 
 function updateOptionsMenu() {
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -5217,7 +5336,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays);
+  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules);
   optionGroupDividers = optionDividerKeys(items);
   items.forEach(function (item) {
     var btn = el("button", optionRowClass(item.key));
@@ -5339,7 +5458,7 @@ function buildHolidaysItem() {
   var item = holidaysItem(data && data.holidays);
   var btn = el("button", optionRowClass(item.key) + " options__item--action");
   btn.type = "button";
-  btn.id = "option-holidays";
+  btn.id = "option-holidays-panel";
   btn.setAttribute("role", "menuitem");
   btn.appendChild(document.createTextNode(item.label));
   holidaysOptionDetail = el("span", "options__item-detail");
@@ -5389,7 +5508,7 @@ function buildMilestonesItem() {
   var item = milestonesItem(data && data.milestones);
   var btn = el("button", optionRowClass("milestones") + " options__item--action");
   btn.type = "button";
-  btn.id = "option-milestones";
+  btn.id = "option-milestones-panel";
   btn.setAttribute("role", "menuitem");
   btn.appendChild(document.createTextNode(item.label));
   milestonesOptionDetail = el("span", "options__item-detail");
@@ -5794,9 +5913,9 @@ function initOptions() {
   // are is public/lib/options.mjs' rule, not a second list here.
   if (isReport) {
     reportDisabledOptionKeys().forEach(function (key) {
-      // The toggle rows are held by key; Reset view is its own button. A
-      // duplicate key (the Holidays action shares the toggle's key) resolves
-      // to the toggle, which is the row this rule names.
+      // The toggle rows are held by key; Reset view is its own button. The two
+      // panel actions that share a toggle's key are held under their own ids,
+      // so this resolves to the toggle, which is the row this rule names.
       var btn = optionButtons[key] || document.getElementById("option-" + key);
       if (btn) btn.disabled = true;
     });
