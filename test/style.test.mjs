@@ -4,6 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PALETTES, labelInkFor } from "../public/lib/palette.mjs";
+import { GRID_SPACING_MIN } from "../public/lib/timeline.mjs";
+import { milestoneAxisSlots } from "../public/lib/milestones.mjs";
 
 // The interface's one stylesheet and the script that feeds it the per-block
 // tokens. Both are read here so a colour token that is referenced but no longer
@@ -714,13 +716,91 @@ test("the chart's milestone rule is a hairline in the milestone's own colour", (
   assert.doesNotMatch(rule[1], /dash/);
 });
 
-test("the milestone tick is drawn on the date's own column, in its colour", () => {
+test("the milestone tick is the row rule's own two pixels, on the same edge", () => {
   assert.ok(MILESTONE_TICK, "the .ax-milestone::before rule is missing");
   // A slot is positioned at its own date, as a rule is, and carries the tick on
   // that same edge, where the rule through the rows sits.
   assert.equal(declaration(MILESTONE_TICK[1], "left"), "0");
-  assert.equal(declaration(MILESTONE_TICK[1], "width"), "1px");
   assert.equal(declaration(MILESTONE_TICK[1], "background"), "var(--milestone)");
+  // One stroke from the band into the rows: the tick is as wide as the rule, so
+  // the line cannot step narrow where the header meets the rows.
+  assert.equal(
+    declaration(MILESTONE_TICK[1], "width"),
+    declaration(MILESTONE_RULE[1], "width"),
+    "the band tick and the row rule must be drawn at one width"
+  );
+  assert.equal(declaration(MILESTONE_TICK[1], "width"), "2px");
+  // And on the rule's own column: the slot's left edge is the date's day
+  // boundary, which is where the rule is laid, so tick and rule share an x.
+  const slot = STYLE.match(/\.ax-milestone\s*\{([^}]*)\}/);
+  assert.ok(slot, "the .ax-milestone rule is missing");
+  assert.equal(declaration(slot[1], "left"), declaration(MILESTONE_RULE[1], "left"));
+});
+
+// A length in the stylesheet, as pixels: the root's own 16px rem, so a token
+// written in rem and a hairline written in px can be compared as numbers.
+function px(text) {
+  const value = String(text || "").trim();
+  const pxMatch = value.match(/^(-?[\d.]+)px$/);
+  if (pxMatch) return Number(pxMatch[1]);
+  const remMatch = value.match(/^(-?[\d.]+)rem$/);
+  if (remMatch) return Number(remMatch[1]) * ROOT_REM_PX;
+  const token = value.match(/^var\((--[a-z0-9-]+)\)$/);
+  if (token) {
+    const declared = STYLE.match(new RegExp(token[1] + ":\\s*(-?[\\d.]+(?:px|rem))\\s*;"));
+    assert.ok(declared, "the " + token[1] + " token is not declared as a length");
+    return px(declared[1]);
+  }
+  const computed = value.match(/^calc\(\s*(-?[\d.]+)px\s*([+-])?\s*(-?[\d.]+)px\s*\)$/);
+  if (computed) {
+    return computed[2] === "-" ? Number(computed[1]) - Number(computed[3]) : Number(computed[1]);
+  }
+  assert.fail("not a length: " + value);
+}
+
+test("the name beside a tick still starts clear of it, at every Grid spacing", () => {
+  const slot = STYLE.match(/\.ax-milestone\s*\{([^}]*)\}/);
+  assert.ok(slot, "the .ax-milestone rule is missing");
+  const tick = px(declaration(MILESTONE_TICK[1], "width"));
+  // The label starts at the slot's own padding, which is the room the tick takes
+  // off it; app.js hands that same inset to the fit rule.
+  const inset = px(declaration(slot[1], "padding-left"));
+  assert.ok(inset > tick, "the tick runs into the name beside it: " + tick + "px tick in " + inset + "px of inset");
+  // And the tick stays inside the narrowest day the Grid spacing allows, so it
+  // never spills into the next date's slot.
+  assert.ok(tick <= GRID_SPACING_MIN, "the tick is wider than the narrowest day: " + tick + "px");
+});
+
+test("a crowded Month zoom still withholds the name rather than overlapping it", () => {
+  const slot = STYLE.match(/\.ax-milestone\s*\{([^}]*)\}/);
+  assert.ok(slot, "the .ax-milestone rule is missing");
+  const inset = px(declaration(slot[1], "padding-left"));
+  const marks = [
+    { date: "2026-11-01", i: 0, name: "Launch", colour: 0, count: 1 },
+    { date: "2026-11-08", i: 7, name: "Cutover", colour: 0, count: 1 }
+  ];
+  // Six pixels a character, as the milestones tests measure; the widths the
+  // interface draws are the stylesheet's own, so this follows a spacing change.
+  const widthOf = (text) => text.length * 6;
+  const slotsAt = (zoom) => milestoneAxisSlots(marks,
+    { dayWidth: dayWidthPx(zoom), dayCount: 30, inset, widthOf });  // Month's five-pixel days leave the first date a week's 31 pixels beside the
+  // tick, so its name is withdrawn and it keeps its tick. The last date has the
+  // rest of the period and is named from there, which is the same rule.
+  const month = slotsAt("month");
+  assert.deepEqual(month.map((s) => s.labelled), [false, true]);
+  assert.deepEqual(month.map((s) => s.room), [31, 111]);
+  // Day's forty-four do fit them, and every drawn name ends inside its own slot:
+  // its inset plus its text is never past the next date's left edge.
+  const dayWidth = px((STYLE.match(/:root\s*\{[^}]*--day-w:\s*([^;]+);/) || [])[1]);
+  assert.equal(dayWidth, 44);
+  const day = milestoneAxisSlots(marks, { dayWidth, dayCount: 30, inset, widthOf });
+  assert.deepEqual(day.map((s) => s.labelled), [true, true]);
+  day.forEach((s, k) => {
+    const end = day[k + 1] ? day[k + 1].mark.i : 30;
+    const right = s.mark.i * dayWidth + inset + widthOf(s.label);
+    assert.ok(right <= end * dayWidth,
+      "the name at " + s.mark.date + " reaches into the next date's slot");
+  });
 });
 
 test("a milestone slot is laid at its date rather than packed beside the last one", () => {

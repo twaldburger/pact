@@ -1868,14 +1868,17 @@ h1, h2, h3, p { margin: 0; }
 
 /* The tick is drawn on the slot's left edge - the date's own column, where the
    rule through the rows sits - in the milestone's palette colour, so the two
-   meet on one date. */
+   meet on one date. It is the rule's own two pixels, not a hairline: the band
+   and the rows then read as one continuous stroke rather than narrowing where
+   they meet. The slot's padding is wider than the tick, so the name still
+   starts clear of it. */
 .ax-milestone::before {
   content: "";
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 1px;
+  width: 2px;
   background: var(--milestone);
 }
 
