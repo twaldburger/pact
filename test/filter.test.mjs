@@ -18,6 +18,7 @@ import {
   fieldLabel,
   unknownFieldHint
 } from "../public/lib/filter.mjs";
+import { milestoneMarks } from "../public/lib/milestones.mjs";
 
 /*
  * A plan with one person whose work spans two projects, a project match that
@@ -420,7 +421,15 @@ test("every canonical field and alias names the field it should search", () => {
     "assignment tag: x": ["assignment.tags"],
     "assignment tags: x": ["assignment.tags"],
     "assignment note: x": ["assignment.note"],
-    "assignment notes: x": ["assignment.note"]
+    "assignment notes: x": ["assignment.note"],
+    "milestone: x": ["milestone.name"],
+    "milestones: x": ["milestone.name"],
+    "milestone name: x": ["milestone.name"],
+    "milestone names: x": ["milestone.name"],
+    "milestone tag: x": ["milestone.tags"],
+    "milestone tags: x": ["milestone.tags"],
+    "milestone note: x": ["milestone.notes"],
+    "milestone notes: x": ["milestone.notes"]
   };
   Object.keys(cases).forEach((query) => {
     const term = parseFilterTerm(query);
@@ -588,6 +597,9 @@ test("the empty state can name the field a typed term searched", () => {
     "person tags, project tags or assignment tags");
   assert.equal(fieldLabel(["project.tags"]), "project tags");
   assert.equal(fieldLabel(["person.name", "project.name"]), "person names or project names");
+  assert.equal(fieldLabel(["milestone.name"]), "milestone names");
+  assert.equal(fieldLabel(["milestone.tags"]), "milestone tags");
+  assert.equal(fieldLabel(["milestone.name", "milestone.notes"]), "milestone names or milestone notes");
 });
 
 test("the dropdown teaches the field prefixes as a plain query is typed", () => {
@@ -630,4 +642,145 @@ test("a typed term's dropdown offers the names and tags of its field", () => {
   assert.equal(empty.find((item) => item.value === "phase two").insert, "project notes: phase two");
   // An unknown prefix offers nothing.
   assert.equal(filterSuggestions(plan(), "meeting: notes", defaultScopes()).length, 0);
+});
+
+/* --- milestones ----------------------------------------------------------- */
+
+/*
+ * The same plan with three Milestones: one related to the React project, one
+ * plan-wide, and one related to Borealis. `delivery` tags both the React
+ * project and two Milestones, so a row's tag and a Milestone's tag can be told
+ * apart by the field a term names.
+ */
+function milestonePlan() {
+  const p = plan();
+  p.projects[0].tags = ["lead", "delivery"];
+  p.milestones = [
+    { id: "m-api", name: "API freeze", date: "2026-10-15", colour: 1, tags: ["api", "delivery"], notes: "contract signed", projectIds: ["react"] },
+    { id: "m-launch", name: "Atlas launch", date: "2026-11-20", colour: 2, tags: ["delivery"], notes: "", projectIds: [] },
+    { id: "m-audit", name: "Audit", date: "2026-12-01", colour: 3, tags: ["governance"], notes: "external audit begins", projectIds: ["borealis"] }
+  ];
+  return p;
+}
+
+test("a milestone is found by its name, by its tag and by its note", () => {
+  const found = (query) => ids(filterPlan(milestonePlan(), query, defaultScopes()).milestones);
+  assert.deepEqual(found("milestone: api"), ["m-api"]);
+  assert.deepEqual(found("milestone tag: delivery"), ["m-api", "m-launch"]);
+  assert.deepEqual(found("milestone note: signed"), ["m-api"]);
+  // The matching rule is every other field's: case-insensitive, anywhere.
+  assert.deepEqual(found("MILESTONE TAG: DELIV"), ["m-api", "m-launch"]);
+  assert.deepEqual(found("milestone note: audit"), ["m-audit"]);
+  // The singular and the plural name the same fields.
+  ["milestone", "milestones", "milestone name", "milestone names"].forEach((prefix) => {
+    assert.deepEqual(found(prefix + ": api"), ["m-api"], prefix);
+  });
+  ["milestone tag", "milestone tags"].forEach((prefix) => {
+    assert.deepEqual(found(prefix + ": governance"), ["m-audit"], prefix);
+  });
+  ["milestone note", "milestone notes"].forEach((prefix) => {
+    assert.deepEqual(found(prefix + ": external"), ["m-audit"], prefix);
+  });
+});
+
+test("a milestone term narrows the milestones and leaves the rows whole", () => {
+  const whole = milestonePlan();
+  const view = filterPlan(whole, "milestone tag: delivery", defaultScopes());
+  assert.deepEqual(ids(view.milestones), ["m-api", "m-launch"]);
+  // The term says nothing about the plan's People, Projects or Assignments,
+  // so they stay as the scope left them - whole.
+  assert.deepEqual(ids(view.people), ids(whole.people));
+  assert.deepEqual(ids(view.projects), ids(whole.projects));
+  assert.deepEqual(ids(view.assignments), ids(whole.assignments));
+  assert.equal(filterIsEmpty(view), false);
+  // A term that matches no milestone matches no milestone rather than hiding
+  // the plan: with the toggle off nothing would be drawn to explain an empty
+  // grid.
+  const none = filterPlan(whole, "milestone: nominal", defaultScopes());
+  assert.deepEqual(ids(none.milestones), []);
+  assert.deepEqual(ids(none.projects), ids(whole.projects));
+  assert.equal(filterIsEmpty(none), false);
+});
+
+test("a Project's tag does not reach a Milestone", () => {
+  const p = milestonePlan();
+  // `delivery` tags the React project and two Milestones. The project term
+  // matches the Project and leaves the Milestones alone, and the same word as
+  // a plain query does the same.
+  const byProject = filterPlan(p, "project tag: delivery", defaultScopes());
+  assert.deepEqual(ids(byProject.projects), ["react"]);
+  assert.deepEqual(ids(byProject.milestones), ids(p.milestones));
+  const plain = filterPlan(p, "delivery", defaultScopes());
+  assert.deepEqual(ids(plain.milestones), ids(p.milestones));
+  // A milestone tag term matches no row and hides none.
+  const byMilestone = filterPlan(p, "milestone tag: governance", defaultScopes());
+  assert.deepEqual(ids(byMilestone.milestones), ["m-audit"]);
+  assert.deepEqual(ids(byMilestone.projects), ids(p.projects));
+  assert.deepEqual(ids(byMilestone.assignments), ids(p.assignments));
+});
+
+test("a bare tag term stays with the rows' three vocabularies", () => {
+  const p = milestonePlan();
+  // `delivery` is a Project tag and a Milestone tag. The bare term matches the
+  // Project and never a Milestone: Milestone tags are the fourth, separate
+  // vocabulary and are reached by `milestone tag:` alone.
+  const tag = filterPlan(p, "tag: delivery", defaultScopes());
+  assert.deepEqual(ids(tag.projects), ["react"]);
+  assert.deepEqual(ids(tag.milestones), ids(p.milestones));
+  assert.deepEqual(ids(filterPlan(p, "milestone tag: delivery", defaultScopes()).milestones),
+    ["m-api", "m-launch"]);
+  // The bare tag suggestion list offers the rows' three kinds, not the fourth.
+  assert.equal(filterSuggestions(p, "tag:", defaultScopes()).some((i) => i.source === "Milestone tag"), false);
+});
+
+test("a matched milestone the visibility rule hides stays hidden", () => {
+  const p = milestonePlan();
+  const view = filterPlan(p, "milestone tag: delivery", defaultScopes());
+  assert.deepEqual(ids(view.milestones), ["m-api", "m-launch"]);
+  const start = "2026-10-01";
+  const days = 70;
+  const marked = (visibleProjectIds) => milestoneMarks(view.milestones, p.projects, visibleProjectIds, start, days)
+    .map((mark) => mark.name);
+  // What the Filter left is drawn while the Projects its Milestones relate to
+  // are in view: the plan-wide one always, the React one because React is.
+  assert.deepEqual(marked(["react", "borealis"]), ["API freeze", "Atlas launch"]);
+  // Taking React out of view - the Project archived, or a Filter that hides
+  // it - still hides the milestone the term matched.
+  assert.deepEqual(marked(["borealis"]), ["Atlas launch"]);
+  // Matching never forces a milestone into view: with nothing in view, the
+  // linked one stays hidden and only the plan-wide one is drawn.
+  assert.deepEqual(marked([]), ["Atlas launch"]);
+});
+
+test("the dropdown teaches the milestone fields and offers their vocabulary", () => {
+  const p = milestonePlan();
+  const taught = filterSuggestions(p, "milestone", defaultScopes());
+  assert.deepEqual(taught.filter((item) => item.kind === "prefix").map((item) => item.value),
+    ["milestone:", "milestone tag:", "milestone note:"]);
+  // A value row carries the whole term and counts what selecting it leaves.
+  const tag = filterSuggestions(p, "milestone tag:", defaultScopes()).find((item) => item.value === "delivery");
+  assert.equal(tag.source, "Milestone tag");
+  assert.equal(tag.insert, "milestone tag: delivery");
+  assert.equal(tag.matchLabel, "2 milestones");
+  assert.equal(filterPlan(p, tag.insert, defaultScopes()).milestones.length, 2);
+  const name = filterSuggestions(p, "milestone:", defaultScopes()).find((item) => item.value === "Audit");
+  assert.equal(name.source, "Milestone");
+  assert.equal(name.insert, "milestone: Audit");
+  assert.equal(name.matchLabel, "1 milestone");
+  const note = filterSuggestions(p, "milestone note:", defaultScopes())
+    .find((item) => item.value === "external audit begins");
+  assert.equal(note.source, "Milestone note");
+  assert.equal(note.insert, "milestone note: external audit begins");
+  assert.equal(note.matchLabel, "1 milestone");
+  // A plain query's vocabulary is still the areas looked in, and a milestone
+  // is not one of them: its name is offered once a milestone prefix is typed.
+  assert.equal(filterSuggestions(p, "audit", defaultScopes()).some((item) => item.source === "Milestone"), false);
+});
+
+test("the plan is never changed by a milestone term", () => {
+  const p = milestonePlan();
+  const before = JSON.stringify(p);
+  filterPlan(p, "milestone tag: delivery", defaultScopes());
+  filterSuggestions(p, "milestone tag:", defaultScopes());
+  assert.equal(JSON.stringify(p), before);
 });

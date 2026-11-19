@@ -46,14 +46,16 @@ them. The Show milestones toggle in that menu draws each one as a vertical rule
 through the rows, in its own colour, naming it and its date in the axis band: a
 Milestone related to Projects is drawn while one of them is in view, and one
 related to none is plan-wide. They are annotations, so no total, share or
-over-allocation check counts them.
+over-allocation check counts them. The Filter finds them by their own terms -
+`milestone: api`, `milestone tag: delivery`, `milestone note: signed`.
 - **Filter.** One field hides everything on the grid that does not match. By
   default it looks in People, Projects and Assignments, and a scope control
   states how many areas it is searching and switches each. A plain term is a
   case-insensitive substring; a `field: value` term names one field, as in
-  `person tag:architect` or `project notes: delayed`. Typing offers the plan's
-  own vocabulary as keyboard-navigable suggestions, each labelled with how much
-  it would match.
+  `person tag:architect` or `project notes: delayed`. A term naming a milestone
+  field narrows the Milestones alone, leaving the rows whole. Typing offers the
+  plan's own vocabulary as keyboard-navigable suggestions, each labelled with
+  how much it would match.
 - **Zoom and spacing.** Day, Week, Sprint and Month change only what the grid
   draws, never the stored dates. Each keeps its own day width, moved by the
   grid-spacing stepper; the row-height stepper sizes the rows. Sprint draws a

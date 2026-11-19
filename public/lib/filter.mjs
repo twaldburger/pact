@@ -12,7 +12,10 @@
  * the typed text anywhere in its own fields - and then propagated, because a
  * match carries what belongs to it: a matching Project brings all of its
  * Assignments, a matching Person all of their work, and a matching Assignment
- * its Person's row and its Project. The whole plan is never changed; the
+ * its Person's row and its Project. Milestones are the fourth thing a term can
+ * reach, by name, tag and note, and a term about them narrows the Milestones
+ * alone: they are annotations over the rows, and the visibility rule still
+ * decides which of them are drawn. The whole plan is never changed; the
  * caller keeps it for the row-header figures, which describe the Person rather
  * than the query.
  *
@@ -71,7 +74,9 @@ export function searchedAreas(scopes) {
  * matched case-insensitively and trimmed, and both the singular and the plural
  * work. The bare `tag:`/`tags:` means all three tag kinds, `note:`/`notes:` both
  * person and assignment notes, and `name:`/`names:` both names; everything
- * else points at exactly one field.
+ * else points at exactly one field. The milestone fields are named only by
+ * their own prefixes: a Milestone's tags are a fourth, separate vocabulary, so
+ * a bare `tag:` never reaches them.
  */
 export const FILTER_FIELDS = [
   "person.name",
@@ -82,7 +87,10 @@ export const FILTER_FIELDS = [
   "project.notes",
   "project.tags",
   "assignment.tags",
-  "assignment.note"
+  "assignment.note",
+  "milestone.name",
+  "milestone.tags",
+  "milestone.notes"
 ];
 
 // What each field is called where the interface has to name it.
@@ -95,7 +103,10 @@ export const FIELD_LABELS = {
   "project.notes": "project notes",
   "project.tags": "project tags",
   "assignment.tags": "assignment tags",
-  "assignment.note": "assignment notes"
+  "assignment.note": "assignment notes",
+  "milestone.name": "milestone names",
+  "milestone.tags": "milestone tags",
+  "milestone.notes": "milestone notes"
 };
 
 // The canonical fields and the safe short aliases. Each maps to the list of
@@ -129,6 +140,14 @@ const PREFIX_FIELDS = {
   "assignment tags": ["assignment.tags"],
   "assignment note": ["assignment.note"],
   "assignment notes": ["assignment.note"],
+  "milestone name": ["milestone.name"],
+  "milestone names": ["milestone.name"],
+  "milestone": ["milestone.name"],
+  "milestones": ["milestone.name"],
+  "milestone tag": ["milestone.tags"],
+  "milestone tags": ["milestone.tags"],
+  "milestone note": ["milestone.notes"],
+  "milestone notes": ["milestone.notes"],
   "name": ["person.name", "project.name"],
   "names": ["person.name", "project.name"]
 };
@@ -146,6 +165,9 @@ const TEACHING_PREFIXES = [
   { name: "project tag", label: "project tags", fields: ["project.tags"] },
   { name: "assignment tag", label: "assignment tags", fields: ["assignment.tags"] },
   { name: "assignment note", label: "assignment notes", fields: ["assignment.note"] },
+  { name: "milestone", label: "milestones by name", fields: ["milestone.name"] },
+  { name: "milestone tag", label: "milestone tags", fields: ["milestone.tags"] },
+  { name: "milestone note", label: "milestone notes", fields: ["milestone.notes"] },
   { name: "name", label: "people and projects by name", fields: ["person.name", "project.name"] },
   { name: "tag", label: "person, project and assignment tags", fields: ["person.tags", "project.tags", "assignment.tags"] },
   { name: "note", label: "person and assignment notes", fields: ["person.note", "assignment.note"] }
@@ -212,7 +234,8 @@ export function parseFilterTerm(query) {
 export function unknownFieldHint(prefix) {
   return '"' + String(prefix == null ? "" : prefix) + '" is not a field the Filter knows. ' +
     "Try person, people, person tag, person note, person location, project, " +
-    "project note, project tag, assignment tag, assignment note, name, tag or note.";
+    "project note, project tag, assignment tag, assignment note, milestone, " +
+    "milestone tag, milestone note, name, tag or note.";
 }
 
 // The whole query: a case-insensitive substring anywhere in the text. `rea`
@@ -242,13 +265,26 @@ const FIELD_MATCHES = {
   "project.notes": function (item, q) { return won(item.notes, q); },
   "project.tags": function (item, q) { return someTag(item.tags, q); },
   "assignment.tags": function (item, q) { return someTag(item.tags, q); },
-  "assignment.note": function (item, q) { return won(item.note, q); }
+  "assignment.note": function (item, q) { return won(item.note, q); },
+  "milestone.name": function (item, q) { return won(item.name, q); },
+  "milestone.tags": function (item, q) { return someTag(item.tags, q); },
+  "milestone.notes": function (item, q) { return won(item.notes, q); }
 };
 
 function termMatches(kind, item, fields, q) {
   return (fields || []).some(function (field) {
     return field.indexOf(kind + ".") === 0 && FIELD_MATCHES[field](item, q);
   });
+}
+
+function namesKind(fields, kind) {
+  return (fields || []).some(function (field) { return field.indexOf(kind + ".") === 0; });
+}
+
+// Whether the term names a field outside the Milestones, so it speaks about the
+// rows as well as - or instead of - them.
+function namesRowField(fields) {
+  return (fields || []).some(function (field) { return field.indexOf("milestone.") !== 0; });
 }
 
 function personMatches(person, q) {
@@ -269,28 +305,50 @@ function assignmentMatches(assignment, q) {
 
 /*
  * The plan as the filter leaves it: the People rows, Projects in the Stack and
- * Assignments on the Timeline that survive, in their original order. The input
- * plan is never touched. An empty query means no filter at all.
+ * Assignments on the Timeline that survive, in their original order, and the
+ * Milestones the term leaves. The input plan is never touched. An empty query
+ * means no filter at all.
  *
  * A field term ignores the scope and is matched only against the field or
  * fields it names; an unknown term matches nothing. Propagation is the same
  * for every kind of match.
+ *
+ * Milestones are narrowed only by a term that names a milestone field: they
+ * are annotations over the rows, so a term about them says nothing about which
+ * People or Projects to hide. A term naming only milestone fields therefore
+ * leaves the rows whole - with milestones switched off, hiding the rows would
+ * leave an empty grid and nothing drawn to explain it. Every other term leaves
+ * the Milestones alone, for the visibility rule to decide (a Milestone is drawn
+ * while the toggle is on and, when it relates to Projects, while one of them is
+ * in view), so matching a Milestone never forces it into view.
  */
 export function filterPlan(plan, query, scopes) {
   const people = (plan && plan.people) || [];
   const projects = (plan && plan.projects) || [];
   const assignments = (plan && plan.assignments) || [];
+  const milestones = (plan && plan.milestones) || [];
   const s = scopes || defaultScopes();
   const term = parseFilterTerm(query);
 
   const matchedPeople = new Set();
   const matchedProjects = new Set();
   const matchedAssignments = new Set();
+  const matchedMilestones = new Set();
+  // Whether the term speaks about the rows at all, and whether it speaks about
+  // Milestones. A term naming only milestone fields narrows the Milestones and
+  // leaves the rows whole; any other term does the opposite.
+  let narrowsRows = true;
+  let narrowsMilestones = false;
 
   if (term.kind === "plain") {
     const q = lower(term.text);
     if (q === "") {
-      return { people: people.slice(), projects: projects.slice(), assignments: assignments.slice() };
+      return {
+        people: people.slice(),
+        projects: projects.slice(),
+        assignments: assignments.slice(),
+        milestones: milestones.slice()
+      };
     }
     if (s.people) {
       people.forEach(function (person) {
@@ -308,20 +366,42 @@ export function filterPlan(plan, query, scopes) {
       });
     }
   } else if (term.kind === "field") {
+    narrowsMilestones = namesKind(term.fields, "milestone");
+    narrowsRows = namesRowField(term.fields);
     const q = lower(term.value);
-    people.forEach(function (person) {
-      if (termMatches("person", person, term.fields, q)) matchedPeople.add(person.id);
-    });
-    projects.forEach(function (project) {
-      if (termMatches("project", project, term.fields, q)) matchedProjects.add(project.id);
-    });
-    assignments.forEach(function (assignment) {
-      if (termMatches("assignment", assignment, term.fields, q)) matchedAssignments.add(assignment.id);
-    });
+    if (narrowsRows) {
+      people.forEach(function (person) {
+        if (termMatches("person", person, term.fields, q)) matchedPeople.add(person.id);
+      });
+      projects.forEach(function (project) {
+        if (termMatches("project", project, term.fields, q)) matchedProjects.add(project.id);
+      });
+      assignments.forEach(function (assignment) {
+        if (termMatches("assignment", assignment, term.fields, q)) matchedAssignments.add(assignment.id);
+      });
+    }
+    if (narrowsMilestones) {
+      milestones.forEach(function (milestone) {
+        if (termMatches("milestone", milestone, term.fields, q)) matchedMilestones.add(milestone.id);
+      });
+    }
   } else {
     // An unrecognised prefix: no match at all, so the empty state can explain
     // the field it did not recognise.
-    return { people: [], projects: [], assignments: [] };
+    return { people: [], projects: [], assignments: [], milestones: [] };
+  }
+
+  const shownMilestones = narrowsMilestones
+    ? milestones.filter(function (m) { return matchedMilestones.has(m.id); })
+    : milestones.slice();
+
+  if (!narrowsRows) {
+    return {
+      people: people.slice(),
+      projects: projects.slice(),
+      assignments: assignments.slice(),
+      milestones: shownMilestones
+    };
   }
 
   // What each match carries. A Person or Project match reaches every
@@ -348,7 +428,8 @@ export function filterPlan(plan, query, scopes) {
   return {
     people: people.filter(function (p) { return shownPeople.has(p.id); }),
     projects: projects.filter(function (p) { return shownProjects.has(p.id); }),
-    assignments: assignments.filter(function (a) { return shownAssignments.has(a.id); })
+    assignments: assignments.filter(function (a) { return shownAssignments.has(a.id); }),
+    milestones: shownMilestones
   };
 }
 
@@ -388,6 +469,9 @@ const SOURCE_PROJECT_NOTE = "Project note";
 const SOURCE_ASSIGNMENT_NOTE = "Assignment note";
 const SOURCE_PERSON_NOTE = "Person note";
 const SOURCE_PERSON_LOCATION = "Person location";
+const SOURCE_MILESTONE = "Milestone";
+const SOURCE_MILESTONE_TAG = "Milestone tag";
+const SOURCE_MILESTONE_NOTE = "Milestone note";
 const SOURCE_FIELD = "Field";
 // The first row's source: the broad search itself, named. It is not a field, so
 // it gets its own name rather than one of the vocabulary sources above.
@@ -397,6 +481,7 @@ export function countLabel(count, unit) {
   const n = Number(count) || 0;
   if (unit === "person") return n + (n === 1 ? " person" : " people");
   if (unit === "project") return n + (n === 1 ? " project" : " projects");
+  if (unit === "milestone") return n + (n === 1 ? " milestone" : " milestones");
   if (unit === "match") return n + (n === 1 ? " match" : " matches");
   return n + (n === 1 ? " assignment" : " assignments");
 }
@@ -425,7 +510,12 @@ function collectTags(items) {
 }
 
 // Which Filter view a suggestion's unit is read from.
-const VIEW_BY_UNIT = { person: "people", project: "projects", assignment: "assignments" };
+const VIEW_BY_UNIT = {
+  person: "people",
+  project: "projects",
+  assignment: "assignments",
+  milestone: "milestones"
+};
 
 function addCandidate(out, seen, plan, prefix, source, value, unit) {
   const text = String(value == null ? "" : value).trim();
@@ -457,6 +547,7 @@ function collectField(plan, field, q, out, seen, prefix) {
   const people = (plan && plan.people) || [];
   const projects = (plan && plan.projects) || [];
   const assignments = (plan && plan.assignments) || [];
+  const milestones = (plan && plan.milestones) || [];
   const fieldPrefix = prefix || FIELD_PREFIXES[field];
 
   if (field === "project.name") {
@@ -499,6 +590,19 @@ function collectField(plan, field, q, out, seen, prefix) {
     assignments.forEach(function (assignment) {
       if (!assignment.note || !won(assignment.note, q)) return;
       addCandidate(out, seen, plan, fieldPrefix, SOURCE_ASSIGNMENT_NOTE, assignment.note, "assignment");
+    });
+  } else if (field === "milestone.name") {
+    milestones.forEach(function (milestone) {
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_MILESTONE, milestone.name, "milestone");
+    });
+  } else if (field === "milestone.tags") {
+    collectTags(milestones).forEach(function (tag) {
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_MILESTONE_TAG, tag, "milestone");
+    });
+  } else if (field === "milestone.notes") {
+    milestones.forEach(function (milestone) {
+      if (!milestone.notes || !won(milestone.notes, q)) return;
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_MILESTONE_NOTE, milestone.notes, "milestone");
     });
   }
 }
@@ -604,11 +708,13 @@ export function searchEverywhereSuggestion(plan, query, scopes) {
 
 /*
  * The plan's own vocabulary, offered while typing: project names, people's
- * names, Assignment tags, Person tags and the text in notes. Each suggestion
- * carries the source it came from and how many things it would match. A plain
- * query draws only from the areas currently looked in; a typed term draws only
- * from the field it names; an unknown prefix draws nothing. Alongside the
- * vocabulary, a plain query is offered the field prefixes themselves.
+ * names, Assignment tags, Person tags, Milestone names, tags and notes, and the
+ * text in notes. Each suggestion carries the source it came from and how many
+ * things it would match. A plain query draws only from the areas currently
+ * looked in, so Milestones - an annotation rather than a look-in area - are
+ * offered by their own prefixes alone; a typed term draws only from the field it
+ * names; an unknown prefix draws nothing. Alongside the vocabulary, a plain
+ * query is offered the field prefixes themselves.
  */
 export function filterSuggestions(plan, query, scopes) {
   const term = parseFilterTerm(query);
