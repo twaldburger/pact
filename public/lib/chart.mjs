@@ -124,6 +124,62 @@ export function chartReadoutAt(geom, box) {
   };
 }
 
+// A date as UTC midnight, or null when it is not a full ISO date. The chart's
+// dates are the plan's own, so they are read the way the rest of the app reads
+// them rather than through a parser that would take a local time zone.
+function isoMidnight(iso) {
+  if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const t = Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  return Number.isFinite(t) ? t : null;
+}
+
+const DAY_MS = 86400000;
+
+// Where a date stands on the plot, as the x of a rule through it, or null for a
+// date the plot does not hold.
+//
+// The buckets tile the plan period and every bucket takes the same width
+// whatever its length, so a date is placed inside its own bucket by how far
+// through that bucket it falls: the bucket's first day is its own left edge and
+// its last is one day short of the next. Day zoom therefore rules the day's own
+// boundary, as the grid does, and a month's rule stands where its date falls in
+// the month. A date no bucket holds is off the plot, and answers null, so a
+// milestone outside the chart's period draws nothing rather than a rule pinned
+// to an edge.
+function chartDateX(iso, buckets, geom) {
+  const list = Array.isArray(buckets) ? buckets : [];
+  const at = isoMidnight(iso);
+  if (at === null || !geom || !(geom.bw > 0)) return null;
+  for (let i = 0; i < list.length; i++) {
+    const start = isoMidnight(list[i] && list[i].start);
+    const end = isoMidnight(list[i] && list[i].end);
+    if (start === null || end === null || end < start) continue;
+    if (at < start || at > end) continue;
+    const days = Math.round((end - start) / DAY_MS) + 1;
+    const into = Math.round((at - start) / DAY_MS);
+    return geom.left + (i + into / days) * geom.bw;
+  }
+  return null;
+}
+
+// The milestone rules a chart draws: one per mark, at the x of that mark's own
+// date, or none at all while the Show milestones switch is off. `marks` are the
+// milestones' own visible dates (public/lib/milestones.mjs), so which dates are
+// shown - and one rule per date, however many milestones share it - is that
+// module's rule rather than a second copy here. A mark the plot does not hold is
+// dropped, since a date outside the period is off the axis rather than an error.
+export function chartMilestoneRules(marks, on, buckets, geom) {
+  if (!on) return [];
+  const out = [];
+  (Array.isArray(marks) ? marks : []).forEach(function (mark) {
+    if (!mark) return;
+    const x = chartDateX(mark.date, buckets, geom);
+    if (x === null) return;
+    out.push({ mark: mark, x: x });
+  });
+  return out;
+}
+
 // Where a key press moves the ruler, or null for a key the chart does not use.
 // The arrows walk one bucket at a time and stop at the ends; Home and End jump
 // there. A chart nobody has read yet starts at its first bucket, whichever

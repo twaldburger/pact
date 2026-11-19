@@ -891,7 +891,6 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
   assert.deepEqual(reportDisabledOptionKeys(), [
     "weekends",
     "holidays",
-    "milestones",
     "dividers",
     "minimap",
     "marker",
@@ -903,6 +902,45 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
   ["archived", "palette", "range", "step", "sprints", "plan-file"].forEach((key) => {
     assert.equal(reportDisabledOptionKeys().includes(key), false, key + " must stay live");
   });
+  // Show milestones acts on a report too: its chart draws the rules, so the row
+  // stays live there and the one switch governs the chart and the grid alike.
+  assert.equal(reportDisabledOptionKeys().includes("milestones"), false,
+    "a report can no longer switch the milestones it draws");
+});
+
+/* --- the milestones, on the chart and nowhere else ------------------------ */
+
+test("the chart is the only report view that shows a milestone", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // The seven views' builders, from the section that names them to the render
+  // that draws one: no row, no column and no figure mentions a milestone.
+  const start = APP.indexOf("/* --- the seven views");
+  const end = APP.indexOf("function render(opts)");
+  assert.ok(start > -1 && end > start, "the seven views are missing");
+  assert.doesNotMatch(APP.slice(start, end), /milestone/i,
+    "a report view other than the chart draws a milestone");
+  // And no milestone reaches the figures either: the report's own content is
+  // built from the plan's work, never from its annotations.
+  const content = fs.readFileSync(path.join(PUBLIC, "lib", "report-content.mjs"), "utf8");
+  assert.doesNotMatch(content, /milestone/i, "the report's figures count a milestone");
+});
+
+test("the chart and the grid read one stored Show milestones switch", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // One setting, restored on load and stored back, for both pages: the report
+  // page adopts the same key the grid does rather than keeping a second one.
+  assert.equal((APP.match(/var milestoneRules = /g) || []).length, 1);
+  assert.match(APP, /milestoneRules = v\.milestones;/);
+  assert.match(APP, /milestones: milestoneRules,/);
+  // And one answer to "are they drawn": the chart draws from the grid's own
+  // marks and asks that answer, so neither surface can be showing while the
+  // other is not.
+  const drawn = APP.slice(APP.indexOf("function milestonesDrawn()"));
+  const body = drawn.slice(0, drawn.indexOf("\n}\n"));
+  assert.match(body, /return milestoneRules && milestoneMarkList\.length > 0;/);
+  const chart = APP.slice(APP.indexOf("function reportChartMilestones("),
+    APP.indexOf("function reportChartAxis("));
+  assert.match(chart, /milestoneMarkList, milestonesDrawn\(\)/);
 });
 
 /* --- the report's own zoom is independent of the grid's ------------------- */

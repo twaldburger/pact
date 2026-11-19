@@ -661,6 +661,18 @@ test("a milestone rule is a hairline on the date's own day boundary, in its colo
   assert.equal(declaration(MILESTONE_RULE[1], "background"), "var(--milestone)");
 });
 
+test("the chart's milestone rule is a hairline in the milestone's own colour", () => {
+  const rule = STYLE.match(/\n\.report-chart__milestone\s*\{([^}]*)\}/);
+  assert.ok(rule, "the .report-chart__milestone rule is missing");
+  // The palette slot arrives as the same token the grid's rules and axis band
+  // wear, so a milestone is one colour on both surfaces.
+  assert.equal(declaration(rule[1], "stroke"), "var(--milestone)");
+  // A hairline, like the grid's own rule and the chart's grid: an annotation
+  // beside the figures rather than one of them, and never dashed.
+  assert.equal(Number(declaration(rule[1], "stroke-width")), 1);
+  assert.doesNotMatch(rule[1], /dash/);
+});
+
 test("the milestone tick is drawn on the date's own column, in its colour", () => {
   assert.ok(MILESTONE_TICK, "the .ax-milestone::before rule is missing");
   // A slot is positioned at its own date, as a rule is, and carries the tick on

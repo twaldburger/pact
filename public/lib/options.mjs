@@ -55,15 +55,16 @@ export function optionDividerKeys(items) {
 
 /*
  * The menu entries a report cannot act on, by key: the grid's own display
- * toggles (the weekend band, the holiday band, the milestone rules, the Grid
- * dividers, the Minimap and the Marker) and Reset view. A report page draws no
- * grid and makes no plan writes, so these are disabled rather than moved or
- * hidden; the plan-facing entries and the Set of archived records stay live.
- * Expressed here, beside the menu's own items, so the menu and the report
+ * toggles (the weekend band, the holiday band, the Grid dividers, the Minimap
+ * and the Marker) and Reset view. A report page draws no grid and makes no plan
+ * writes, so these are disabled rather than moved or hidden; the plan-facing
+ * entries, the Set of archived records and Show milestones stay live, since a
+ * report's chart draws the milestone rules and takes the same switch the grid
+ * does. Expressed here, beside the menu's own items, so the menu and the report
  * cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
-  return ["weekends", "holidays", "milestones", "dividers", "minimap", "marker", "reset-view"];
+  return ["weekends", "holidays", "dividers", "minimap", "marker", "reset-view"];
 }
 
 /*
