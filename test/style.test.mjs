@@ -605,3 +605,71 @@ test("the legend's capacity swatch draws the band, not a dash", () => {
   assert.equal(declaration(LEGEND_BAND[1], "border-top"), "1.5px solid var(--signal)");
   assert.doesNotMatch(LEGEND_BAND[1], /dash/);
 });
+
+/* --- the milestone rules and the grid's other overlays --------------------- */
+
+// The milestone rules are drawn the way the weekend band and the Grid dividers
+// are: a sibling layer inside the grid, at the same stacking level, each rule
+// an absolutely positioned hairline on the date's own day boundary. These
+// assertions pin that, and the axis band the dates are named in, so the rules
+// cannot drift onto a layer or a geometry of their own.
+const MILESTONE_RULES = STYLE.match(/\.milestone-rules\s*\{([^}]*)\}/);
+const MILESTONE_RULE = STYLE.match(/\.milestone-rule\s*\{([^}]*)\}/);
+const MILESTONE_TICK = STYLE.match(/\.ax-milestone::before\s*\{([^}]*)\}/);
+const MILESTONE_BAND = STYLE.match(/\.axis__milestones\s*\{([^}]*)\}/);
+const GRID_RULES = STYLE.match(/\.rules\s*\{([^}]*)\}/);
+const DIVIDER_RULE = STYLE.match(/\.rule\s*\{([^}]*)\}/);
+
+test("the milestone rules sit on the rows at the Grid dividers' own level", () => {
+  assert.ok(MILESTONE_RULES, "the .milestone-rules rule is missing");
+  assert.ok(GRID_RULES, "the .rules rule is missing");
+  ["grid-column", "grid-row", "position", "z-index"].forEach((name) => {
+    assert.equal(
+      declaration(MILESTONE_RULES[1], name),
+      declaration(GRID_RULES[1], name),
+      "the milestone layer's " + name + " must match the Grid dividers'"
+    );
+  });
+  assert.equal(declaration(MILESTONE_RULES[1], "pointer-events"), "none");
+});
+
+test("a milestone rule is a hairline on the date's own day boundary, in its colour", () => {
+  assert.ok(MILESTONE_RULE, "the .milestone-rule rule is missing");
+  assert.ok(DIVIDER_RULE, "the .rule rule is missing");
+  // The same column a Grid divider sits on: the day's own left edge.
+  assert.equal(declaration(MILESTONE_RULE[1], "left"), declaration(DIVIDER_RULE[1], "left"));
+  assert.equal(declaration(MILESTONE_RULE[1], "width"), "1px");
+  assert.equal(declaration(MILESTONE_RULE[1], "background"), "var(--milestone)");
+});
+
+test("the milestone tick is drawn on the date's own column, in its colour", () => {
+  assert.ok(MILESTONE_TICK, "the .ax-milestone::before rule is missing");
+  // A slot is positioned at its own date, as a rule is, and carries the tick on
+  // that same edge, where the rule through the rows sits.
+  assert.equal(declaration(MILESTONE_TICK[1], "left"), "0");
+  assert.equal(declaration(MILESTONE_TICK[1], "width"), "1px");
+  assert.equal(declaration(MILESTONE_TICK[1], "background"), "var(--milestone)");
+});
+
+test("a milestone slot is laid at its date rather than packed beside the last one", () => {
+  const slot = STYLE.match(/\.ax-milestone\s*\{([^}]*)\}/);
+  assert.ok(slot, "the .ax-milestone rule is missing");
+  assert.equal(declaration(slot[1], "position"), "absolute");
+  assert.equal(declaration(slot[1], "left"), "calc(var(--i) * var(--day-w))");
+  // The band keeps the axis' own width, so its rule runs the whole way whether
+  // it holds one date or none.
+  assert.equal(declaration(MILESTONE_BAND[1], "width"), "calc(var(--days) * var(--day-w))");
+});
+
+test("a crowded date keeps its tick and withdraws its name", () => {
+  assert.match(STYLE, /\.ax-milestone\.is-tick\s+\.ax-milestone__label\s*\{[^}]*display:\s*none/);
+});
+
+test("the milestone band grows the axis rather than overhanging the rows", () => {
+  assert.ok(MILESTONE_BAND, "the .axis__milestones rule is missing");
+  assert.equal(declaration(MILESTONE_BAND[1], "height"), "var(--band-day-h)");
+  // One extra band's height at every zoom, so the rows start below it.
+  assert.match(STYLE, /--axis-h:\s*calc\(var\(--band-month-h\) \+ var\(--band-day-h\) \+ var\(--axis-extra\)\)/);
+  assert.match(STYLE, /\[data-zoom="month"\][^{]*\{[^}]*--axis-h:\s*calc\(var\(--band-month-h\) \+ var\(--axis-extra\)\)/);
+  assert.match(STYLE, /\.is-milestones\s*\{[^}]*--axis-extra:\s*var\(--band-day-h\)/);
+});

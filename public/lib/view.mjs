@@ -1,11 +1,12 @@
 /*
  * PACT view state: the whole of what the interface draws the plan with rather
  * than what the plan holds - the Zoom and the row height, the report's own
- * zoom and which of its views is showing, the weekend band and the Grid
- * dividers, the Minimap, the Colour palette, whether the Stack rail is folded,
- * and the two sort keys. It lives in `data/config.json` beside the
- * active plan file, so it survives a reload; the Filter and the Marker do not,
- * being a query and a cursor rather than settings.
+ * zoom and which of its views is showing, the weekend band, the holiday band,
+ * the milestone rules and the Grid dividers, the Minimap, the Colour palette,
+ * whether the Stack rail is folded, and the two sort keys. It lives in
+ * `data/config.json` beside the active plan file, so it survives a reload; the
+ * Filter and the Marker do not, being a query and a cursor rather than
+ * settings.
  *
  * A plain ES module with no DOM and no server, so the browser (public/app.js),
  * the server (lib/config.mjs) and `node --test` all read exactly the same
@@ -48,6 +49,7 @@ export const VIEW_DEFAULTS = Object.freeze({
   gridSpacing: GRID_SPACING_DEFAULTS,
   weekends: false,
   holidays: false,
+  milestones: false,
   dividers: true,
   minimap: MINIMAP_DEFAULT,
   palette: PALETTE_DEFAULT,
@@ -64,6 +66,7 @@ export const VIEW_KEYS = Object.freeze([
   "gridSpacing",
   "weekends",
   "holidays",
+  "milestones",
   "dividers",
   "minimap",
   "palette",
@@ -131,6 +134,7 @@ export function normalizeView(raw) {
     gridSpacing: normalizeGridSpacing(source.gridSpacing),
     weekends: booleanOr(source.weekends, VIEW_DEFAULTS.weekends),
     holidays: booleanOr(source.holidays, VIEW_DEFAULTS.holidays),
+    milestones: booleanOr(source.milestones, VIEW_DEFAULTS.milestones),
     dividers: booleanOr(source.dividers, VIEW_DEFAULTS.dividers),
     minimap: booleanOr(source.minimap, VIEW_DEFAULTS.minimap),
     palette: isPalette(source.palette) ? source.palette : VIEW_DEFAULTS.palette,
