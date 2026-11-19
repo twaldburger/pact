@@ -15,8 +15,10 @@ import {
   chartReadout,
   chartReadoutBox,
   chartReadoutAt,
-  chartKeyIndex
+  chartKeyIndex,
+  chartMilestoneRules
 } from "../public/lib/chart.mjs";
+import { milestoneMarks } from "../public/lib/milestones.mjs";
 
 // The report's chart is drawn in the browser but its rules are pure, in
 // public/lib/chart.mjs. Everything here reads those rules directly: where a
@@ -203,6 +205,139 @@ test("the keyboard walks one bucket at a time and jumps to the ends", () => {
   assert.equal(chartKeyIndex("ArrowRight", 0, 0), null);
 });
 
+/* --- the milestones on the chart ------------------------------------------ */
+
+// The report's buckets tile the plan period, as report-content.mjs makes them:
+// four months of unequal length, each taken at the same width.
+const MONTH_BUCKETS = [
+  { key: "2026-09", label: "Sep", start: "2026-09-01", end: "2026-09-30" },
+  { key: "2026-10", label: "Oct", start: "2026-10-01", end: "2026-10-31" },
+  { key: "2026-11", label: "Nov", start: "2026-11-01", end: "2026-11-30" },
+  { key: "2026-12", label: "Dec", start: "2026-12-01", end: "2026-12-31" }
+];
+
+function monthGeometry() {
+  return chartGeometry(WIDTH, HEIGHT, PAD, MONTH_BUCKETS.length, 400);
+}
+
+// One mark as public/lib/milestones.mjs writes it: a date, the palette slot it
+// is drawn in and, for the title, its name and how many share the date.
+function markOn(date, colour) {
+  return { date: date, i: 0, colour: colour === undefined ? 3 : colour, name: "Launch", count: 1 };
+}
+
+test("with the switch off the chart draws no milestone rule, whatever the plan holds", () => {
+  const geom = monthGeometry();
+  const marks = [markOn("2026-09-10"), markOn("2026-10-15"), markOn("2026-12-24")];
+  assert.deepEqual(chartMilestoneRules(marks, false, MONTH_BUCKETS, geom), []);
+  // Nothing else decides it: the same marks on the same plot, and the one
+  // switch is the whole difference.
+  assert.equal(chartMilestoneRules(marks, true, MONTH_BUCKETS, geom).length, 3);
+  // And a chart with no mark is a chart with no rule, switch or not.
+  assert.deepEqual(chartMilestoneRules([], true, MONTH_BUCKETS, geom), []);
+  assert.deepEqual(chartMilestoneRules(undefined, true, MONTH_BUCKETS, geom), []);
+});
+
+test("with the switch on one rule stands at each milestone's own date", () => {
+  const geom = monthGeometry();
+  const rules = chartMilestoneRules(
+    [markOn("2026-09-01", 1), markOn("2026-09-16", 2), markOn("2026-12-31", 5)],
+    true, MONTH_BUCKETS, geom
+  );
+  assert.equal(rules.length, 3);
+  // The palette slot travels with the rule, so the browser can colour it.
+  assert.deepEqual(rules.map((r) => r.mark.colour), [1, 2, 5]);
+  // A date is placed inside its own bucket, by how far through it falls: the
+  // bucket's first day is its own left edge, its last one day short of the next.
+  assert.equal(rules[0].x, geom.left);
+  assert.equal(rules[1].x, geom.left + (15 / 30) * geom.bw);
+  assert.equal(rules[2].x, geom.left + (3 + 30 / 31) * geom.bw);
+  // A month's own first day opens that month's bucket.
+  const october = chartMilestoneRules([markOn("2026-10-01")], true, MONTH_BUCKETS, geom);
+  assert.equal(october[0].x, geom.left + geom.bw);
+  // Later dates stand further right, and no rule leaves the plot.
+  assert.ok(rules[1].x > rules[0].x && rules[2].x > rules[1].x, "the rules are not in date order");
+  rules.forEach((r) => {
+    assert.ok(r.x >= geom.left && r.x <= geom.left + geom.plotW, "a rule is off the plot");
+  });
+});
+
+test("a Day report rules each day's own boundary, as the grid does", () => {
+  const days = ["2026-09-01", "2026-09-02", "2026-09-03"].map((iso) => ({
+    key: iso, label: iso, start: iso, end: iso
+  }));
+  const geom = chartGeometry(WIDTH, HEIGHT, PAD, days.length, 4);
+  const rules = chartMilestoneRules([markOn("2026-09-02")], true, days, geom);
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].x, geom.left + geom.bw);
+});
+
+test("a milestone outside the chart's period draws nothing", () => {
+  const geom = monthGeometry();
+  // Before the period and after it: the chart holds September to December.
+  assert.deepEqual(chartMilestoneRules([markOn("2026-08-31")], true, MONTH_BUCKETS, geom), []);
+  assert.deepEqual(chartMilestoneRules([markOn("2027-01-01")], true, MONTH_BUCKETS, geom), []);
+  assert.deepEqual(chartMilestoneRules([markOn("2026-02-31")], true, MONTH_BUCKETS, geom), []);
+  assert.deepEqual(chartMilestoneRules([markOn("")], true, MONTH_BUCKETS, geom), []);
+  // A chart with no buckets holds no date at all - and a bucket without its
+  // bounds is no evidence of one.
+  assert.deepEqual(chartMilestoneRules([markOn("2026-09-10")], true, [], geom), []);
+  assert.deepEqual(chartMilestoneRules([markOn("2026-09-10")], true, [{ key: "x" }], geom), []);
+});
+
+test("the rule follows the milestone visibility rule the grid uses", () => {
+  const geom = monthGeometry();
+  const projects = [{ id: "p1" }, { id: "p2" }];
+  const milestones = [
+    { id: "m1", name: "Launch", date: "2026-09-10", colour: 1, projectIds: ["p1"] },
+    { id: "m2", name: "Audit", date: "2026-10-12", colour: 2, projectIds: ["p2"] },
+    { id: "m3", name: "Review", date: "2026-11-03", colour: 4, projectIds: [] }
+  ];
+  // p2 is filtered out of the view: its milestone is not marked, so no rule is
+  // drawn for it, while the visible project's and the plan-wide one are.
+  const marks = milestoneMarks(milestones, projects, ["p1"], "2026-09-01", 122);
+  const rules = chartMilestoneRules(marks, true, MONTH_BUCKETS, geom);
+  assert.deepEqual(rules.map((r) => r.mark.name), ["Launch", "Review"]);
+  // With both projects in view, all three dates rule the plot. The visibility
+  // half of that answer is milestones.mjs': this side reads its marks.
+  const both = milestoneMarks(milestones, projects, ["p1", "p2"], "2026-09-01", 122);
+  assert.equal(chartMilestoneRules(both, true, MONTH_BUCKETS, geom).length, 3);
+  // One rule per date however many milestones share it.
+  const twin = milestones.concat([{ id: "m4", name: "Ship", date: "2026-09-10", colour: 7, projectIds: [] }]);
+  const twinRules = chartMilestoneRules(milestoneMarks(twin, projects, ["p1"], "2026-09-01", 122),
+    true, MONTH_BUCKETS, geom);
+  assert.equal(twinRules.length, 2);
+  assert.equal(twinRules[0].mark.count, 2);
+});
+
+test("a rule can stand under the readout's corner, and the paper is painted over it", () => {
+  const geom = monthGeometry();
+  // The readout's paper sits in the plot's bottom-left corner, drawn from its
+  // own measured words; the first bucket's early days fall inside it.
+  const ink = { x: 0, y: 0, width: 140, height: 14 };
+  const at = chartReadoutAt(geom, chartReadoutBox(ink));
+  const paper = chartReadoutBox(ink);
+  const paperLeft = at.x + paper.x;
+  const paperRight = paperLeft + paper.width;
+  const inside = chartMilestoneRules([markOn("2026-09-03")], true, MONTH_BUCKETS, geom);
+  assert.equal(inside.length, 1);
+  assert.ok(inside[0].x > paperLeft && inside[0].x < paperRight,
+    "the fixture no longer lands a rule under the readout");
+  // The two are told apart by the paint order and by the paper: the rule is
+  // drawn before the ruler and the readout, and the paper's fill is the opaque
+  // canvas the chart is drawn on, so the reading survives over the rule.
+  const chart = functionSource(APP, "buildLineChart");
+  const rules = chart.indexOf("reportChartMilestones(svg, model.buckets, geom);");
+  const ruler = chart.indexOf('class: "report-chart__rule"');
+  const readout = chart.indexOf('class: "report-chart__readout"');
+  assert.ok(rules > -1 && ruler > -1 && readout > -1, "a mark is missing");
+  assert.ok(rules < ruler && ruler < readout, "the readout is not painted over the rules");
+  const style = fs.readFileSync(path.join(PUBLIC, "style.css"), "utf8");
+  const paperFill = style.match(/\.report-chart__readout-box\s*\{([^}]*)\}/);
+  assert.ok(paperFill, "the readout has no paper");
+  assert.match(paperFill[1], /fill:\s*var\(--canvas\)/, "the paper is not opaque");
+});
+
 /* --- the composition and the wiring --------------------------------------- */
 
 // One function's source, from its own line to the next closing brace at column
@@ -283,4 +418,45 @@ test("the readout's words are announced, not only drawn", () => {
   assert.match(section, /swatchClass: "report-legend__swatch--band"/);
   assert.equal(APP.includes("report-legend__swatch--dashed"), false,
     "the legend still names a dashed capacity");
+});
+
+test("the chart draws the grid's own marks, through the one Show milestones switch", () => {
+  const helper = functionSource(APP, "reportChartMilestones");
+  assert.ok(helper.length > 0, "reportChartMilestones is missing");
+  // The marks are the grid's own list, read through the chart module's rule,
+  // with the one milestonesDrawn() answer for the switch: no second reading of
+  // the plan and no second copy of the visibility rule on this side.
+  assert.match(helper,
+    /chartMilestoneRules\(milestoneMarkList, milestonesDrawn\(\), buckets, geom\)\.forEach/);
+  assert.doesNotMatch(helper, /data\.milestones/);
+  assert.doesNotMatch(helper, /milestoneMarks\(|milestoneShown\(/);
+  // A rule is the milestone's own palette slot, in the app's own token, and it
+  // is named in the axis band's words for a hover or a screen reader.
+  assert.match(helper, /class: "report-chart__milestone"/);
+  assert.match(helper, /setProperty\("--milestone", "var\(--proj-" \+ rule\.mark\.colour \+ "\)"\)/);
+  assert.match(helper, /svgNode\("title", null, milestoneLabel\(rule\.mark\)\)/);
+  // Reached through the chart module's import list, not invented here.
+  const imports = APP.slice(APP.lastIndexOf("import {", APP.indexOf('} from "./lib/chart.mjs";')));
+  assert.match(imports, /chartMilestoneRules/);
+});
+
+test("the rules are painted over the grid and under the data ink and the readout", () => {
+  const chart = functionSource(APP, "buildLineChart");
+  const band = chart.indexOf('class: "report-chart__band"');
+  const grid = chart.indexOf("reportChartAxis(svg, width, height, geom);");
+  const rules = chart.indexOf("reportChartMilestones(svg, model.buckets, geom);");
+  const cap = chart.indexOf('class: "report-chart__cap"');
+  const alloc = chart.indexOf('class: "report-chart__alloc"');
+  const ruler = chart.indexOf('class: "report-chart__rule"');
+  const readout = chart.indexOf('class: "report-chart__readout"');
+  [band, grid, rules, cap, alloc, ruler, readout].forEach((i, n) => {
+    assert.ok(i > -1, "mark " + n + " is missing");
+  });
+  // Above the band's quiet fill and the grid's guides, so a rule reads.
+  assert.ok(band < grid && grid < rules, "the rules are not over the grid");
+  // Under the capacity's edge, the allocation line and its dots, so a rule
+  // never covers the figures it annotates.
+  assert.ok(rules < cap && cap < alloc, "the rules are not under the data ink");
+  // And under the ruler and the readout's paper, so a reading survives.
+  assert.ok(rules < ruler && ruler < readout, "the readout is not over the rules");
 });

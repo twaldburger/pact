@@ -47,7 +47,8 @@ import {
   chartReadout,
   chartReadoutBox,
   chartReadoutAt,
-  chartKeyIndex
+  chartKeyIndex,
+  chartMilestoneRules
 } from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
@@ -581,9 +582,10 @@ function updateDividerRules() {
 
 /* --- drawing: milestones ------------------------------------------------- */
 
-// Whether the grid draws milestones at all: switched on, and something to name.
-// The rules, the axis band and the band's own height all follow this one
-// answer, so a switched-on plan with nothing in the period draws no empty band.
+// Whether the milestones are drawn at all: switched on, and something to name.
+// The grid's rules, the axis band and the band's own height follow this one
+// answer - and so does the report's chart, which rules the same marks - so a
+// switched-on plan with nothing in the period draws no empty band.
 function milestonesDrawn() {
   return milestoneRules && milestoneMarkList.length > 0;
 }
@@ -3921,6 +3923,32 @@ function svgNode(tag, attrs, text) {
 // A whole-number ceiling a chart can divide cleanly is the module's own rule
 // (public/lib/chart.mjs), beside the geometry, the paths and the ruler.
 
+// The milestones on the chart: one quiet vertical rule at each date the view
+// leaves a milestone on, in that milestone's own palette colour. The marks are
+// the grid's own (milestoneMarkList, one per visible date and none off the
+// plan period), and the one Show milestones switch decides whether either
+// surface draws them, so the chart and the rows cannot disagree about which
+// milestones are shown. A date the plot does not hold draws nothing.
+//
+// A milestone is an annotation, so its rule takes the band's place in the paint
+// order: over the grid and the capacity's quiet fill, under the data ink and
+// under the ruler and the readout's paper. The paper is opaque, so a reading in
+// the plot's corner stays legible over a rule beneath it and the rule is simply
+// interrupted there rather than fighting the figure it annotates.
+function reportChartMilestones(svg, buckets, geom) {
+  chartMilestoneRules(milestoneMarkList, milestonesDrawn(), buckets, geom).forEach(function (rule) {
+    var line = svgNode("line", {
+      x1: rule.x, x2: rule.x, y1: geom.top, y2: geom.top + geom.plotH,
+      class: "report-chart__milestone"
+    });
+    line.style.setProperty("--milestone", "var(--proj-" + rule.mark.colour + ")");
+    // Named on hover and to a screen reader in the axis band's own words: the
+    // milestone's name, its date, and how many others share the date.
+    line.appendChild(svgNode("title", null, milestoneLabel(rule.mark)));
+    svg.appendChild(line);
+  });
+}
+
 function reportChartAxis(svg, width, height, geom) {
   [0, geom.max / 2, geom.max].forEach(function (v) {
     var y = chartY(v, geom);
@@ -3976,6 +4004,7 @@ function buildLineChart(model, live) {
 
   svg.appendChild(svgNode("path", { d: chartBandPath(line, geom), class: "report-chart__band" }));
   reportChartAxis(svg, width, height, geom);
+  reportChartMilestones(svg, model.buckets, geom);
   svg.appendChild(svgNode("path", {
     d: chartLinePath(line, geom, "capacity"), class: "report-chart__cap"
   }));

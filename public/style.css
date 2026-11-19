@@ -1233,6 +1233,16 @@ h1, h2, h3, p { margin: 0; }
 
 .report-chart__dot-alloc { fill: var(--ink); }
 
+/* The milestones on the chart: one quiet rule through the plot at each date the
+   view leaves a milestone on, in that milestone's own palette colour - the same
+   colour, and the same slot token, the grid's rules and its axis band wear. It
+   is an annotation rather than a figure, so it takes the weight of the grid's
+   own hairline and is painted under the data ink and under the readout's paper. */
+.report-chart__milestone {
+  stroke: var(--milestone);
+  stroke-width: 1;
+}
+
 /* The ruler, the readout in the plot's corner and the paper under it: drawn but
    put away until the chart is being read, over the pointer or the keyboard. */
 .report-chart__rule,

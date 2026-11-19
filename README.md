@@ -45,7 +45,9 @@ listed and edited in the Milestones panel from the Options menu, which counts
 them. The Show milestones toggle in that menu draws each one as a vertical rule
 through the rows, in its own colour, naming it and its date in the axis band: a
 Milestone related to Projects is drawn while one of them is in view, and one
-related to none is plan-wide. They are annotations, so no total, share or
+related to none is plan-wide. The same switch rules the report's Allocation
+against capacity chart, where each is a vertical rule at its own date and every
+other view leaves them out. They are annotations, so no total, share or
 over-allocation check counts them.
 - **Filter.** One field hides everything on the grid that does not match. By
   default it looks in People, Projects and Assignments, and a scope control
