@@ -94,15 +94,34 @@ export function chartBandPath(buckets, geom) {
 }
 
 // One bucket's reading, as the ruler states it: the bucket's own label as the
-// axis writes it, the allocated and capacity figures and the share between
-// them. A bucket the plan offers no capacity in has no share to divide, and
-// says so instead of claiming 0% or an infinity.
+// axis writes it, the allocated and capacity figures as a slash-separated pair
+// and the share after them. A bucket the plan offers no capacity in has no
+// share to divide, and says so instead of claiming 0% or an infinity.
 export function chartReadout(bucket) {
   const allocated = Math.round(bucket.alloc);
   const capacity = Math.round(bucket.capacity);
-  const figures = bucket.label + ": " + allocated + " of " + capacity + " FTE-days";
+  const figures = bucket.label + ": " + allocated + "/" + capacity + " FTE-days";
   if (!(bucket.capacity > 0)) return figures + " \u00b7 no capacity";
   return figures + " \u00b7 " + Math.round((bucket.alloc / bucket.capacity) * 100) + "%";
+}
+
+// The paper under the readout's words: the ink `getBBox` measures plus a small
+// padding, so a long bucket label is never clipped and the paper never ends
+// short of the text. The padding is even either side, which puts the paper's
+// own left edge on the group's origin.
+export function chartReadoutBox(ink) {
+  return { x: ink.x - 6, y: ink.y - 4, width: ink.width + 12, height: ink.height + 8 };
+}
+
+// Where the readout's group sits: the plot's bottom-left corner, inset by the
+// same small margin it already took, and lifted by the paper's own height so
+// the paper stands above the baseline rather than into the axis labels under
+// it. The height is measured, not guessed, so the placement follows the words.
+export function chartReadoutAt(geom, box) {
+  return {
+    x: geom.left + 4,
+    y: geom.top + geom.plotH - 4 - (box.y + box.height)
+  };
 }
 
 // Where a key press moves the ruler, or null for a key the chart does not use.

@@ -44,6 +44,8 @@ import {
   chartLinePath,
   chartBandPath,
   chartReadout,
+  chartReadoutBox,
+  chartReadoutAt,
   chartKeyIndex
 } from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
@@ -3661,10 +3663,11 @@ function reportChartLabels(svg, height, geom, labels) {
 // it is one fixed colour whatever palette scheme the plan is read in.
 //
 // Reading it is the ruler's job, over the pointer or the keyboard: it snaps to
-// the nearest bucket's centre and a readout fixed in the plot's top corner
-// states that bucket's label, its two figures and the share between them. Both
-// are put away when the pointer leaves the plot or the chart loses focus, and
-// the readout's words are announced through the caller's live region.
+// the nearest bucket's centre and a readout fixed in the plot's bottom-left
+// corner states that bucket's label, its two figures and the share between
+// them. Both are put away when the pointer leaves the plot or the chart loses
+// focus, and the readout's words are announced through the caller's live
+// region.
 function buildLineChart(model, live) {
   var width = 780;
   var height = 240;
@@ -3698,18 +3701,14 @@ function buildLineChart(model, live) {
   reportChartLabels(svg, height, geom, line.map(function (b) { return b.label; }));
 
   // The ruler and its readout: drawn once, shown by a class on the chart while
-  // someone is reading. The readout is a group of its own in the plot's top
-  // corner - fixed there, so it never covers the bucket being read and never
-  // flickers between two positions.
+  // someone is reading. The readout is a group of its own, kept down in the
+  // plot's left corner by the capacity's baseline - fixed there, so it never
+  // covers the roof it describes and never flickers between two positions. Its
+  // place is set on each showing, from the words' own measured box.
   var rule = svgNode("line", {
     class: "report-chart__rule", y1: geom.top, y2: geom.top + geom.plotH
   });
-  // Inset from the corner so the paper reads as sitting inside the plot rather
-  // than hanging off its top edge.
-  var readout = svgNode("g", {
-    class: "report-chart__readout",
-    transform: "translate(" + (geom.left + 4) + " " + (geom.top + 4) + ")"
-  });
+  var readout = svgNode("g", { class: "report-chart__readout" });
   var box = svgNode("rect", { class: "report-chart__readout-box" });
   var words = svgNode("text", { class: "report-chart__readout-text", x: 6, y: 13 });
   readout.appendChild(box);
@@ -3724,15 +3723,19 @@ function buildLineChart(model, live) {
     var x = chartX(i, geom);
     rule.setAttribute("x1", x);
     rule.setAttribute("x2", x);
-    svg.classList.add("is-reading");
     words.textContent = chartReadout(line[i]);
-    // The box takes the words' own size, so a long bucket label is never
-    // clipped and the paper never ends short of the text.
-    var ink = words.getBBox();
-    box.setAttribute("x", ink.x - 6);
-    box.setAttribute("y", ink.y - 4);
-    box.setAttribute("width", ink.width + 12);
-    box.setAttribute("height", ink.height + 8);
+    // Shown before it is measured: an undisplayed group measures as nothing.
+    svg.classList.add("is-reading");
+    // The box takes the words' own measured size, and the group is placed from
+    // that same box, so a taller or longer reading still sits inside the plot
+    // and clear of the axis labels under its baseline.
+    var paper = chartReadoutBox(words.getBBox());
+    var at = chartReadoutAt(geom, paper);
+    box.setAttribute("x", paper.x);
+    box.setAttribute("y", paper.y);
+    box.setAttribute("width", paper.width);
+    box.setAttribute("height", paper.height);
+    readout.setAttribute("transform", "translate(" + at.x + " " + at.y + ")");
     if (live) live.textContent = words.textContent;
   }
   function hide() {

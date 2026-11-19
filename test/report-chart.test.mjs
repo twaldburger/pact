@@ -13,6 +13,8 @@ import {
   chartLinePath,
   chartBandPath,
   chartReadout,
+  chartReadoutBox,
+  chartReadoutAt,
   chartKeyIndex
 } from "../public/lib/chart.mjs";
 
@@ -126,19 +128,58 @@ test("the band is the capacity's own top edge closed down to the baseline", () =
 });
 
 test("the readout names the bucket, both figures and the share between them", () => {
-  assert.equal(chartReadout(BUCKETS[0]), "Sep: 148 of 372 FTE-days \u00b7 40%");
-  assert.equal(chartReadout(BUCKETS[1]), "Oct: 210 of 372 FTE-days \u00b7 56%");
+  assert.equal(chartReadout(BUCKETS[0]), "Sep: 148/372 FTE-days \u00b7 40%");
+  assert.equal(chartReadout(BUCKETS[1]), "Oct: 210/372 FTE-days \u00b7 56%");
   // The share is rounded from the figures themselves, not from their rounding:
   // 148.4 of 372 is 39.9%.
   assert.equal(Math.round((BUCKETS[0].alloc / BUCKETS[0].capacity) * 100), 40);
+  // The slash stands between the figures and the middle dot before the share:
+  // neither the word "of" nor a bare space between the two counts.
+  assert.doesNotMatch(chartReadout(BUCKETS[0]), / of |\d \d/);
+  assert.equal(chartReadout(BUCKETS[0]).split(" \u00b7 ")[1], "40%");
   // Over-allocation reads as the share it is, above 100%.
   assert.equal(chartReadout({ label: "Dec", alloc: 500, capacity: 372 }),
-    "Dec: 500 of 372 FTE-days \u00b7 134%");
+    "Dec: 500/372 FTE-days \u00b7 134%");
   // A bucket the plan offers nothing in says so instead of dividing.
-  assert.equal(chartReadout(BUCKETS[2]), "Nov: 12 of 0 FTE-days \u00b7 no capacity");
+  assert.equal(chartReadout(BUCKETS[2]), "Nov: 12/0 FTE-days \u00b7 no capacity");
   assert.equal(chartReadout({ label: "Nov", alloc: 0, capacity: 0 }),
-    "Nov: 0 of 0 FTE-days \u00b7 no capacity");
+    "Nov: 0/0 FTE-days \u00b7 no capacity");
   assert.doesNotMatch(chartReadout(BUCKETS[2]), /%|Infinity|NaN/);
+});
+
+// What a browser's getBBox reports for the readout's words at 10px: the ink
+// starts at the text's own x, rises a couple of units over its baseline and is
+// one line of type tall. Used with the chart's real geometry, so the placement
+// assertions below are measured in the SVG's own units.
+const INK = { x: 6, y: 2, width: 132, height: 12 };
+
+test("the readout's paper sits in the plot's bottom-left, above the baseline", () => {
+  const geom = geometry();
+  const base = geom.top + geom.plotH;
+  const box = chartReadoutBox(INK);
+  const at = chartReadoutAt(geom, box);
+  // The paper in the SVG's own frame: the words plus their padding, carried by
+  // the group's own place.
+  const left = at.x + box.x;
+  const top = at.y + box.y;
+  const bottom = top + box.height;
+  // The inset the readout took at the top corner, now taken from the left edge
+  // and from the baseline under it.
+  assert.equal(left, geom.left + 4);
+  assert.equal(bottom, base - 4);
+  // Inside the plot's lower half, so it no longer covers the roof it describes,
+  // and above the baseline rather than on it.
+  assert.ok(top > geom.top + geom.plotH / 2, "the readout is not in the bottom half");
+  assert.ok(bottom < base, "the readout overlaps the baseline");
+  // Clear of the axis labels, which are drawn under the baseline on a 10px
+  // baseline of their own; and clear of the tick figures at the plot's left.
+  const labelBaseline = HEIGHT - 10;
+  assert.ok(bottom < labelBaseline - 10, "the readout reaches the axis labels");
+  assert.ok(left > geom.left - 6, "the readout covers the tick figures");
+  // The paper is the words' own measured size plus an even padding, so it
+  // follows the text rather than a guessed height.
+  assert.equal(box.width, INK.width + 12);
+  assert.equal(box.height, INK.height + 8);
 });
 
 test("the keyboard walks one bucket at a time and jumps to the ends", () => {
@@ -204,6 +245,31 @@ test("the chart answers the pointer and the keyboard, and keeps its name", () =>
   // chart.
   assert.match(chart, /addEventListener\("pointerleave", hide\)/);
   assert.match(chart, /addEventListener\("blur", hide\)/);
+});
+
+test("the readout is placed from its own measured box each time it shows", () => {
+  const chart = functionSource(APP, "buildLineChart");
+  // Measured where the words are, and placed from that same measurement, so a
+  // longer reading still sits inside the plot and above the axis labels.
+  assert.match(chart, /var paper = chartReadoutBox\(words\.getBBox\(\)\);/);
+  assert.match(chart, /var at = chartReadoutAt\(geom, paper\);/);
+  assert.match(chart, /readout\.setAttribute\("transform", "translate\(" \+ at\.x \+ " " \+ at\.y \+ "\)"\);/);
+  // The group carries no place of its own: a translate fixed at creation is
+  // the top-corner placement this replaces.
+  assert.match(chart, /var readout = svgNode\("g", \{ class: "report-chart__readout" \}\);/);
+  // Shown before it is measured, since a display:none group measures as
+  // nothing and getBBox would throw.
+  assert.ok(chart.indexOf('svg.classList.add("is-reading")') <
+    chart.indexOf("chartReadoutBox(words.getBBox())"),
+    "the readout is measured while still hidden");
+  // And the words come from the module's own rule, so the ruler and the tests
+  // read the same wording.
+  assert.match(chart, /words\.textContent = chartReadout\(line\[i\]\);/);
+  // Both placement rules arrive through the chart module's own import list: a
+  // rule the app calls without importing throws on the first hover.
+  const imports = APP.slice(APP.lastIndexOf("import {", APP.indexOf('} from "./lib/chart.mjs";')));
+  assert.match(imports, /chartReadoutBox/);
+  assert.match(imports, /chartReadoutAt/);
 });
 
 test("the readout's words are announced, not only drawn", () => {
