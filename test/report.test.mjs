@@ -893,6 +893,7 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
     "holidays",
     "dividers",
     "minimap",
+    "marker",
     "reset-view"
   ]);
   // The plan-facing entries - the period, the step, the palette, Sprints, the

@@ -100,7 +100,7 @@ Its absence means the default; if it exists but cannot be read, the default is u
 _Avoid_: preferences, settings, options, registry
 
 **View setting**:
-One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band and the Grid dividers, the Minimap, the Colour palette, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter and the Marker are deliberately not view settings - one is a query, the other a cursor into the timeline - so neither persists. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker alone. A malformed stored value falls back to that setting's default on its own.
+One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band, the holiday band, the Milestone rules, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's default on its own.
 _Avoid_: preference, option, display state
 
 **Step**:
@@ -116,7 +116,7 @@ A short free-text label on a Milestone, for grouping and filtering milestones la
 _Avoid_: label, keyword, category, or an unqualified "tag"
 
 **Marker**:
-The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at. It is the reading cursor, not a Milestone: a Milestone is a dated point in the plan, while the Marker only sets the date the plan is read at.
+The draggable vertical line on the Timeline. It starts on today, and the date it sits on is the date the per-Person totals are read at. It is the reading cursor, not a Milestone: a Milestone is a dated point in the plan, while the Marker only sets the date the plan is read at. It is drawn by default and can be hidden from the Options menu, which takes the line and its date chip away - so there is nothing to drag - while leaving the reading where it was: a hidden Marker still sets the date the totals are read at.
 _Avoid_: today line, now line, cursor, playhead, reference line, milestone
 
 **Minimap**:

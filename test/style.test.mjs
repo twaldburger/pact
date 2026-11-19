@@ -155,6 +155,25 @@ test("the Marker's date is anchored to the sticky axis at the marker's x", () =>
   assert.match(APP, /markerDate\.addEventListener\("pointerdown", onChipDown\)/);
 });
 
+/* --- the Marker's visibility --------------------------------------------- */
+
+// The Marker's line is drawn only while its own view setting says so, and a
+// hidden Marker keeps its index - and so every figure - exactly where it was.
+// Pinned here because the suite has no DOM to draw one with.
+test("a hidden Marker draws no line and still moves the reading", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // Drawn behind the setting; with it off nothing is appended at all, so no
+  // line, no chip and no slider are left on screen to drag.
+  assert.match(APP, /if \(markerVisible\) \{\s*tl\.appendChild\(drawMarker\(\)\);/);
+  // Every write to the drawn element is guarded, so a move reaches updateFigures
+  // without throwing over a node that is not there.
+  assert.match(APP, /if \(marker\) \{\s*marker\.style\.setProperty\("--i", markerIndex\);/);
+  assert.match(APP, /if \(markerDate\) \{\s*markerDate\.style\.setProperty\("--i", markerIndex\);/);
+  // With no line on screen, the header band places no Marker either: nothing
+  // invisible moves the date the totals are read at.
+  assert.match(APP, /function onAxisClick\(e\) \{\s*if \(!markerVisible\) return;/);
+});
+
 /* --- the Grid dividers and the axis separators share the boundary --------- */
 
 // The full-height Grid dividers sit on the true day boundary
