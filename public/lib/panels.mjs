@@ -1,7 +1,7 @@
 /*
- * PACT panel logic: the parts of the Person, Project and Assignment panels
- * that are rules rather than DOM - which tags to suggest, how Availability
- * steps, and how a refused drop is worded.
+ * PACT panel logic: the parts of the Person, Project, Assignment and Milestone
+ * panels that are rules rather than DOM - which tags to suggest, how
+ * Availability steps, and how a refused drop is worded.
  *
  * A plain ES module with no imports, so the browser (public/app.js) and
  * `node --test` load exactly the same source.
@@ -165,6 +165,20 @@ export function suggestPersonLocations(people, currentPersonId, configured) {
   }));
   own.forEach(function (_, key) { configuredSeen.delete(key); });
   configuredSeen.forEach(function (text, key) { if (!others.has(key)) others.set(key, text); });
+  return sortedValues(others);
+}
+
+/*
+ * Milestone tags are a fourth, separate vocabulary: offered from the other
+ * Milestones only, and never from People's, Projects' or Assignments' tags even
+ * when the other Milestones carry none.
+ */
+export function suggestMilestoneTags(milestones, currentMilestoneId) {
+  const list = milestones || [];
+  const current = list.find(function (m) { return m.id === currentMilestoneId; });
+  const own = collectTags(current ? [current] : []);
+  const others = collectTags(list.filter(function (m) { return m.id !== currentMilestoneId; }));
+  own.forEach(function (_, key) { others.delete(key); });
   return sortedValues(others);
 }
 

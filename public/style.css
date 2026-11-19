@@ -2884,6 +2884,89 @@ down to the last row and no further. */
   color: var(--ink);
 }
 
+/* The Milestones panel: one row per milestone, then the same row's fields while
+   it is being edited. A row reads as the point it marks - its colour, its name,
+   the date, and the projects and tags it carries - and the whole row is the
+   button that opens the editor. The swatch is a Project panel swatch, so a
+   milestone's colour is read the same way a project's is. */
+.panel--milestones { width: 26rem; }
+
+.milestone-list { margin-top: var(--sp-4); }
+
+.milestone-list__empty {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
+.milestone-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: baseline;
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  text-align: left;
+  cursor: pointer;
+}
+
+.milestone-row:hover { border-color: var(--rule-strong); }
+
+.milestone-row__swatch {
+  width: var(--sp-2);
+  height: var(--sp-2);
+  border-radius: var(--radius-chip);
+  background: var(--pick);
+  align-self: center;
+}
+
+.milestone-row__name { font-weight: var(--fw-ui); }
+
+.milestone-row__date,
+.milestone-row__links,
+.milestone-row__tags {
+  color: var(--ink-soft);
+  font-size: var(--fs-axis);
+}
+
+.milestone-row__date { white-space: nowrap; }
+
+.milestone-row__links,
+.milestone-row__tags { grid-column: 2 / -1; }
+
+/* The related-projects picker: one checkbox per project, so a milestone may
+   relate to none, one or many. */
+.milestone-projects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.milestone-project {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+
+.milestone-project input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.milestone-projects__empty {
+  font-size: var(--fs-data);
+  color: var(--ink-soft);
+}
+
 .noscript {
   margin: var(--sp-6);
   font-size: var(--fs-body);

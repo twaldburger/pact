@@ -35,7 +35,7 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
 export function optionGroups(items) {
   return [
     items.map(function (item) { return item.key; }).concat(["palette", "reset-view"]),
-    ["range", "step", "sprints", "holidays", "tags"],
+    ["range", "step", "sprints", "holidays", "tags", "milestones"],
     ["plan-file"]
   ];
 }
@@ -138,6 +138,21 @@ export function tagsItem(tagColours) {
   if (keyCount) parts.push(keyCount + (keyCount === 1 ? " key" : " keys"));
   if (colourCount) parts.push(colourCount + (colourCount === 1 ? " colour" : " colours"));
   return { key: "tags", label: "Tags...", detail: parts.join(", ") };
+}
+
+/*
+ * The Milestones entry in the Options menu. Like the Sprints, Holidays and Tags
+ * entries it is an action, not a checked state: opening it opens the Milestones
+ * panel. The detail counts them, so a plan carrying Milestones is not silent
+ * about them while their drawing is switched off.
+ */
+export function milestonesItem(milestones) {
+  const count = Array.isArray(milestones) ? milestones.length : 0;
+  return {
+    key: "milestones",
+    label: "Milestones...",
+    detail: count === 0 ? "None yet" : count + (count === 1 ? " milestone" : " milestones")
+  };
 }
 
 /*

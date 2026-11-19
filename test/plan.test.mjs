@@ -1127,3 +1127,188 @@ test("the store trusts its own write, so the next write is no false conflict", (
   store.createPerson({ name: "Erin Sol", availability: 70 });
   assert.equal(store.get().people.length, 5);
 });
+
+/* --- milestones ---------------------------------------------------------- */
+
+test("the seed leaves milestones out, so an existing plan is unchanged", () => {
+  const seed = seedPlan();
+  assert.equal(seed.milestones, undefined);
+  assert.deepEqual(validatePlan(seed), []);
+});
+
+test("a plan with milestones validates, related projects included", () => {
+  const plan = seedPlan();
+  plan.milestones = [
+    {
+      id: "atlas-launch",
+      name: "Atlas launch",
+      date: day(10),
+      colour: 3,
+      tags: ["Release", "comms"],
+      notes: "handover signed off",
+      projectIds: ["atlas", "borealis"]
+    },
+    // A milestone relates to no project, and one may name none at all.
+    { id: "quarter-end", name: "Q4 close", date: day(20), colour: 0, tags: [], notes: "", projectIds: [] },
+    { id: "audit", name: "Audit", date: day(-1), colour: 9 }
+  ];
+  assert.deepEqual(validatePlan(plan), []);
+});
+
+test("a malformed milestone is refused by name, plainly", () => {
+  const plan = seedPlan();
+  const base = { id: "atlas-launch", name: "Atlas launch", date: day(1), colour: 3, tags: [], notes: "", projectIds: [] };
+
+  plan.milestones = [Object.assign({}, base, { name: "   " })];
+  assert.deepEqual(validatePlan(plan), ["milestones.name must be a non-empty string"]);
+
+  plan.milestones = [Object.assign({}, base, { date: "2026-02-30" })];
+  assert.deepEqual(validatePlan(plan), ["milestones.date must be a valid YYYY-MM-DD date"]);
+
+  plan.milestones = [Object.assign({}, base, { date: "01.02.2026" })];
+  assert.deepEqual(validatePlan(plan), ["milestones.date must be a valid YYYY-MM-DD date"]);
+
+  plan.milestones = [Object.assign({}, base, { colour: 10 })];
+  assert.deepEqual(validatePlan(plan), ["milestones.colour must be a slot 0..9"]);
+
+  plan.milestones = [Object.assign({}, base, { tags: "Release" })];
+  assert.deepEqual(validatePlan(plan), ["milestones.tags must be an array of strings"]);
+
+  plan.milestones = [Object.assign({}, base, { notes: 4 })];
+  assert.deepEqual(validatePlan(plan), ["milestones.notes must be a string"]);
+
+  plan.milestones = [Object.assign({}, base, { projectIds: ["atlas", 7] })];
+  assert.deepEqual(validatePlan(plan), ["milestones.projectIds must be an array of strings"]);
+
+  plan.milestones = [base, Object.assign({}, base)];
+  assert.deepEqual(validatePlan(plan), ["milestones has a duplicate id 'atlas-launch'"]);
+
+  plan.milestones = "atlas-launch";
+  assert.deepEqual(validatePlan(plan), ["milestones must be an array"]);
+
+  plan.milestones = [42];
+  assert.deepEqual(validatePlan(plan), ["milestones[0] must be an object"]);
+});
+
+test("a milestone round-trips through the plan file", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = { undo: 0, redo: 0 };
+  assert.deepEqual(store.historyDepth(), before);
+
+  const created = store.createMilestone({
+    name: "Atlas launch",
+    date: day(5),
+    colour: 7,
+    tags: ["Release", "comms"],
+    notes: "handover signed off",
+    projectIds: ["atlas", "borealis"]
+  });
+  assert.match(created.id, /^milestone-/);
+  // Tags are stored in the plan's alphabetical order, the spelling kept.
+  assert.deepEqual(created.tags, ["comms", "Release"]);
+
+  // The entry reaches the file as written, and a fresh store reads it back.
+  const written = JSON.parse(fs.readFileSync(file, "utf8")).milestones[0];
+  assert.deepEqual(written, created);
+  const reloaded = createStore(file);
+  assert.deepEqual(reloaded.get().milestones, [created]);
+
+  const edited = store.updateMilestone(created.id, { name: "Atlas launch (moved)", date: day(9), colour: 2 });
+  assert.equal(edited.name, "Atlas launch (moved)");
+  assert.equal(edited.date, day(9));
+  assert.equal(edited.colour, 2);
+  // The fields the patch does not name keep their stored value.
+  assert.deepEqual(edited.projectIds, ["atlas", "borealis"]);
+  assert.deepEqual(edited.notes, "handover signed off");
+  assert.deepEqual(createStore(file).get().milestones, [edited]);
+
+  store.destroyMilestone(created.id);
+  // Deleting the last milestone drops the collection, so a plan that never had
+  // one carries no key at all.
+  assert.equal(store.get().milestones, undefined);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).milestones, undefined);
+});
+
+test("a stretch of milestones keeps the collection, in the order they were added", () => {
+  const store = createStore(tempFile());
+  const first = store.createMilestone({ name: "Atlas launch", date: day(5) });
+  const second = store.createMilestone({ name: "Borealis launch", date: day(15) });
+  // A colourless milestone takes the least-used slot, as a new project does.
+  assert.equal(first.colour, 0);
+  assert.equal(second.colour, 1);
+  store.destroyMilestone(first.id);
+  assert.deepEqual(store.get().milestones, [second]);
+});
+
+test("a milestone naming a project that no longer exists does not stop the plan loading", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const milestone = store.createMilestone({
+    name: "Atlas launch",
+    date: day(5),
+    projectIds: ["atlas"]
+  });
+  store.destroyProject("atlas");
+
+  // The stale id stays in the file rather than taking the milestone or the
+  // project deletion down with it.
+  assert.deepEqual(store.get().milestones[0].projectIds, ["atlas"]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).milestones[0].projectIds, ["atlas"]);
+
+  // Opening that file is not refused, and the milestone reads back whole.
+  const reloaded = createStore(file);
+  assert.deepEqual(validatePlan(reloaded.get()), []);
+  assert.deepEqual(reloaded.get().milestones, [milestone]);
+
+  // Undoing the delete in the session that made it brings the project back,
+  // and the link with it: the id was kept, so it resolves again.
+  store.undo();
+  assert.equal(store.get().projects.some((p) => p.id === "atlas"), true);
+  assert.deepEqual(store.get().milestones[0].projectIds, ["atlas"]);
+});
+
+test("a refused milestone writes nothing and records no history", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = fs.readFileSync(file, "utf8");
+  assert.throws(() => store.createMilestone({ name: "", date: day(1), colour: 1 }), /milestone.name/);
+  assert.throws(() => store.createMilestone({ name: "Atlas launch", date: "not-a-date", colour: 1 }), /milestone.date/);
+  assert.throws(() => store.createMilestone({ name: "Atlas launch", date: day(1), colour: 12 }), /milestone.colour/);
+  assert.throws(() => store.createMilestone({ name: "Atlas launch", date: day(1), colour: 1, extra: 1 }), ValidationError);
+  assert.throws(() => store.createMilestone({ name: "Atlas launch", date: day(1), colour: 1, id: "Atlas Launch" }),
+    /milestone.id must be a lowercase slug/);
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+  assert.deepEqual(store.historyDepth(), { undo: 0, redo: 0 });
+  assert.equal(store.get().milestones, undefined);
+});
+
+test("creating, editing and deleting a milestone is one undo step each", () => {
+  const store = createStore(tempFile());
+  const created = store.createMilestone({ name: "Atlas launch", date: day(5) });
+  assert.deepEqual(store.historyDepth(), { undo: 1, redo: 0 });
+
+  store.updateMilestone(created.id, { name: "Atlas go-live" });
+  assert.deepEqual(store.historyDepth(), { undo: 2, redo: 0 });
+  assert.equal(store.get().milestones[0].name, "Atlas go-live");
+
+  store.destroyMilestone(created.id);
+  assert.deepEqual(store.historyDepth(), { undo: 3, redo: 0 });
+  assert.equal(store.get().milestones, undefined);
+
+  // One step back restores each state whole.
+  store.undo();
+  assert.equal(store.get().milestones[0].name, "Atlas go-live");
+  store.undo();
+  assert.equal(store.get().milestones[0].name, "Atlas launch");
+  store.undo();
+  assert.equal(store.get().milestones, undefined);
+  assert.equal(store.canUndo(), false);
+});
+
+test("editing or deleting a milestone that is not there is an ordinary not-found refusal", () => {
+  const store = createStore(tempFile());
+  assert.throws(() => store.updateMilestone("nope", { name: "X" }), NotFoundError);
+  assert.throws(() => store.destroyMilestone("nope"), NotFoundError);
+  assert.throws(() => store.updateMilestone("nope", { bogus: 1 }), /unknown field 'bogus'/);
+});

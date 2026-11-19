@@ -579,3 +579,72 @@ test("a malformed cadence is refused by name over the API", async () => {
   assert.match(badAdjustment.body.error, /sprints\[0\]\.index/);
   assert.deepEqual(store.get(), before);
 });
+
+test("a milestone is created, edited, read back and deleted over its collection route", async () => {
+  const { base, store } = await server();
+  const body = {
+    name: "Atlas launch",
+    date: day(5),
+    colour: 4,
+    tags: ["Release"],
+    notes: "handover signed off",
+    projectIds: ["atlas", "borealis"]
+  };
+  const created = await api(base, "POST", "/api/milestones", body);
+  assert.equal(created.status, 201);
+  assert.match(created.body.id, /^milestone-/);
+  assert.deepEqual(store.get().milestones, [created.body]);
+
+  const read = await api(base, "GET", "/api/plan");
+  assert.deepEqual(read.body.milestones, [created.body]);
+
+  const edited = await api(base, "PATCH", "/api/milestones/" + created.body.id, {
+    name: "Atlas go-live",
+    projectIds: ["atlas"]
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.name, "Atlas go-live");
+  assert.deepEqual(edited.body.projectIds, ["atlas"]);
+  // The fields the patch does not name are kept.
+  assert.equal(edited.body.date, day(5));
+  assert.deepEqual(store.get().milestones, [edited.body]);
+
+  const removed = await api(base, "DELETE", "/api/milestones/" + created.body.id + "/destroy");
+  assert.equal(removed.status, 200);
+  assert.deepEqual(removed.body, { deleted: created.body.id });
+  assert.equal(store.get().milestones, undefined);
+  const after = await api(base, "GET", "/api/plan");
+  assert.equal(after.body.milestones, undefined);
+});
+
+test("a malformed milestone is refused plainly over the API and nothing is written", async () => {
+  const { base, store } = await server();
+  const before = store.get();
+  const nameless = await api(base, "POST", "/api/milestones", { name: " ", date: day(1), colour: 1 });
+  assert.equal(nameless.status, 400);
+  assert.equal(nameless.body.error, "milestone.name must be a non-empty string");
+  const undated = await api(base, "POST", "/api/milestones", { name: "Atlas launch", date: "nope", colour: 1 });
+  assert.equal(undated.status, 400);
+  assert.equal(undated.body.error, "milestone.date must be a valid YYYY-MM-DD date");
+  const colourless = await api(base, "POST", "/api/milestones", { name: "Atlas launch", date: day(1), colour: 99 });
+  assert.equal(colourless.status, 400);
+  assert.equal(colourless.body.error, "milestone.colour must be a slot 0..9");
+  assert.deepEqual(store.get(), before);
+
+  const missing = await api(base, "PATCH", "/api/milestones/nope", { name: "X" });
+  assert.equal(missing.status, 404);
+  assert.match(missing.body.error, /no milestone with id 'nope'/);
+});
+
+test("a milestone collection takes every route but the archive one", async () => {
+  const { base, store } = await server();
+  const created = await api(base, "POST", "/api/milestones", { name: "Atlas launch", date: day(5) });
+  // A milestone has no archived state, so a bare DELETE is refused rather than
+  // inventing one; removal is the /destroy route every collection has.
+  const archive = await api(base, "DELETE", "/api/milestones/" + created.body.id);
+  assert.equal(archive.status, 405);
+  const method = await api(base, "PUT", "/api/milestones");
+  assert.equal(method.status, 405);
+  // The refusals left the milestone in place.
+  assert.equal(store.get().milestones.length, 1);
+});
