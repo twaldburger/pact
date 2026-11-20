@@ -511,20 +511,30 @@ control or a press outside it closes it and puts focus back on the `?`. The
 glyph is in the top bar of both pages, so what a report's own vocabulary means
 is a search away from the report.
 
-The field at the top of the panel searches both documents. A section whose
-heading carries the search comes before a section that only mentions it in its
-text, and within each of those the results stay in reading order; the search is
-case-insensitive and covers headings and body text alike. A result names the
-section, or the glossary term, and quotes the line that matched, and choosing
-one opens that section. With the field empty the panel shows this reference,
-which is where every visit starts: the document read last is not remembered.
+The field at the top of the panel searches the document showing. A section
+whose heading carries the search comes before a section that only mentions it
+in its text, and within each of those the results stay in reading order; the
+search is case-insensitive and covers headings and body text alike. A result
+names the section, or the glossary term, and quotes the line that matched, and
+choosing one opens that section. A search typed before a switch is kept rather
+than cleared, and is run again against the document switched to, so a word
+looked up in the reference finds its term in the glossary.
+
+The row under the panel's title is the switch between the two documents:
+`Feature reference` and `Glossary`, side by side, the one showing filled the way
+the Plan/Report switch fills the page you are on. Choosing the other shows that
+document in place - at its opening with the field empty, at the results of a
+query already typed - so the lexicon is a press away rather than a search away.
+Every visit still starts on this reference, with the field empty: the document
+read last is not remembered.
 
 Inside the text, a link to the glossary or to another section of this page
-moves within the panel. A link anywhere else - the README, an ADR, the scope
-doc - is drawn as plain text, because reading the rest of the docs tree is not
-what this panel is for. The two documents are read from the repository each
-time the panel opens rather than kept as a copy, so the help cannot describe a
-version of the app that has moved on.
+moves within the panel, and the switch marks whichever document the panel is
+then showing. A link anywhere else - the README, an ADR, the scope doc - is
+drawn as plain text, because reading the rest of the docs tree is not what this
+panel is for. The two documents are read from the repository each time the
+panel opens rather than kept as a copy, so the help cannot describe a version
+of the app that has moved on.
 
 **Where the controls are.** The `?` in the top bar, between the redo control and
 the Options glyph.

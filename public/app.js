@@ -6012,21 +6012,42 @@ function openPlanFilePanel(trigger) {
  * this function's own. The panel opens on the feature reference, and the last
  * document read is not remembered - reopening starts where a first visit does.
  *
+ * The panel's subtitle row is the switch between the two: one button per
+ * document, named by the allowlist's own labels, the one showing marked the way
+ * the Plan/Report switch marks the current page. A search is a search of the
+ * document open, so a typed query survives a switch and is run again against
+ * the document now showing.
+ *
  * The search itself, and the rule that ranks a title match above a body match,
  * are public/lib/help.mjs'; this draws its results. A link between the two
  * documents moves within the panel, and a link anywhere else is plain text.
  */
 function openHelpPanel(trigger) {
-  var node = panelShell("Help", "Reading the documentation");
+  var node = panelShell("Help");
   node.classList.add("panel--help");
-  var sub = node.querySelector(".panel__sub");
+
+  // Where the subtitle was: the two documents the help may draw, as a pair of
+  // buttons. The open one carries `aria-current`, which is the whole of the
+  // marking - the stylesheet's fill follows the attribute.
+  var switcher = el("div", "panel__sub help__switch");
+  switcher.setAttribute("role", "group");
+  switcher.setAttribute("aria-label", "Help document");
+  var switchButtons = {};
+  HELP_DOCUMENTS.forEach(function (entry) {
+    var button = el("button", "help__switch-btn");
+    button.type = "button";
+    button.textContent = entry.label;
+    button.addEventListener("click", function () { switchDocument(entry.key); });
+    switchButtons[entry.key] = button;
+    switcher.appendChild(button);
+  });
 
   var search = document.createElement("input");
   search.type = "search";
   search.className = "help__search";
   search.autocomplete = "off";
-  search.setAttribute("aria-label", "Search the feature reference and the glossary");
-  search.setAttribute("placeholder", "Search, or read the reference");
+  search.setAttribute("aria-label", "Search the document showing");
+  search.setAttribute("placeholder", "Search, or read the document");
 
   var count = el("p", "help__count");
   count.setAttribute("role", "status");
@@ -6035,6 +6056,7 @@ function openHelpPanel(trigger) {
   results.hidden = true;
   var body = el("div", "help__body");
 
+  node.appendChild(switcher);
   node.appendChild(search);
   node.appendChild(count);
   node.appendChild(results);
@@ -6049,6 +6071,23 @@ function openHelpPanel(trigger) {
   // `Minimap` cannot claim the grid's element id.
   var idPrefix = "help-";
 
+  // The document the panel is showing, and the one whose text is drawn in the
+  // body. They differ while a search lists results, because the text is left
+  // as it was rather than redrawn under a list nobody is reading.
+  var openKey = HELP_DOCUMENT_DEFAULT;
+  var renderedKey = null;
+
+  function markOpen() {
+    HELP_DOCUMENTS.forEach(function (entry) {
+      var button = switchButtons[entry.key];
+      if (!button) return;
+      if (entry.key === openKey) button.setAttribute("aria-current", "true");
+      else button.removeAttribute("aria-current");
+    });
+  }
+
+  markOpen();
+
   // The document scrolls inside the panel, under a title, a close control and
   // a search field that stay put. A section is brought to the top of the text.
   function scrollToAnchor(anchorId) {
@@ -6058,21 +6097,42 @@ function openHelpPanel(trigger) {
     body.scrollTop += target.getBoundingClientRect().top - body.getBoundingClientRect().top;
   }
 
-  // One document in the panel, scrolled to a section of it. This is what a
-  // result and a link between the two documents both do.
-  function showDocument(key, anchorId) {
-    var doc = documents.find(function (entry) { return entry.key === key; }) || documents[0];
+  // The open document's own text in the body, scrolled to one of its sections.
+  function renderBody(anchorId) {
+    var doc = documents.find(function (entry) { return entry.key === openKey; });
     if (!doc) return;
     var known = helpDocument(doc.key);
     if (!known) return;
+    renderedKey = doc.key;
+    body.innerHTML = renderHelpDocument(known, doc.markdown, anchors, idPrefix);
+    scrollToAnchor(anchorId);
+  }
+
+  // One document in the panel, scrolled to a section of it. This is what a
+  // result and a link between the two documents both do: the search that led
+  // to either is spent, so the box is emptied.
+  function showDocument(key, anchorId) {
+    if (!helpDocument(key)) return;
+    openKey = key;
+    markOpen();
     search.value = "";
     results.textContent = "";
     results.hidden = true;
     count.hidden = true;
     body.hidden = false;
-    if (sub) sub.textContent = doc.label;
-    body.innerHTML = renderHelpDocument(known, doc.markdown, anchors, idPrefix);
-    scrollToAnchor(anchorId);
+    renderBody(anchorId);
+  }
+
+  // A press on a switch: the document it names is the one showing from now on.
+  // The box is left as it stands, because a query typed in one document is a
+  // query about the other too - the panel runs it again rather than throwing
+  // it away, and focus stays in the box to be typed in or cleared.
+  function switchDocument(key) {
+    if (!documents.length || !helpDocument(key)) return;
+    openKey = key;
+    markOpen();
+    updateSearch();
+    search.focus();
   }
 
   function resultButton(hit) {
@@ -6096,8 +6156,10 @@ function openHelpPanel(trigger) {
     return row;
   }
 
-  // An empty field is the reading, a filled one is the search: the panel shows
-  // one or the other, so a result list never pushes the text being read away.
+  // An empty field is the reading, a filled one is the search over the open
+  // document: the panel shows one or the other, so a result list never pushes
+  // the text being read away. A switch comes through here too, which is what
+  // runs a typed query again against the document now showing.
   function updateSearch() {
     var query = search.value.trim();
     if (!query) {
@@ -6105,20 +6167,22 @@ function openHelpPanel(trigger) {
       results.hidden = true;
       count.hidden = true;
       body.hidden = false;
+      // A switch left another document's text in the body: draw this one's own.
+      if (renderedKey !== openKey) renderBody(null);
       return;
     }
     body.hidden = true;
     results.textContent = "";
     results.hidden = false;
     count.hidden = false;
-    var hits = searchHelp(documents, query);
+    var hits = searchHelp(documents.filter(function (doc) { return doc.key === openKey; }), query);
     var shown = hits.slice(0, HELP_RESULT_LIMIT);
     count.textContent = hits.length > shown.length
       ? "Showing the first " + shown.length + " of " + hits.length + " sections"
       : hits.length === 1 ? "1 section" : hits.length + " sections";
     if (!hits.length) {
       var none = el("p", "help__empty");
-      none.textContent = "Nothing in the reference or the glossary matches that.";
+      none.textContent = "Nothing in this document matches that.";
       results.appendChild(none);
       return;
     }

@@ -2496,6 +2496,51 @@ down to the last row and no further. */
   color: var(--ink-soft);
 }
 
+/* The help's document switch, in the subtitle's own row: the two documents the
+   panel can draw, side by side in one bordered pair like the Plan/Report
+   switch, each at the panel's own text size rather than the bar's control
+   height. The document showing is marked the way that switch and the report's
+   rail mark the one showing - an ink fill and canvas text - so the app has one
+   treatment for it rather than a third. */
+.help__switch {
+  display: inline-flex;
+  align-items: stretch;
+  /* The panel is a column of flex items, and this row's own `overflow: hidden`
+     would let it shrink to nothing when the text under it is long. It is a row
+     of controls: it keeps its height and the text takes the squeeze. */
+  flex: 0 0 auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.help__switch-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--fs-data);
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.help__switch-btn:last-child { border-right: 0; }
+
+.help__switch-btn:hover:not([aria-current]) {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+  color: var(--ink);
+}
+
+.help__switch-btn[aria-current] {
+  background: var(--ink);
+  color: var(--canvas);
+}
+
 .panel__close {
   appearance: none;
   position: absolute;

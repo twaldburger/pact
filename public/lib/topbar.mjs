@@ -140,7 +140,7 @@ export function topbarMarkup(view) {
         </button>
       </div>
       <button type="button" class="ghost help__btn" id="help-btn"
-        aria-haspopup="dialog" aria-label="Help" title="Help - search the reference and the glossary">
+        aria-haspopup="dialog" aria-label="Help" title="Help - the reference and the glossary">
         <span class="help__glyph" aria-hidden="true">?</span>
       </button>
       <div class="options" id="options">
