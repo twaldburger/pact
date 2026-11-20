@@ -7,9 +7,13 @@ description: Every page under docs/, with what it is for.
 # PACT documentation
 
 The documentation outside [`README.md`](../README.md), which is the front door,
-and [`GLOSSARY.md`](../GLOSSARY.md), which is the language. Every page under
-`docs/` is listed here with one line saying what it is for.
+[`GLOSSARY.md`](../GLOSSARY.md), which is the language, and
+[`AGENTS.md`](../AGENTS.md), which is the map an agent reads. Every page under
+`docs/` is listed here with one line saying what it is for, and the map that
+sits outside it is listed first.
 
+- [AGENTS.md](../AGENTS.md) - the map for a new agent: what to read, and the
+  rules for answering.
 - [features.md](features.md) - the feature reference: what each capability does,
   how it behaves and where its controls live.
 - [scope.md](scope.md) - what the first version covers, and what is deliberately
