@@ -283,6 +283,13 @@ var milestoneRules = false;
 // milestones once per draw by indexData and read by the rules, the axis band
 // and the axis's own fit pass alike.
 var milestoneMarkList = [];
+// Whether each row draws its availability line: the dashed rule at the height
+// the Person's Availability reaches, on by default so an untouched plan looks
+// exactly as it did. A view setting kept in the config and restored on load,
+// like the bands above - never written to the plan. Hiding it hides a mark of
+// a measurement, never the measurement: the row height, the over-allocation
+// band and every figure are drawn from the plan alone.
+var availabilityLines = VIEW_DEFAULTS.availabilityLines;
 var gridDividers = true;
 // The Stack rail's folded state: one of the view settings kept in the config
 // and restored on load, like Zoom and Row height; never written to the plan.
@@ -841,9 +848,13 @@ function drawRows() {
 
     var row = el("div", "row" + (person.archived ? " is-archived" : ""));
     row.setAttribute("data-person", person.id);
-    var ceiling = el("span", "ceiling");
-    ceiling.style.setProperty("--ceiling-px", yPx(person.availability / 100) + "px");
-    row.appendChild(ceiling);
+    // With the setting off the line is not built at all, rather than drawn and
+    // hidden: nothing invisible is left in the row to style or measure.
+    if (availabilityLines) {
+      var ceiling = el("span", "ceiling");
+      ceiling.style.setProperty("--ceiling-px", yPx(person.availability / 100) + "px");
+      row.appendChild(ceiling);
+    }
 
     // The holiday band is per row: it shades only the days off the Person's own
     // Location has configured, so a row whose Location has none is untouched.
@@ -5304,6 +5315,7 @@ function currentView() {
     weekends: highlightWeekends,
     holidays: highlightHolidays,
     milestones: milestoneRules,
+    availabilityLines: availabilityLines,
     dividers: gridDividers,
     minimap: minimapEnabled,
     marker: markerVisible,
@@ -5333,6 +5345,7 @@ function adoptView(view) {
   highlightWeekends = v.weekends;
   highlightHolidays = v.holidays;
   milestoneRules = v.milestones;
+  availabilityLines = v.availabilityLines;
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
   markerVisible = v.marker;
@@ -5439,6 +5452,7 @@ var OPTION_ACTIONS = {
   weekends: function () { setHighlightWeekends(!highlightWeekends); },
   holidays: function () { setHighlightHolidays(!highlightHolidays); },
   milestones: function () { setMilestoneRules(!milestoneRules); },
+  availabilityLines: function () { setAvailabilityLines(!availabilityLines); },
   dividers: function () { setGridDividers(!gridDividers); },
   minimap: function () { setMinimapEnabled(!minimapEnabled); },
   marker: function () { setMarkerVisible(!markerVisible); }
@@ -5478,6 +5492,16 @@ function setMilestoneRules(on) {
   persistView();
 }
 
+// The availability lines are a view change in the same shape: they update the
+// menu, redraw the rows, and store the new view. The plan file is untouched and
+// no figure moves - a hidden line is a hidden mark, not a hidden measurement.
+function setAvailabilityLines(on) {
+  availabilityLines = on === true;
+  updateOptionsMenu();
+  render();
+  persistView();
+}
+
 function setGridDividers(on) {
   gridDividers = on;
   updateOptionsMenu();
@@ -5507,7 +5531,7 @@ function setMarkerVisible(on) {
 }
 
 function updateOptionsMenu() {
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -5543,7 +5567,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible);
+  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines);
   optionGroupDividers = optionDividerKeys(items);
   // Show archived is drawn after the view group rather than in this pass: it
   // is a group of its own, because it decides which records are included

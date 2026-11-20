@@ -21,12 +21,16 @@ import { tagKeys, tagColourSlots } from "./tags.mjs";
  * they are drawn, it is session-only and Reset view leaves it alone, so
  * optionGroups below gives it a group of its own.
  */
-export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible, availabilityLines) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
     { key: "weekends", label: "Weekends", checked: !!highlightWeekends },
     { key: "holidays", label: "Holidays", checked: !!highlightHolidays },
     { key: "milestones", label: "Milestones", checked: !!milestoneRules },
+    // The dashed line each row draws at its Availability. Named for what a
+    // reader sees rather than the code's "ceiling", and plural like Grid
+    // dividers beside it, since every row draws one.
+    { key: "availabilityLines", label: "Availability lines", checked: !!availabilityLines },
     { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
     { key: "minimap", label: "Minimap", checked: !!minimap },
     { key: "marker", label: "Marker", checked: !!markerVisible }
@@ -69,8 +73,8 @@ export function optionDividerKeys(items) {
 
 /*
  * The menu entries a report cannot act on, by key: the grid's own display
- * toggles (the weekend band, the holiday band, the Grid dividers, the Minimap
- * and the Marker) and Reset view. A report page draws no grid and makes no plan
+ * toggles (the weekend band, the holiday band, the availability lines, the Grid
+ * dividers, the Minimap and the Marker) and Reset view. A report page draws no grid and makes no plan
  * writes, so these are disabled rather than moved or hidden; the plan-facing
  * entries, Show archived - which decides which records a report includes, so
  * it is a group of its own - and Milestones stay live, since a report's chart
@@ -79,7 +83,7 @@ export function optionDividerKeys(items) {
  * cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
-  return ["weekends", "holidays", "dividers", "minimap", "marker", "reset-view"];
+  return ["weekends", "holidays", "availabilityLines", "dividers", "minimap", "marker", "reset-view"];
 }
 
 /*

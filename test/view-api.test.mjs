@@ -76,6 +76,7 @@ test("a changed view is stored and read back", async () => {
     weekends: true,
     holidays: true,
     milestones: true,
+    availabilityLines: false,
     dividers: false,
     minimap: true,
     marker: false,
@@ -98,9 +99,9 @@ test("a changed view is stored and read back", async () => {
 
 test("a malformed value falls back for that key alone", async () => {
   const { base } = await server();
-  await api(base, "POST", "/api/view", { zoom: "week", palette: "set3", minimap: true, marker: false });
+  await api(base, "POST", "/api/view", { zoom: "week", palette: "set3", minimap: true, marker: false, availabilityLines: false });
 
-  const written = await api(base, "POST", "/api/view", { zoom: "year", rowHeight: "tall", marker: "no" });
+  const written = await api(base, "POST", "/api/view", { zoom: "year", rowHeight: "tall", marker: "no", availabilityLines: "yes" });
   assert.equal(written.status, 200);
   // The bad keys fall back; the good ones already stored are kept.
   assert.equal(written.body.zoom, "month");
@@ -110,14 +111,18 @@ test("a malformed value falls back for that key alone", async () => {
   // The Marker's visibility is a stored setting like the rest: only a boolean
   // is one, so a malformed value reads as the default of drawn.
   assert.equal(written.body.marker, true);
-  // Its own write hides it, and the read brings it back hidden.
-  const hidden = await api(base, "POST", "/api/view", { marker: false });
+  // The availability lines are one too, falling back to drawn the same way.
+  assert.equal(written.body.availabilityLines, true);
+  // A whole write hides both, and the read brings them back hidden.
+  const hidden = await api(base, "POST", "/api/view", { marker: false, availabilityLines: false });
   assert.equal(hidden.body.marker, false);
+  assert.equal(hidden.body.availabilityLines, false);
   assert.equal(hidden.body.palette, "set3");
 
   const read = await api(base, "GET", "/api/view");
   assert.deepEqual(read.body, hidden.body);
   assert.equal(read.body.marker, false);
+  assert.equal(read.body.availabilityLines, false);
 });
 
 test("a malformed view already in the config does not break the read", async () => {
@@ -145,6 +150,7 @@ test("Reset view restores every default and leaves the plan path alone", async (
     weekends: true,
     holidays: true,
     milestones: true,
+    availabilityLines: false,
     dividers: false,
     minimap: true,
     marker: false,

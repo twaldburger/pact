@@ -176,6 +176,30 @@ test("a hidden Marker draws no line and still moves the reading", () => {
   assert.match(APP, /function onAxisClick\(e\) \{\s*if \(!markerVisible\) return;/);
 });
 
+/* --- the availability lines ---------------------------------------------- */
+
+// Each row's availability line is drawn only while its own view setting says
+// so, and hiding it hides a mark rather than a measurement: the row's height
+// and its over-allocation band are drawn from the plan alone. Pinned here
+// because the suite has no DOM to draw a row with.
+test("a hidden availability line is not built, and no figure moves without it", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // Built behind the setting, so with it off no .ceiling element exists in the
+  // row at all - not one drawn and hidden.
+  assert.match(APP, /function drawRows\(\)[\s\S]*if \(availabilityLines\) \{\s*var ceiling = el\("span", "ceiling"\);/);
+  // The one place the line is built: nothing else appends a .ceiling, so the
+  // guard above is the whole of what the setting controls.
+  assert.equal(APP.match(/el\("span", "ceiling"\)/g).length, 1);
+  // The row's height is the view's own --row-h, set by the row height alone.
+  assert.match(STYLE, /\.row \{[^}]*height: var\(--row-h\);/);
+  assert.equal(/--row-h[^:]*:[^;]*availabilityLines/.test(APP), false);
+  // The over-allocation band is measured from the block's own stack offset and
+  // the Person's Availability, never from the drawn line.
+  assert.match(APP, /var hatchBottom = yPx\(Math\.max\(s\.offset, a\.person\.availability \/ 100\)\);/);
+  const hatch = APP.slice(APP.indexOf("var hatch = el(\"span\", \"blk__hatch\")"));
+  assert.equal(hatch.slice(0, hatch.indexOf("b.appendChild(hatch)")).includes("availabilityLines"), false);
+});
+
 /* --- the Grid dividers and the axis separators share the boundary --------- */
 
 // The full-height Grid dividers sit on the true day boundary
