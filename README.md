@@ -71,8 +71,26 @@ person's time.
 - **One file you own.** The plan is a single
   [JSON file](docs/features.md#the-plan-and-its-file), written atomically and
   readable by anything - version it, copy it, diff it, or open it in an editor.
-  `bin/pact.mjs` reads it too, so a question about the plan can be answered at a
-  terminal, or by an agent, with no browser in the way.
+
+## Working with an agent
+
+PACT is meant to be read by a colleague's agent as well as by the colleague.
+
+- **[`AGENTS.md`](AGENTS.md) is a map, not a manual**: it says where each answer
+  lives, and answers nothing itself, so it cannot drift from the documents it
+  points at.
+- **The documents can be quoted.** The feature reference gives one section per
+  capability, each ending in where its controls live, and the glossary gives each
+  term one entry with the words to avoid. A test fails when a capability in the
+  app has no section, so neither document can quietly fall behind the code.
+- **The numbers are computable.** `bin/pact.mjs` reads the plan file and prints
+  the same figures the report draws - FTE-days by project, person or tag, and
+  allocation against capacity - so an agent can answer *who is over capacity in
+  March* without a browser, and without adding anything up itself.
+- **Nothing is hidden behind the interface.** A question the documents do not
+  answer is a documentation bug, and the repository is written to be read: the
+  plan is one file, the rules behind it are plain modules, and the tests that
+  hold them together run with one command.
 
 ## Tests
 
