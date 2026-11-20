@@ -9,6 +9,11 @@
  * page carries the frontmatter the standard requires (`type`, `title` and
  * `description`).
  *
+ * The README is held to the same rule one step out: every relative link in it
+ * has to name a file that exists and, where it carries a fragment, an anchor
+ * that document defines. The README is the front door, so a link that goes
+ * nowhere is the one failure a reader is certain to meet.
+ *
  * What this cannot do is grade the prose. A section that exists may still be
  * wrong, thin or stale in its detail, and a green run says the section is
  * there, not that it is any good. Nor can it see a capability the code does not
@@ -41,9 +46,12 @@ import {
   milestonesItem
 } from "../public/lib/options.mjs";
 import { REPORT_VIEWS } from "../public/lib/report-views.mjs";
+import { helpAnchors } from "../public/lib/help.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DOCS = path.join(HERE, "..", "docs");
+const ROOT = path.join(HERE, "..");
+const README = path.join(ROOT, "README.md");
+const DOCS = path.join(ROOT, "docs");
 const FEATURES = path.join(DOCS, "features.md");
 const INDEX = path.join(DOCS, "index.md");
 
@@ -224,4 +232,48 @@ test("every page under docs/ carries type, title and description", () => {
     if (absent.length) missing.push(page + " (" + absent.join(", ") + ")");
   }
   assert.deepEqual(missing, [], "these pages lack required frontmatter");
+});
+
+/* --- the README's own links, and the one section that is an offer ---------- */
+
+// The local paths a document links to, as written in it, anchors included.
+function localLinks(markdown) {
+  return [...markdown.matchAll(/\[[^\]\n]*\]\(([^)\s]+)\)/g)]
+    .map((match) => match[1])
+    .filter((target) => !/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith("#"));
+}
+
+test("every relative link in README.md names a file, and an anchor, that exists", () => {
+  const dead = [];
+  for (const target of localLinks(fs.readFileSync(README, "utf8"))) {
+    const [file, anchor] = target.split("#");
+    const full = path.join(ROOT, file);
+    if (!fs.existsSync(full)) {
+      dead.push(target + " (no such file)");
+    } else if (anchor && file.endsWith(".md") &&
+      !helpAnchors(fs.readFileSync(full, "utf8")).includes(anchor)) {
+      // The anchor rule is the app's own: a heading's slug, or a glossary
+      // term's, which is what the documents already link to each other by.
+      dead.push(target + " (no such heading or term)");
+    }
+  }
+  assert.deepEqual(dead, [], "these README.md links are dead ends");
+});
+
+// A section of the README, by its heading, with its body as its own lines.
+function readmeSection(title) {
+  const part = fs.readFileSync(README, "utf8").split(/^## /m)
+    .find((section) => section.startsWith(title + "\n"));
+  return part ? part.slice(title.length + 1).replace(/\n+$/, "").split("\n") : null;
+}
+
+test("the README's What it does section is an offer, not a how-to", () => {
+  const section = readmeSection("What it does");
+  assert.ok(section, "README.md has no What it does section");
+  const gestures = [...section.join("\n").matchAll(
+    /\b(drag|drags|dragged|click|clicks|clicked|press|presses|pressed|chevron|paste|keystroke)\b/gi
+  )].map((match) => match[0].toLowerCase());
+  assert.deepEqual(gestures, [], "a gesture belongs in docs/features.md, not in what the plan offers");
+  assert.equal(section.filter((line) => line.startsWith("- ")).length, 8);
+  assert.ok(section.length <= 25, "the section is " + section.length + " lines");
 });
