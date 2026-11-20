@@ -20,76 +20,27 @@ anyone's real colleagues, clients or engagements.
 
 ## What it does
 
-One board: a column of People down the left, a Timeline of days across, and the
-Projects rail down the side, which folds away from the chevron in its header.
-
-- **Assignments.** Drag a Project from the rail onto a Person's row to create
-  one, or draw across an empty row space. Drag a block's body to move it in time
-  and onto another person, its ends to change its dates, or an end vertically to
-  change its Allocation in the plan's step. Every drag shows the value it is
-  setting. Over-allocation is allowed and drawn: the part of a block above the
-  person's Availability line is hatched, and the row header's
-  `assigned/availability` figure turns to the signal colour.
-- **People and Projects.** A Person carries a name, an optional Location, an
-  Availability, any number of Person tags and a note; a Project carries a name,
-  a colour, any number of Project tags and notes. Tags are typed or picked from
-  the ones already in use - each vocabulary its own - and suggested as you type.
-  Archiving keeps every Assignment and takes a record out of the plan, with a
-  Show archived view to bring it back; deleting is permanent and takes its
-  Assignments with it. Both sit in the panels, and an Assignment can also be
-  deleted with the Delete key over its block.
-- **Milestones.** A Milestone is one dated point in the plan - a delivery, a
-deployment, a deadline - carrying a name, a palette colour, its own tags and
-notes, and the Projects it relates to. Milestones travel with the plan and are
-listed and edited in the Milestones panel from the Options menu, which counts
-them. The Milestones toggle in that menu draws each one as a vertical rule
-through the rows, in its own colour, naming it and its date in the axis band: a
-Milestone related to Projects is drawn while one of them is in view, and one
-related to none is plan-wide. The Filter finds them by their own terms -
-`milestone: api`, `milestone tag: delivery`, `milestone note: signed` - and the
-same Milestones switch rules the report's Allocation against capacity chart,
-where each is a vertical rule at its own date and every other view leaves them
-out. They are annotations, so no total, share or over-allocation check counts
-them.
-- **Filter.** One field hides everything on the grid that does not match. By
-  default it looks in People, Projects and Assignments, and a scope control
-  states how many areas it is searching and switches each. A plain term is a
-  case-insensitive substring; a `field: value` term names one field, as in
-  `person tag:architect` or `project notes: delayed`. A term naming a milestone
-  field narrows the Milestones alone, leaving the rows whole. Typing offers the
-  plan's own vocabulary as keyboard-navigable suggestions, each labelled with
-  how much it would match.
-- **Zoom and spacing.** Day, Week, Sprint and Month change only what the grid
-  draws, never the stored dates. Each keeps its own day width, moved by the
-  grid-spacing stepper; the row-height stepper sizes the rows. Sprint draws a
-  sprint cadence defined in a panel from the Options menu - a first start, a
-  length and a naming rule - and is disabled until one exists.
-- **Instruments.** A draggable Marker reads each person's totals at its date.
-  Today scrolls back to it. The Minimap, off by default, is an overview strip of
-  the whole period that doubles as a scrollbar. The two lists can each be sorted
-  by name, dates, location or load, as display order only.
-- **Display toggles.** Weekends, Holidays, Milestones, Availability lines,
-  Assignments, Grid dividers, the Minimap and the Marker sit in the Options
-  menu. Availability lines draws or hides the dashed rule each row carries at
-  its Availability: a hidden line hides a mark, never a measurement, so the row
-  heights, the over-allocation band and every figure stay exactly as they were.
-  Assignments draws or hides the blocks each row is made of, absences included,
-  which leaves a grid of dates alone; like the lines, it hides drawing rather
-  than work, so every figure stays put. With the blocks hidden the grid cannot
-  make a new Assignment - a drag, a drop or a paste is refused with a message
-  naming the setting - since a block is what a reader drags, and one created
-  there would land nowhere visible. The Marker's own entry draws or hides the
-  line, and a hidden Marker still sets the date the per-person totals are read
-  at. The Colour palette group switches the block fills between Paired and Set3.
-- **Undo and redo.** Two controls step the plan back and forward one change at a
-  time, the last 100 changes held in the running server's memory. The save
-  status beside the wordmark reads Saved, Saving... or Not saved as writes land.
-- **The plan itself.** An explicit start and end date, set together under
-  Options, is the plan's extent, and nothing grows it on its own. Beside it, the
-  percentage step (1 to 100, default 10) governs every Availability and
-  Allocation stepper and drag. The `Plan file...` entry chooses the active JSON
-  file, the view settings are kept in `data/config.json`, and `Reset view`
-  returns them to their defaults.
+- **A plan of people's time.** Every Project sits on a Person's row for its
+  dates, its height the share of that person it takes, over one timeline.
+- **Capacity against demand.** Each row reads allocation against what a person
+  offers, so an over-committed plan says so before the work is promised. The
+  excess is hatched above the line, never hidden.
+- **Figures that count working days.** Weekends, a Location's holidays and a
+  person's absences come off first: a figure is
+  [time worked](GLOSSARY.md#working-day), not time elapsed.
+- **Dates that mean something.** [Milestones](docs/features.md#milestones) are
+  dated points drawn as rules through the rows; no total counts them.
+- **A vocabulary to slice by.** Tags on People, Projects, Assignments and
+  Milestones, [typed](docs/features.md#tags-typed-tags-and-colour-by-key) as
+  `api: Stellar` where a key helps, read the plan by client or capability.
+- **The report reads the plan.** Its seven [views](docs/features.md#the-report)
+  give the same period in FTE-days by project, person and tag, as totals, as
+  shares, and as a chart of allocation against capacity.
+- **Changes cheap to take back.** Undo steps through the last 100 changes, and
+  the save status reads Saved, Saving... or Not saved.
+- **One file, and no lock-in.** The plan is one
+  [JSON file](docs/features.md#the-plan-and-its-file), written atomically and
+  readable by anything; `bin/pact.mjs` reads it too, for a person or an agent.
 
 ## Tests
 
