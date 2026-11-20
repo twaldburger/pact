@@ -29,29 +29,50 @@ real colleagues, clients or engagements.
 
 ## What it does
 
-- **A plan of people's time.** Every Project sits on a Person's row for its
-  dates, its height the share of that person it takes, over one timeline.
-- **Capacity against demand.** Each row reads an Allocation against what its
-  Person offers, so an over-committed plan says so before the work is promised,
-  the excess hatched above the line rather than hidden.
-- **Figures that count working time.** Weekends, each Location's holidays and
-  each Person's Absences come off first, so a figure is
-  [time worked](GLOSSARY.md#working-day) rather than time elapsed, and a
-  full-time working day is an [FTE-day](GLOSSARY.md#fte-day).
-- **Milestones.** A delivery, a deployment or a deadline, drawn as a rule through
-  the rows at its own date; no total counts them.
-- **A vocabulary to read it by.** [Typed tags](GLOSSARY.md#typed-tag) on People,
-  Projects, Assignments and Milestones - `api: Stellar` beside `api: Nova` - so
-  the plan reads by client, team or capability.
+The board is the plan. People run down the left, the days of the plan run across,
+and the Projects sit in a rail at the side that folds away when a full width of
+days is more useful than the list. Read across a row and you are reading one
+person's time.
+
+- **A plan of people's time.** An Assignment puts a Project on one Person's row
+  for a set of dates, and the block's height is the share of that person it
+  takes. Two Assignments over the same dates commit that person twice over, and
+  the board shows that rather than refusing it.
+- **Capacity against demand.** Every Person has an Availability - the most they
+  can be scheduled for, their own 100% - and each row sets what is asked of them
+  against it. Over-allocation is allowed and drawn: the part of a block above the
+  Availability line is hatched, so a plan that asks too much of someone says so
+  while the work is being promised rather than when it arrives.
+- **Figures that count working time.** A
+  [working day](GLOSSARY.md#working-day) is a day the person is actually there, so
+  weekends, the public holidays configured for their Location and their Absences
+  come off before anything is counted. A figure is therefore time worked rather
+  than time elapsed, and a full-time working day is an
+  [FTE-day](GLOSSARY.md#fte-day) - the unit every total, share and report is
+  expressed in.
+- **Milestones.** A delivery, a deployment or a deadline is a dated point in the
+  plan, drawn as a rule through the rows in its own colour and naming itself in
+  the axis band. No total counts one: a Milestone marks the plan rather than
+  changing it.
+- **A vocabulary to read it by.** Tags label People, Projects, Assignments and
+  Milestones, and any of them can be
+  [typed](GLOSSARY.md#typed-tag) as `api: Stellar` beside `api: Nova`, so one key
+  holds a family of values and the plan can be read by client, team or capability
+  instead of one project at a time. The Filter narrows the board to whatever
+  matches a word, or a named field when a word is not precise enough.
 - **A report of the same numbers.** [Seven views](docs/features.md#the-report) of
-  one period: FTE-days by project, person and tag, as totals and as shares of
-  what the plan offers, and Allocation against capacity as a chart.
+  a single period: the FTE-days each project, person or tag takes; the same work
+  as a share of what the plan offers; and Allocation against capacity, drawn as a
+  chart. The report reads the plan rather than re-deriving it, so its figures and
+  the board's cannot disagree.
 - **Changes that are cheap to take back.** Undo steps through the last hundred
-  changes, and the save status says whether the current one has landed.
+  changes and the save status says whether the current one has reached the file,
+  so trying a plan out costs nothing and a wrong turn is one step back.
 - **One file you own.** The plan is a single
   [JSON file](docs/features.md#the-plan-and-its-file), written atomically and
-  readable by anything; `bin/pact.mjs` reads it too, for a person at a terminal
-  or for an agent.
+  readable by anything - version it, copy it, diff it, or open it in an editor.
+  `bin/pact.mjs` reads it too, so a question about the plan can be answered at a
+  terminal, or by an agent, with no browser in the way.
 
 ## Tests
 
