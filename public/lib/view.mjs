@@ -2,9 +2,9 @@
  * PACT view state: the whole of what the interface draws the plan with rather
  * than what the plan holds - the Zoom and the row height, the report's own
  * zoom and which of its views is showing, the weekend band, the holiday band,
- * the milestone rules, the Grid dividers, the Minimap and the Marker's own
- * visibility, the Colour palette, whether the Stack rail is folded, and the two
- * sort keys. It lives in `data/config.json` beside the active plan file, so it
+ * the milestone rules, the availability lines, the Grid dividers, the Minimap
+ * and the Marker's own visibility, the Colour palette, whether the Stack rail
+ * is folded, and the two sort keys. It lives in `data/config.json` beside the active plan file, so it
  * survives a reload; the Filter and the Marker's date do not, being a query and
  * a cursor rather than settings.
  *
@@ -50,6 +50,10 @@ export const VIEW_DEFAULTS = Object.freeze({
   weekends: false,
   holidays: false,
   milestones: false,
+  // The dashed line each row draws at its Availability, the only mark of it in
+  // the grid. Drawn by default, which is how the grid opened while it was not
+  // a setting: an untouched plan looks exactly as it did.
+  availabilityLines: true,
   dividers: true,
   minimap: MINIMAP_DEFAULT,
   // The Marker - the line the totals are read at - is drawn by default, which
@@ -70,6 +74,7 @@ export const VIEW_KEYS = Object.freeze([
   "weekends",
   "holidays",
   "milestones",
+  "availabilityLines",
   "dividers",
   "minimap",
   "marker",
@@ -139,6 +144,7 @@ export function normalizeView(raw) {
     weekends: booleanOr(source.weekends, VIEW_DEFAULTS.weekends),
     holidays: booleanOr(source.holidays, VIEW_DEFAULTS.holidays),
     milestones: booleanOr(source.milestones, VIEW_DEFAULTS.milestones),
+    availabilityLines: booleanOr(source.availabilityLines, VIEW_DEFAULTS.availabilityLines),
     dividers: booleanOr(source.dividers, VIEW_DEFAULTS.dividers),
     minimap: booleanOr(source.minimap, VIEW_DEFAULTS.minimap),
     marker: booleanOr(source.marker, VIEW_DEFAULTS.marker),

@@ -27,6 +27,7 @@ test("the defaults are exactly what the app shipped with", () => {
     weekends: false,
     holidays: false,
     milestones: false,
+    availabilityLines: true,
     dividers: true,
     minimap: false,
     marker: true,
@@ -56,6 +57,7 @@ test("an absent view, or any non-object, reads as every default", () => {
       weekends: false,
       holidays: false,
       milestones: false,
+      availabilityLines: true,
       dividers: true,
       minimap: false,
       marker: true,
@@ -90,6 +92,7 @@ test("every key survives a normalise at a non-default value", () => {
     weekends: true,
     holidays: true,
     milestones: true,
+    availabilityLines: false,
     dividers: false,
     minimap: true,
     marker: false,
@@ -138,6 +141,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     weekends: "yes",
     holidays: "yes",
     milestones: "yes",
+    availabilityLines: "yes",
     dividers: 1,
     minimap: "on",
     marker: "yes",
@@ -154,6 +158,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     weekends: false,
     holidays: false,
     milestones: false,
+    availabilityLines: true,
     dividers: true,
     minimap: false,
     marker: true,
@@ -228,6 +233,21 @@ test("the milestone rules start off, are restored on load, and Reset view return
   // Only a boolean is a stored value; anything else is the default.
   [1, "yes", null, [], {}].forEach((raw) => {
     assert.equal(normalizeView({ milestones: raw }).milestones, false);
+  });
+});
+
+test("the availability lines start drawn, are restored on load, and Reset view returns them to drawn", () => {
+  // Drawn on a first run and in any config that never stored it: that is how
+  // every row opened while the line was not a setting.
+  assert.equal(VIEW_DEFAULTS.availabilityLines, true);
+  assert.equal(normalizeView({}).availabilityLines, true);
+  // Switched off, the stored view brings them back hidden.
+  assert.equal(normalizeView({ availabilityLines: false }).availabilityLines, false);
+  // Reset view writes the defaults whole, so the toggle comes back on.
+  assert.equal(normalizeView(VIEW_DEFAULTS).availabilityLines, true);
+  // Only a boolean is a stored value; anything else is the default.
+  [1, 0, "yes", null, [], {}].forEach((raw) => {
+    assert.equal(normalizeView({ availabilityLines: raw }).availabilityLines, true);
   });
 });
 
