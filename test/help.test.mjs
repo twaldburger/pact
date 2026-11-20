@@ -11,9 +11,12 @@
  * link between the two documents pointing at a heading that is not there.
  *
  * What this cannot do is read the panel: that the glyph opens it, that Escape
- * closes it and focus goes back, and that the grid has not moved are checked in
- * a browser, not here. What is checked here is the material the panel is built
- * from - the documents, the search and the HTML.
+ * closes it and focus goes back, that the grid has not moved, and that a press
+ * on a switch marks it and moves the document, that the switches are reachable
+ * by keyboard, and that a query survives the switch are checked in a browser,
+ * not here. What is checked here is the material the panel is built from - the
+ * documents, the search and the HTML - and the script and stylesheet the panel
+ * is drawn by, read as the text they are.
  */
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
@@ -414,4 +417,111 @@ test("the panel is wider than the other panels, and only its text scrolls", () =
   assert.match(STYLE, /\.help__results\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(STYLE, /\.help__result\s*\{[^}]*display:\s*grid/);
   assert.match(STYLE, /\.md-table\s*\{/);
+});
+
+/* --- the document switch -------------------------------------------------- */
+
+// The help panel as the script writes it, and one function of it, so a test
+// reads what a press really does rather than a summary of it.
+function helpPanel() {
+  const at = APP.indexOf("function openHelpPanel(trigger)");
+  assert.ok(at !== -1, "the help panel is gone");
+  const end = APP.indexOf("\n/* The Colour palette disclosure", at);
+  assert.ok(end !== -1, "the help panel does not end where the next panel begins");
+  return APP.slice(at, end);
+}
+
+function helpFunction(source, name, next) {
+  const at = source.indexOf("function " + name);
+  assert.ok(at !== -1, name + " is gone");
+  const end = source.indexOf(next, at);
+  assert.ok(end !== -1, next + " is gone after " + name);
+  return source.slice(at, end);
+}
+
+test("the subtitle row is the switch, named by the allowlist", () => {
+  const panel = helpPanel();
+  // The panel no longer passes a static subtitle: the row is the switch.
+  assert.doesNotMatch(APP, /panelShell\("Help",/);
+  // One button per document, each named by the allowlist's own label.
+  assert.match(panel, /HELP_DOCUMENTS\.forEach\(function \(entry\) \{[\s\S]{0,300}help__switch-btn/);
+  assert.match(panel, /button\.textContent = entry\.label;/);
+  assert.match(panel, /switchDocument\(entry\.key\)/);
+  // It sits where the subtitle was, over the search field.
+  const row = panel.indexOf("node.appendChild(switcher);");
+  assert.ok(row !== -1 && row < panel.indexOf("node.appendChild(search);"),
+    "the switch is not above the search field");
+  assert.doesNotMatch(panel, /"Feature reference"|"Glossary"/, "the switch restates a document's name");
+});
+
+test("the open document is the one marked, the way the app marks a page", () => {
+  const panel = helpPanel();
+  const mark = helpFunction(panel, "markOpen()", "markOpen();\n");
+  assert.match(mark, /if \(entry\.key === openKey\) button\.setAttribute\("aria-current", "true"\);/);
+  assert.match(mark, /else button\.removeAttribute\("aria-current"\);/);
+  // A first visit marks the default document from the start.
+  assert.match(panel, /var openKey = HELP_DOCUMENT_DEFAULT;/);
+  assert.match(panel, /\n  markOpen\(\);\n/);
+  // Following a link between the documents moves the marking with the text.
+  const show = helpFunction(panel, "showDocument(key, anchorId)", "function switchDocument");
+  assert.match(show, /openKey = key;\n\s+markOpen\(\);/);
+  // One treatment for "this is the one showing", not a third: the switch's
+  // marked rule is the report rail's own, at the panel's scale.
+  const rail = STYLE.match(/\.report-nav__item\[aria-current\]\s*\{([^}]*)\}/);
+  const marked = STYLE.match(/\.help__switch-btn\[aria-current\]\s*\{([^}]*)\}/);
+  assert.ok(rail && marked, "a switch's marking rule is missing");
+  assert.equal(marked[1], rail[1], "the switch invents a marking of its own");
+  assert.match(STYLE, /\.help__switch\s*\{[^}]*display:\s*inline-flex/);
+  // The row is a flex item in the panel's column, so it is told not to shrink:
+  // a squeezed switch would be a control with no height.
+  assert.match(STYLE, /\.help__switch\s*\{[^}]*flex:\s*0 0 auto/);
+});
+
+test("a typed query survives a switch and runs against the document now open", () => {
+  const panel = helpPanel();
+  const switched = helpFunction(panel, "switchDocument(key)", "function resultButton");
+  // The press changes the document and nothing else about the field.
+  assert.match(switched, /openKey = key;\n\s+markOpen\(\);/);
+  assert.doesNotMatch(switched, /search\.value\s*=/, "the switch clears the box");
+  assert.doesNotMatch(switched, /body\.innerHTML/, "the switch redraws the text itself");
+  // The one search is re-run, and focus stays where the typing is.
+  assert.match(switched, /updateSearch\(\);/);
+  assert.match(switched, /search\.focus\(\);/);
+
+  const search = helpFunction(panel, "updateSearch()", "search.addEventListener(\"input\"");
+  // The query is answered from the open document alone, so a switch changes
+  // what is listed rather than listing the same two documents again.
+  assert.match(search, /searchHelp\(documents\.filter\(function \(doc\) \{ return doc\.key === openKey; \}\), query\)/);
+  // A switch with the box empty draws the document now open at its opening.
+  assert.match(search, /if \(renderedKey !== openKey\) renderBody\(null\);/);
+  // A result still empties the box: the search that led to it is spent.
+  const show = helpFunction(panel, "showDocument(key, anchorId)", "function switchDocument");
+  assert.match(show, /search\.value = "";/);
+});
+
+test("a search of one document is answered from that document", () => {
+  // What the panel hands the unchanged search: one entry, so the results are
+  // that document's, in the same rank order.
+  const reference = documents().filter((doc) => doc.key === "features");
+  const glossary = documents().filter((doc) => doc.key === "glossary");
+  const term = searchHelp(glossary, "ruler");
+  assert.ok(term.length > 0, "ruler is not in the glossary");
+  assert.equal(term.every((hit) => hit.doc === "glossary"), true);
+  assert.equal(term.some((hit) => hit.title === "Ruler" && hit.matched === "title"), true);
+  const work = searchHelp(reference, "assignment");
+  assert.ok(work.length > 0, "assignment is not in the reference");
+  assert.equal(work.every((hit) => hit.doc === "features"), true);
+  // The ranking rule is untouched: a title match still comes before a mention.
+  const firstBody = work.findIndex((hit) => hit.matched === "body");
+  const lastTitle = work.map((hit) => hit.matched).lastIndexOf("title");
+  if (firstBody !== -1) assert.ok(lastTitle < firstBody);
+});
+
+test("the panel still closes on Escape and gives focus back to the glyph", () => {
+  // The switch adds a pair of buttons inside the panel and nothing to the
+  // layer's own key handling, so the existing close and focus return hold.
+  assert.match(APP, /if \(e\.key === "Escape" && panel\) closePanel\(true\);/);
+  assert.match(APP, /function closePanel\(restoreFocus\)[\s\S]{0,400}panelTrigger\.focus\(\);/);
+  // A switch is a real button, so the keyboard reaches and presses it.
+  assert.match(helpPanel(), /var button = el\("button", "help__switch-btn"\);\n\s+button\.type = "button";/);
 });
