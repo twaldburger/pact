@@ -719,6 +719,21 @@ h1, h2, h3, p { margin: 0; }
   line-height: 1;
 }
 
+/* The help glyph: the one quiet action between Undo/Redo and the Options
+   glyph. It takes the Options button's own square, border and ink, and draws
+   its `?` at that glyph's size, so the bar's two punctuations read as a pair. */
+.help__btn {
+  min-width: var(--control-h);
+  padding: 0;
+  justify-content: center;
+}
+
+.help__glyph {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-title);
+  line-height: 1;
+}
+
 .options__menu {
   position: fixed;
   z-index: 60;
@@ -3149,6 +3164,202 @@ down to the last row and no further. */
 }
 
 .milestone-picker__none[hidden] { display: none; }
+
+/* The help panel: the feature reference and the glossary, read in place. Wider
+   than the other panels because it holds prose rather than fields, and the one
+   panel with no footer - reading is the whole of what it does.
+
+   This is also the one panel that scrolls for a long time, so it holds its
+   title, its close control and its search field still and lets only the text
+   under them scroll: the search must stay reachable while a section is read,
+   and the panel's own close control must not scroll out of the window. */
+.panel--help {
+  display: flex;
+  flex-direction: column;
+  width: 34rem;
+  overflow: hidden;
+}
+
+.help__search {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+}
+
+.help__search:focus-visible { border-color: var(--rule-strong); }
+.help__search::placeholder { color: var(--ink-soft); }
+
+.help__count {
+  margin-top: var(--sp-2);
+  color: var(--ink-soft);
+  font-size: var(--fs-axis);
+}
+
+.help__count[hidden],
+.help__results[hidden],
+.help__body[hidden] { display: none; }
+
+.help__results {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: var(--sp-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* One result: the section's own title, the line that matched under it, and the
+   document it is in at the right, so a list of them reads as one column. */
+.help__result {
+  appearance: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-2);
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.help__result:first-child { border-top: 0; }
+
+.help__result:hover,
+.help__result:focus-visible {
+  background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
+}
+
+.help__result-title {
+  grid-column: 1;
+  font-size: var(--fs-data);
+  font-weight: var(--fw-ui);
+}
+
+.help__result-line {
+  grid-column: 1 / -1;
+  margin-top: var(--sp-1);
+  color: var(--ink-soft);
+  font-size: var(--fs-axis);
+}
+
+.help__result-doc {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--ink-soft);
+  font-size: var(--fs-axis);
+  white-space: nowrap;
+}
+
+.help__empty {
+  margin-top: var(--sp-2);
+  color: var(--ink-soft);
+  font-size: var(--fs-data);
+}
+
+.help__error {
+  margin-top: var(--sp-3);
+  color: var(--signal);
+  font-size: var(--fs-data);
+}
+
+/* The documents themselves. Prose is set at the interface's own data size with
+   a little more leading, and the headings keep one rank of size between them so
+   a section's title reads as a title without shouting over the panel's own. */
+.help__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: var(--sp-3);
+  padding-bottom: var(--sp-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: var(--fs-data);
+  line-height: 1.55;
+}
+
+.help__body p { margin-top: var(--sp-3); }
+
+.md-h {
+  margin-top: var(--sp-5);
+  font-weight: var(--fw-title);
+  font-stretch: var(--wd-title);
+  line-height: 1.25;
+}
+
+.md-h1 { font-size: var(--fs-title); }
+.md-h2 { font-size: var(--fs-body); }
+.md-h3 { font-size: var(--fs-data); }
+
+/* A glossary term's own line leads its definition, so it keeps the panel's
+   title weight rather than the body's. */
+.md-term strong { font-weight: var(--fw-title); }
+
+.md-avoid { color: var(--ink-soft); }
+
+.md-code {
+  padding: 0 0.15em;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95em;
+}
+
+.md-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+.md-link:hover { text-decoration-thickness: 2px; }
+
+.md-plainlink { color: inherit; }
+
+.md-list {
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-4);
+}
+
+.md-list li { margin-top: var(--sp-1); }
+.md-list-ul { list-style: disc; }
+.md-list-ol { list-style: decimal; }
+
+.md-table {
+  width: 100%;
+  margin-top: var(--sp-3);
+  border-collapse: collapse;
+  font-size: var(--fs-axis);
+}
+
+.md-table th,
+.md-table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  border-bottom-color: var(--rule-strong);
+  font-weight: var(--fw-ui);
+}
+
+.md-rule {
+  margin: var(--sp-4) 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
 
 .noscript {
   margin: var(--sp-6);

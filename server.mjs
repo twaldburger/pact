@@ -18,6 +18,7 @@ import { resolvePlanFile, readView, writeView, writePlanFile } from "./lib/confi
 import { resolvePlanPath, withPlanSuffix } from "./public/lib/plan-file.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
 import { normalizeStep } from "./public/lib/panels.mjs";
+import { helpDocument } from "./public/lib/help.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -291,6 +292,23 @@ export function createServer(store, options) {
           }
           store.redo();
           return sendJSON(res, 200, { redone: true });
+        }
+        // The help's documents, by name and never by path: `HELP_DOCUMENTS`
+        // names the two files the panel may read, and a name that is not on
+        // that list is refused here rather than resolved. The file is read on
+        // every request rather than cached, so the panel can never show a copy
+        // that has moved on. GET only: nothing here writes.
+        if (pathname === "/api/help" || pathname.startsWith("/api/help/")) {
+          if (req.method !== "GET") return sendError(res, 405, "method not allowed");
+          const doc = helpDocument(pathname.slice("/api/help/".length));
+          if (!doc) return sendError(res, 404, "no such document");
+          let markdown;
+          try {
+            markdown = fs.readFileSync(path.join(HERE, doc.path), "utf8");
+          } catch (err) {
+            return sendError(res, 500, "the help document could not be read");
+          }
+          return sendJSON(res, 200, { key: doc.key, label: doc.label, path: doc.path, markdown: markdown });
         }
         const route = matchApi(pathname);
         if (route) return handleApi(req, res, store, route);

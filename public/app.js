@@ -53,6 +53,15 @@ import {
 } from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
+  HELP_DOCUMENTS,
+  HELP_DOCUMENT_DEFAULT,
+  HELP_RESULT_LIMIT,
+  helpDocument,
+  helpAnchors,
+  searchHelp,
+  renderHelpDocument
+} from "./lib/help.mjs";
+import {
   PALETTES,
   PALETTE_DEFAULT,
   SLOT_COUNT,
@@ -4884,6 +4893,12 @@ function bindChrome() {
   // shortcut is bound for either.
   if (undoBtn) undoBtn.addEventListener("click", undoPlan);
   if (redoBtn) redoBtn.addEventListener("click", redoPlan);
+  // The `?` between the redo control and the Options glyph opens the help:
+  // opened over the board and closed again, so it costs the grid nothing.
+  var helpBtn = document.getElementById("help-btn");
+  if (helpBtn) {
+    helpBtn.addEventListener("click", function (e) { openHelpPanel(e.currentTarget); });
+  }
   panelLayer.addEventListener("pointerdown", function (e) {
     if (e.target === panelLayer) closePanel(true);
   });
@@ -5979,6 +5994,170 @@ function openPlanFilePanel(trigger) {
 
     openPanel(node, trigger);
     if (!view.locked) pathInput.focus();
+  });
+}
+
+/* --- the help panel ------------------------------------------------------ */
+
+/*
+ * The help: the feature reference and the glossary, searched, opened from the
+ * `?` in the top bar. It is opened and never docked - the app's own panel shell
+ * over the board, so the grid does not move and nothing about the plan is
+ * touched. Escape closes it and focus goes back to the glyph, as every other
+ * panel's does.
+ *
+ * The two documents are read from the server's allowlisted route every time the
+ * panel opens, so it can never show a copy that has moved on, and nothing of
+ * them outlives the panel: the documents, the anchors and the search index are
+ * this function's own. The panel opens on the feature reference, and the last
+ * document read is not remembered - reopening starts where a first visit does.
+ *
+ * The search itself, and the rule that ranks a title match above a body match,
+ * are public/lib/help.mjs'; this draws its results. A link between the two
+ * documents moves within the panel, and a link anywhere else is plain text.
+ */
+function openHelpPanel(trigger) {
+  var node = panelShell("Help", "Reading the documentation");
+  node.classList.add("panel--help");
+  var sub = node.querySelector(".panel__sub");
+
+  var search = document.createElement("input");
+  search.type = "search";
+  search.className = "help__search";
+  search.autocomplete = "off";
+  search.setAttribute("aria-label", "Search the feature reference and the glossary");
+  search.setAttribute("placeholder", "Search, or read the reference");
+
+  var count = el("p", "help__count");
+  count.setAttribute("role", "status");
+  count.hidden = true;
+  var results = el("div", "help__results");
+  results.hidden = true;
+  var body = el("div", "help__body");
+
+  node.appendChild(search);
+  node.appendChild(count);
+  node.appendChild(results);
+  node.appendChild(body);
+
+  openPanel(node, trigger);
+  search.focus();
+
+  var documents = [];
+  var anchors = {};
+  // The panel's own ids carry this, so a glossary term named `Filter` or
+  // `Minimap` cannot claim the grid's element id.
+  var idPrefix = "help-";
+
+  // The document scrolls inside the panel, under a title, a close control and
+  // a search field that stay put. A section is brought to the top of the text.
+  function scrollToAnchor(anchorId) {
+    if (!anchorId) { body.scrollTop = 0; return; }
+    var target = body.querySelector('[id="' + idPrefix + anchorId + '"]');
+    if (!target) return;
+    body.scrollTop += target.getBoundingClientRect().top - body.getBoundingClientRect().top;
+  }
+
+  // One document in the panel, scrolled to a section of it. This is what a
+  // result and a link between the two documents both do.
+  function showDocument(key, anchorId) {
+    var doc = documents.find(function (entry) { return entry.key === key; }) || documents[0];
+    if (!doc) return;
+    var known = helpDocument(doc.key);
+    if (!known) return;
+    search.value = "";
+    results.textContent = "";
+    results.hidden = true;
+    count.hidden = true;
+    body.hidden = false;
+    if (sub) sub.textContent = doc.label;
+    body.innerHTML = renderHelpDocument(known, doc.markdown, anchors, idPrefix);
+    scrollToAnchor(anchorId);
+  }
+
+  function resultButton(hit) {
+    var row = el("button", "help__result");
+    row.type = "button";
+    var title = el("span", "help__result-title");
+    title.textContent = hit.title;
+    row.appendChild(title);
+    if (hit.matched === "body") {
+      var line = el("span", "help__result-line");
+      line.textContent = hit.line;
+      row.appendChild(line);
+    }
+    var where = el("span", "help__result-doc");
+    where.textContent = hit.docLabel;
+    row.appendChild(where);
+    row.addEventListener("click", function () {
+      showDocument(hit.doc, hit.anchor);
+      search.focus();
+    });
+    return row;
+  }
+
+  // An empty field is the reading, a filled one is the search: the panel shows
+  // one or the other, so a result list never pushes the text being read away.
+  function updateSearch() {
+    var query = search.value.trim();
+    if (!query) {
+      results.textContent = "";
+      results.hidden = true;
+      count.hidden = true;
+      body.hidden = false;
+      return;
+    }
+    body.hidden = true;
+    results.textContent = "";
+    results.hidden = false;
+    count.hidden = false;
+    var hits = searchHelp(documents, query);
+    var shown = hits.slice(0, HELP_RESULT_LIMIT);
+    count.textContent = hits.length > shown.length
+      ? "Showing the first " + shown.length + " of " + hits.length + " sections"
+      : hits.length === 1 ? "1 section" : hits.length + " sections";
+    if (!hits.length) {
+      var none = el("p", "help__empty");
+      none.textContent = "Nothing in the reference or the glossary matches that.";
+      results.appendChild(none);
+      return;
+    }
+    shown.forEach(function (hit) { results.appendChild(resultButton(hit)); });
+  }
+
+  search.addEventListener("input", updateSearch);
+  search.addEventListener("keydown", function (e) {
+    if (results.hidden) return;
+    var first = results.querySelector(".help__result");
+    if (!first) return;
+    if (e.key === "Enter") { e.preventDefault(); first.click(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); first.focus(); }
+  });
+
+  // A link between the two documents moves within the panel. Anything else was
+  // drawn as plain text by the renderer, so it cannot arrive here.
+  body.addEventListener("click", function (e) {
+    var link = e.target.closest("a[data-help-doc]");
+    if (!link) return;
+    e.preventDefault();
+    showDocument(link.getAttribute("data-help-doc"), link.getAttribute("data-help-anchor"));
+    search.focus();
+  });
+
+  Promise.all(HELP_DOCUMENTS.map(function (entry) {
+    return api("GET", "/api/help/" + entry.key);
+  })).then(function (loaded) {
+    // A panel closed before its documents arrived has nothing to fill.
+    if (!node.isConnected) return;
+    documents = loaded;
+    loaded.forEach(function (doc) { anchors[doc.key] = helpAnchors(doc.markdown); });
+    showDocument(HELP_DOCUMENT_DEFAULT);
+  }).catch(function (err) {
+    var message = el("p", "help__error");
+    message.setAttribute("role", "alert");
+    message.textContent = "The help could not be read: " +
+      (err && err.message ? err.message : "the server did not answer");
+    body.appendChild(message);
   });
 }
 

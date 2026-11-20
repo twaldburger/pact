@@ -502,6 +502,33 @@ nothing to step to.
 the grid-spacing pair. There is no keyboard shortcut, and a report disables
 both.
 
+## In-app help
+
+The `?` beside the redo control opens the help: this reference and the
+[glossary](../GLOSSARY.md), in a panel over the board. It is opened and never
+docked - nothing in the grid moves because it exists - and `Esc`, the close
+control or a press outside it closes it and puts focus back on the `?`. The
+glyph is in the top bar of both pages, so what a report's own vocabulary means
+is a search away from the report.
+
+The field at the top of the panel searches both documents. A section whose
+heading carries the search comes before a section that only mentions it in its
+text, and within each of those the results stay in reading order; the search is
+case-insensitive and covers headings and body text alike. A result names the
+section, or the glossary term, and quotes the line that matched, and choosing
+one opens that section. With the field empty the panel shows this reference,
+which is where every visit starts: the document read last is not remembered.
+
+Inside the text, a link to the glossary or to another section of this page
+moves within the panel. A link anywhere else - the README, an ADR, the scope
+doc - is drawn as plain text, because reading the rest of the docs tree is not
+what this panel is for. The two documents are read from the repository each
+time the panel opens rather than kept as a copy, so the help cannot describe a
+version of the app that has moved on.
+
+**Where the controls are.** The `?` in the top bar, between the redo control and
+the Options glyph.
+
 ## The Options menu
 
 The Options menu holds the infrequent controls, grouped top to bottom by what
