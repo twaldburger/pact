@@ -104,6 +104,10 @@ grid, the filter, the panels, sorting and the view state.
 ## Docs
 
 - [`GLOSSARY.md`](GLOSSARY.md) - the domain model and its language.
+- [`docs/features.md`](docs/features.md) - what each capability does, how it
+  behaves and where its controls live.
+- [`docs/index.md`](docs/index.md) - every page under `docs/`, with what it is
+  for.
 - [`docs/scope.md`](docs/scope.md) - what the first version covers.
 - [`docs/adr/`](docs/adr) - the decisions behind it.
 
