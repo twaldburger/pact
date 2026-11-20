@@ -8,6 +8,9 @@
  * only the switch's own current-page mark differs. Which controls a report
  * withdraws is a rule of its own, `reportDisabledControlIds` below, so the
  * browser can disable them by id instead of holding a second copy of the list.
+ * The `?` between the redo control and the Options glyph is the help's one
+ * entrance, and it stays live on a report: a reader who does not know what the
+ * report's views mean needs the reference as much as anyone.
  */
 
 export const VIEW_PLAN = "plan";
@@ -136,6 +139,10 @@ export function topbarMarkup(view) {
           </svg>
         </button>
       </div>
+      <button type="button" class="ghost help__btn" id="help-btn"
+        aria-haspopup="dialog" aria-label="Help" title="Help - search the reference and the glossary">
+        <span class="help__glyph" aria-hidden="true">?</span>
+      </button>
       <div class="options" id="options">
         <button type="button" class="ghost options__btn" id="options-btn"
           aria-haspopup="true" aria-expanded="false" aria-label="Options" title="Options">
