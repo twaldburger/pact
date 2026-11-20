@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem } from "../public/lib/options.mjs";
+import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "../public/lib/options.mjs";
 import { VIEW_KEYS } from "../public/lib/view.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
@@ -278,9 +278,16 @@ test("the palette, period and step are each one collapsed row, not a group", () 
   assert.equal(stepControl(10).label, "Percentage step");
 });
 
-test("the menu reads as four groups in order: what is drawn, what is included, the plan and the app", () => {
+test("the Help entry is an action carrying the panel-opener's ellipsis", () => {
+  // Named the way every other row that opens a panel is named, and with no
+  // detail: there is nothing about the help to count.
+  assert.deepEqual(helpItem(), { key: "help", label: "Help..." });
+});
+
+test("the menu reads as five groups in order: the help, what is drawn, what is included, the plan and the app", () => {
   const items = optionsItems(false, false, true, false, false);
   assert.deepEqual(optionGroups(items), [
+    ["help"],
     ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "palette", "reset-view"],
     ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
@@ -289,30 +296,37 @@ test("the menu reads as four groups in order: what is drawn, what is included, t
   // A future view toggle joins the view group by being in optionsItems alone;
   // Show archived is the one row there that is not a view toggle.
   const added = items.concat([{ key: "noise", label: "X" }]);
-  assert.deepEqual(optionGroups(added)[0], ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "noise", "palette", "reset-view"]);
-  assert.deepEqual(optionGroups(added)[1], ["archived"]);
+  assert.deepEqual(optionGroups(added)[0], ["help"]);
+  assert.deepEqual(optionGroups(added)[1], ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "noise", "palette", "reset-view"]);
+  assert.deepEqual(optionGroups(added)[2], ["archived"]);
 });
 
-test("three dividers are drawn, each on a group boundary", () => {
+test("four dividers are drawn, each on a group boundary", () => {
   const items = optionsItems(false, false, true, false, false);
   const dividers = optionDividerKeys(items);
-  // Exactly one line above Show archived and one above the plan period, which
+  // One below Help, one above Show archived, one above the plan period, which
   // together box the archived group in, plus the one above Plan file.
-  assert.deepEqual(dividers, ["archived", "range", "plan-file"]);
+  assert.deepEqual(dividers, ["weekends", "archived", "range", "plan-file"]);
+  assert.equal(dividers.filter((key) => key === "weekends").length, 1);
   assert.equal(dividers.filter((key) => key === "archived").length, 1);
   assert.equal(dividers.filter((key) => key === "range").length, 1);
+  // Help opens the menu, so it carries no line above it.
+  assert.equal(dividers.includes("help"), false);
   // Each divider sits on the first row of a group after the menu's first.
   const groups = optionGroups(items);
   dividers.forEach((key) => assert.equal(groups.slice(1).some((group) => group[0] === key), true));
-  // And no view row carries one: the view group opens the menu undeclared.
-  optionGroups(items)[0].forEach((key) => assert.equal(dividers.includes(key), false, key));
+  // And no row outside that first-row rule carries one: the groups after Help
+  // are divided exactly where they begin.
+  groups.forEach((group) => group.forEach((key, at) => {
+    assert.equal(dividers.includes(key), at === 0 && groups.indexOf(group) > 0, key);
+  }));
 });
 
 test("Show archived keeps its place outside the view, its value outside the view settings", () => {
   const items = optionsItems(false, false, true, false, false);
   // Grouped on its own, not among the toggles the reset restores.
-  assert.equal(optionGroups(items)[1].includes("archived"), true);
-  assert.equal(optionGroups(items)[0].includes("archived"), false);
+  assert.equal(optionGroups(items)[2].includes("archived"), true);
+  assert.equal(optionGroups(items)[1].includes("archived"), false);
   // Session-only: the view's own keys never hold it, so a reload starts with
   // archived records hidden again.
   assert.equal(VIEW_KEYS.includes("archived"), false);
@@ -323,12 +337,17 @@ test("Show archived keeps its place outside the view, its value outside the view
 
 test("no row is divided because it is an action", () => {
   const dividers = optionDividerKeys(optionsItems(false, false, true, false, false));
-  // The five actions: Reset view, Sprints, Holidays, Tags, Milestones and Plan
-  // file. Only the one that opens a group carries a line.
+  // The actions: Help, Reset view, Sprints, Holidays, Tags, Milestones and Plan
+  // file. Only the one that opens a group carries a line above it.
+  assert.equal(dividers.includes("help"), false);
   assert.equal(dividers.includes("reset-view"), false);
   assert.equal(dividers.includes("sprints"), false);
   assert.equal(dividers.includes("holidays"), false);
   assert.equal(dividers.includes("tags"), false);
   assert.equal(dividers.includes("milestones"), false);
   assert.equal(dividers.includes("plan-file"), true);
+  // Help is the menu's first row, so its line falls below it, on the view
+  // group's own first row.
+  assert.equal(optionGroups(optionsItems(false, false, true, false, false))[0][0], "help");
+  assert.equal(dividers[0], "weekends");
 });

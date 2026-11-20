@@ -504,12 +504,13 @@ both.
 
 ## In-app help
 
-The `?` beside the redo control opens the help: this reference and the
-[glossary](../GLOSSARY.md), in a panel over the board. It is opened and never
-docked - nothing in the grid moves because it exists - and `Esc`, the close
-control or a press outside it closes it and puts focus back on the `?`. The
-glyph is in the top bar of both pages, so what a report's own vocabulary means
-is a search away from the report.
+The help is opened from the first entry of the Options menu: this reference and
+the [glossary](../GLOSSARY.md), in a panel over the board. It is opened and
+never docked - nothing in the grid moves because it exists - and `Esc`, the
+close control or a press outside it closes it. Because the menu that opened it
+is closed first, focus lands on the page when the panel goes, exactly as it does
+for the menu's other panel entries. The entry is in the menu of both pages, so
+what a report's own vocabulary means is a search away from the report.
 
 The field at the top of the panel searches the document showing. A section
 whose heading carries the search comes before a section that only mentions it
@@ -536,14 +537,14 @@ panel is for. The two documents are read from the repository each time the
 panel opens rather than kept as a copy, so the help cannot describe a version
 of the app that has moved on.
 
-**Where the controls are.** The `?` in the top bar, between the redo control and
-the Options glyph.
+**Where the controls are.** `Options`, then its first entry, `Help...`.
 
 ## The Options menu
 
 The Options menu holds the infrequent controls, grouped top to bottom by what
 they do, with a divider above the first row of each group after the first:
 
+- `Help...`, alone, because it opens the help rather than changing anything;
 - the view settings: `Weekends`, `Holidays`, `Milestones`, `Availability
   lines`, `Assignments`, `Grid dividers`, `Minimap`, `Marker`, then the `Colour
   palette` disclosure and `Reset view`;
@@ -562,9 +563,9 @@ The bar is shared with the report, and the menu is the same menu there; a report
 disables the rows it cannot act on - the grid's display settings and `Reset
 view` - rather than moving or hiding them. Which rows those are is stated once,
 beside the menu's own items, so the two views cannot disagree. Note what stays
-live on a report: `Show archived`, the `Milestones` switch that rules its chart,
-and the plan-facing rows, including Plan period and Percentage step, which are
-plan changes and not view settings.
+live on a report: `Show archived`, `Help...`, the `Milestones` switch that
+rules its chart, and the plan-facing rows, including Plan period and Percentage
+step, which are plan changes and not view settings.
 
 **Where the controls are.** The Options glyph (`...`) at the right end of the
 top bar.

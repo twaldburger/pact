@@ -901,9 +901,9 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
     "reset-view"
   ]);
   // The plan-facing entries - the period, the step, the palette, Sprints, the
-  // Holidays panel, the Plan file panel - and Show archived, which acts on the
-  // rail, all stay live in a report.
-  ["archived", "palette", "range", "step", "sprints", "plan-file"].forEach((key) => {
+  // Holidays panel, the Plan file panel - Help and Show archived, which acts on
+  // the rail, all stay live in a report.
+  ["help", "archived", "palette", "range", "step", "sprints", "plan-file"].forEach((key) => {
     assert.equal(reportDisabledOptionKeys().includes(key), false, key + " must stay live");
   });
   // Milestones acts on a report too: its chart draws the rules, so the row

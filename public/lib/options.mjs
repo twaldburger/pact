@@ -41,15 +41,20 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
 }
 
 /*
- * The Options menu, group by group, top to bottom: what is drawn, what is
- * included, the plan and the app. `items` is optionsItems' own list minus Show
- * archived, so a future view toggle joins the view group without a second
- * edit; the palette and Reset view follow them. Show archived is alone in the
- * second group, because it changes which records are included rather than what
- * is drawn - the owner's decision, and the reason Reset view leaves it alone.
- * The plan group's "holidays" and "milestones" are the actions that open their
- * panels, not the toggles of the same keys above. This is the one place the
- * menu's shape is stated; public/app.js appends its rows in this order.
+ * The Options menu, group by group, top to bottom: the help, what is drawn,
+ * what is included, the plan and the app. `items` is optionsItems' own list
+ * minus Show archived, so a future view toggle joins the view group without a
+ * second edit; the palette and Reset view follow them. Show archived is alone
+ * in the third group, because it changes which records are included rather
+ * than what is drawn - the owner's decision, and the reason Reset view leaves
+ * it alone. The plan group's "holidays" and "milestones" are the actions that
+ * open their panels, not the toggles of the same keys above. This is the one
+ * place the menu's shape is stated; public/app.js appends its rows in this
+ * order.
+ *
+ * Help opens the menu, alone in the first group: it is an action like the
+ * panel entries below, and the owner wanted it first, a divider below it, so
+ * the view settings that follow are not read as a continuation of it.
  */
 export function optionGroups(items) {
   const view = items
@@ -57,6 +62,7 @@ export function optionGroups(items) {
     .filter(function (key) { return key !== "archived"; })
     .concat(["palette", "reset-view"]);
   return [
+    ["help"],
     view,
     ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
@@ -82,9 +88,10 @@ export function optionDividerKeys(items) {
  * disabled rather than moved or hidden; the plan-facing entries, Show archived
  * - which decides which records a report includes, so it is a group of its own
  * - and Milestones stay live, since a report's chart
- * draws the milestone rules and takes the same switch the grid does.
- * Expressed here, beside the menu's own items, so the menu and the report
- * cannot disagree about which rows act.
+ * draws the milestone rules and takes the same switch the grid does. Help is
+ * live too: a report's own vocabulary needs the reference as much as the
+ * grid's does. Expressed here, beside the menu's own items, so the menu and
+ * the report cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
   return ["weekends", "holidays", "availabilityLines", "assignments", "dividers", "minimap", "marker", "reset-view"];
@@ -118,6 +125,17 @@ export function paletteItems(active) {
     label: PALETTE_LABELS[key],
     checked: key === name
   }));
+}
+
+/*
+ * The Help entry in the Options menu: like the Sprints entry below it, an
+ * action rather than a checked state, opening the help panel over the board.
+ * It states no detail, because there is nothing to count: the panel always
+ * holds the two documents it holds. Its label carries the ellipsis every
+ * panel-opener here carries, which is what makes it read as one.
+ */
+export function helpItem() {
+  return { key: "help", label: "Help..." };
 }
 
 /*
