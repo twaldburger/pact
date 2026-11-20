@@ -263,6 +263,17 @@ export function archivedPersonRefusal(name) {
   return name + " is archived. Restore this person before adding an assignment.";
 }
 
+/*
+ * The refusal for a grid gesture made while the assignment blocks are hidden.
+ * A block is what a reader drags, drops onto and pastes into, and a new one
+ * would land in a row with nothing drawn to show it - so the gesture is
+ * refused with a message that names the setting rather than silently doing
+ * nothing visible.
+ */
+export function assignmentsHiddenRefusal() {
+  return "Assignments are hidden. Turn on Assignments in Options to add work on the grid.";
+}
+
 export function archivedProjectRefusal(name) {
   return name + " is archived. Restore this project before adding an assignment.";
 }

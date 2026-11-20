@@ -13,6 +13,7 @@ import {
   withTag,
   withoutTag,
   archivedPersonRefusal,
+  assignmentsHiddenRefusal,
   archivedProjectRefusal,
   dropRefusal,
   outsideRangeRefusal,
@@ -213,6 +214,16 @@ test("a refused drop names the archived record and says why", () => {
     archivedProjectRefusal("Atlas"),
     "Atlas is archived. Restore this project before adding an assignment."
   );
+});
+
+test("a grid gesture made while the blocks are hidden names the setting", () => {
+  // Hiding the blocks hides what a drag, a drop or a paste would create, so the
+  // gesture is refused with the setting's own name rather than doing nothing.
+  assert.equal(
+    assignmentsHiddenRefusal(),
+    "Assignments are hidden. Turn on Assignments in Options to add work on the grid."
+  );
+  assert.match(assignmentsHiddenRefusal(), /Options/);
 });
 
 test("an archived target is refused and a live one is not", () => {

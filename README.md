@@ -68,14 +68,19 @@ them.
   Today scrolls back to it. The Minimap, off by default, is an overview strip of
   the whole period that doubles as a scrollbar. The two lists can each be sorted
   by name, dates, location or load, as display order only.
-- **Display toggles.** Weekends, Holidays, Milestones, Availability lines, Grid
-  dividers, the Minimap and the Marker sit in the Options menu. Availability
-  lines draws or hides the dashed rule each row carries at its Availability: a
-  hidden line hides a mark, never a measurement, so the row heights, the
-  over-allocation band and every figure stay exactly as they were. The Marker's
-  own entry draws or hides the line, and a hidden Marker still sets the date the
-  per-person totals are read at. The Colour palette group switches the block
-  fills between Paired and Set3.
+- **Display toggles.** Weekends, Holidays, Milestones, Availability lines,
+  Assignments, Grid dividers, the Minimap and the Marker sit in the Options
+  menu. Availability lines draws or hides the dashed rule each row carries at
+  its Availability: a hidden line hides a mark, never a measurement, so the row
+  heights, the over-allocation band and every figure stay exactly as they were.
+  Assignments draws or hides the blocks each row is made of, absences included,
+  which leaves a grid of dates alone; like the lines, it hides drawing rather
+  than work, so every figure stays put. With the blocks hidden the grid cannot
+  make a new Assignment - a drag, a drop or a paste is refused with a message
+  naming the setting - since a block is what a reader drags, and one created
+  there would land nowhere visible. The Marker's own entry draws or hides the
+  line, and a hidden Marker still sets the date the per-person totals are read
+  at. The Colour palette group switches the block fills between Paired and Set3.
 - **Undo and redo.** Two controls step the plan back and forward one change at a
   time, the last 100 changes held in the running server's memory. The save
   status beside the wordmark reads Saved, Saving... or Not saved as writes land.
