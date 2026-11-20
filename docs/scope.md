@@ -1,3 +1,9 @@
+---
+type: Reference
+title: "PACT scope"
+description: What the first version covers, and what is deliberately left out of it.
+---
+
 # PACT - scope
 
 Confirmed by the owner on 2026-11-02. The first version is locked; the interface was designed through the `frontend-design` skill and built. Everything under "later" is deliberately out of the first version.

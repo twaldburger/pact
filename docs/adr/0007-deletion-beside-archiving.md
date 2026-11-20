@@ -1,3 +1,9 @@
+---
+type: Decision record
+title: "Deletion exists beside archiving"
+description: Why permanent deletion was added beside archiving, and what it takes with it.
+---
+
 # Deletion exists beside archiving
 
 Deleting permanently destroys a Person, a Project or an Assignment, and it is a separate act from archiving rather than a replacement for it.

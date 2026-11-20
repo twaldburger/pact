@@ -1,3 +1,9 @@
+---
+type: Decision record
+title: "A row's full height is that Person's Availability"
+description: The v1 rule that each row was scaled to its Person's Availability, superseded by ADR-0006.
+---
+
 Status: superseded by ADR-0006, once Allocations became absolute.
 
 # A row's full height is that Person's Availability

@@ -12,6 +12,10 @@ _Avoid_: resource, user, employee, staff member
 The most a Person can be scheduled for - their own 100%, expressed as a share of a full working week. The full working week is the nominal week an FTE describes, not the particular calendar week a date falls in, so a week holding a holiday or an absence holds fewer working days rather than a smaller share. Allocations are absolute, so Availability is the ceiling they are compared against rather than the scale they are measured on.
 _Avoid_: capacity, part-time factor, utilisation limit
 
+**Availability line**:
+The dashed rule each row draws at the height its Person's Availability reaches, with the over-allocation band above it. It is drawn by default, and drawn or hidden from the Options menu; hiding it hides a mark of the measurement, never the measurement, so the row height, the over-allocation band and every figure stay exactly as they were. The code and the earlier writing call it the ceiling, and the interface now calls it Availability lines.
+_Avoid_: ceiling, availability marker, capacity line, limit line
+
 **Location**:
 The one free-text place a Person is at, for grouping and filtering people later. It is optional and single-valued: a new one can be typed, or one already in use on another Person chosen, matched case-insensitively with the first spelling winning. It is deliberately not a fixed country list, and it is also the key a Person's holidays are configured under, so the dates configured for a Location are the ones shaded on that Location's rows.
 _Avoid_: office, site, city, country, timezone, or region
@@ -27,6 +31,14 @@ _Avoid_: label, keyword, category, or an unqualified "tag"
 **Project tag**:
 A short free-text label on a Project, for grouping and filtering projects later. A new one can be typed, or one already in use on another Project chosen; projects' tags, people's tags and assignments' tags are separate lists.
 _Avoid_: label, keyword, category, or an unqualified "tag"
+
+**Typed tag**:
+A free-text tag with a kind written before a colon and a value after it, as in `api: Stellar`. It is a convention rather than a schema: nothing is validated, an untyped tag like `DevOps` is untouched by it, and a kind with no value after it - `api:` - is not a typed tag. Its kind is what colour by key colours.
+_Avoid_: namespaced tag, prefixed tag, key-value tag
+
+**Tag key**:
+The kind a typed tag carries before its colon - `api` in `api: Stellar` - and the unit colour by key chooses, one key per level: Projects, People and Assignments. The values under a chosen key take palette slots, and in the report's by-tag view a key's chip ticks or clears all of its tags at once.
+_Avoid_: tag type, prefix, namespace, category
 
 **Calendar day**:
 A single day as the plan counts it, however it is worked: one column of the Timeline at Day zoom, and the unit a Plan period, a sprint's length and an Assignment's date range are stated in. It is the raw span, weekends, holidays and absences included, where a Working day is the day the plan counts as worked.
@@ -158,3 +170,15 @@ _Avoid_: search, find, search bar, query
 **Tag split**:
 The by-tag report's own choice of what its rows are, read as rows in the view's head: the set of tags that are ticked, grouped by tag key with a row per key whose tick selects or clears all of that key's tags, and a final group for the tags belonging to no key. A key is only a shortcut for selecting its tags, never a mode the table is in: the ticked tags are the rows, in the view's own size order, and one `Other tags` row gathers every tag not ticked. A project's FTE-days are split evenly over all its tags, as everywhere in the report, so that residual is what makes the rows reconcile with the plan's total; it covers a tag nobody ticked and a project carrying no tag alike. Nothing is ticked to begin with, and the set is stored in the plan beside the holidays and the tag colours, so it travels with the plan.
 _Avoid_: grouping, pivot key, split setting, tag filter
+
+**Report view**:
+One of the seven readings a report shows at a time - the three FTE-days views, the three Allocation views, and Allocation against capacity last - each named for its subject and its measure rather than for the shape of the table or chart that draws it. The selection is a view setting, so returning to the report resumes where it was left.
+_Avoid_: tab, page, report tab
+
+**Time bucket**:
+One column of a report table and one point on its chart: the stretch of the Plan period a figure is counted over. The buckets are the report's own Zoom level - days, weeks, the derived sprints or months - tiled across the period and clipped at both ends, so they add up to the period exactly and a project's buckets sum to its total.
+_Avoid_: interval, timeslot, slice, period
+
+**Ruler**:
+The chart's reading cursor, over the pointer or the keyboard: it snaps to the nearest bucket's centre and states that bucket's label, its allocated and capacity FTE-days and the share between them, so a reading never depends on an estimate from the picture. It is not the Marker: the Marker sets the date the plan is read at on the grid, while the ruler reads one bucket of a report's chart.
+_Avoid_: cursor, crosshair, tooltip, marker

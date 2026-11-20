@@ -1,3 +1,9 @@
+---
+type: Decision record
+title: "Allocations are absolute, so every row is a full FTE"
+description: Why an Allocation is a share of a full working week, and what that does to rows and over-allocation.
+---
+
 # Allocations are absolute, so every row is a full FTE
 
 An Allocation is a share of a full working week rather than a share of the Person it sits on: 60% is 0.6 FTE whether that Person is 100% or 80% available. That is what makes FTE-days add up across People and Projects when reporting arrives, and it is why a part-timer's 60% also reads as 60%.
