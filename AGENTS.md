@@ -18,8 +18,9 @@ behave while finding it, and answers nothing itself.
 | Can it do X, and where is the control? | [docs/features.md](docs/features.md) |
 | What documentation is there at all? | [docs/index.md](docs/index.md) |
 | What did the first version promise, and what was left out? | [docs/scope.md](docs/scope.md) |
+| What are the plan's numbers, and who is over capacity? | `node bin/pact.mjs --help`, the read-only tool over a plan file |
 | Why is it built this way? | [docs/adr/](docs/adr/) |
-| Where is that in the code? | `server.mjs`, `lib/` (the plan store, its validation and its atomic write), `public/` (the app, and the pure rules it shares with the tests), `test/` (one file per set of rules) |
+| Where is that in the code? | `server.mjs`, `bin/` (the read-only tool), `lib/` (the plan store, its validation and its atomic write, and the queries the tool asks), `public/` (the app, and the pure rules it shares with the tests), `test/` (one file per set of rules) |
 | Do the documents still match the code? | `test/docs.test.mjs` |
 
 The glossary is the language: look the term up and quote the entry, and treat
@@ -40,9 +41,10 @@ live. Both are more current than any summary of them, including this one.
    happened, say what changed and ask.
 4. **When the documents are silent, say so** and point at them. Do not fill the
    gap with a guess.
-5. **Do not invent figures.** Nothing computes the plan's numbers for you yet:
-   the report draws them for a person at the screen. If an answer needs a
-   figure, say so and point at the report rather than adding one up yourself.
+5. **Use the tool for figures.** `bin/pact.mjs` computes the plan's numbers
+   from the plan file with the report's own modules. Never add a figure up
+   yourself, and never report one the tool did not produce: run the command
+   for the period you mean, or say that you could not answer.
 6. **A question with no home gets a home, not a line here.** If a user's
    question is answered by neither the glossary nor the feature reference, fix
    *that* document. Never add the answer to this file.
