@@ -719,21 +719,6 @@ h1, h2, h3, p { margin: 0; }
   line-height: 1;
 }
 
-/* The help glyph: the one quiet action between Undo/Redo and the Options
-   glyph. It takes the Options button's own square, border and ink, and draws
-   its `?` at that glyph's size, so the bar's two punctuations read as a pair. */
-.help__btn {
-  min-width: var(--control-h);
-  padding: 0;
-  justify-content: center;
-}
-
-.help__glyph {
-  font-size: var(--fs-title);
-  font-weight: var(--fw-title);
-  line-height: 1;
-}
-
 .options__menu {
   position: fixed;
   z-index: 60;

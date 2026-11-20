@@ -10,8 +10,9 @@
  * the subset is a list (`MARKDOWN_CONSTRUCTS`) instead of a promise. So does a
  * link between the two documents pointing at a heading that is not there.
  *
- * What this cannot do is read the panel: that the glyph opens it, that Escape
- * closes it and focus goes back, that the grid has not moved, and that a press
+ * What this cannot do is read the panel: that the menu's `Help...` entry opens
+ * it, that Escape closes it and focus goes back, that the grid has not moved,
+ * and that a press
  * on a switch marks it and moves the document, that the switches are reachable
  * by keyboard, and that a query survives the switch are checked in a browser,
  * not here. What is checked here is the material the panel is built from - the
@@ -38,6 +39,7 @@ import {
   searchHelp
 } from "../public/lib/help.mjs";
 import { reportDisabledControlIds, topbarMarkup } from "../public/lib/topbar.mjs";
+import { helpItem, optionDividerKeys, optionGroups, optionsItems, reportDisabledOptionKeys } from "../public/lib/options.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, "..");
@@ -382,27 +384,45 @@ test("the glossary's avoid lines read as their own lines", () => {
 
 /* --- the entrance --------------------------------------------------------- */
 
-test("the glyph sits between the redo control and the Options glyph", () => {
-  const bar = topbarMarkup("plan");
-  const historyAt = bar.search(/<div class="history"/);
-  const helpAt = bar.search(/id="help-btn"/);
-  const optionsAt = bar.search(/<div class="options"/);
-  assert.ok(historyAt !== -1 && helpAt !== -1 && optionsAt !== -1);
-  assert.ok(historyAt < helpAt && helpAt < optionsAt, "the help glyph is not where the bar says it is");
-  assert.match(bar, /<button type="button" class="ghost help__btn" id="help-btn"\s+aria-haspopup="dialog" aria-label="Help" title="[^"]+">/);
-  // A report keeps it: the report's own vocabulary needs the reference too.
-  assert.equal(reportDisabledControlIds().includes("help-btn"), false);
-  assert.equal(topbarMarkup("report").includes('id="help-btn"'), true);
+test("the bar carries no help control: the glyph is gone from both pages", () => {
+  // One bar, one source: neither page's bar has the `?` that used to open the
+  // help, and nothing is left over where it stood.
+  ["plan", "report"].forEach((view) => {
+    const bar = topbarMarkup(view);
+    assert.equal(bar.includes("help-btn"), false, view + " still carries a help control");
+    assert.equal(bar.includes("help__btn"), false, view + " still carries the help button's class");
+    assert.doesNotMatch(bar, />\s*\?\s*</, view + " still draws a `?` glyph");
+    assert.equal(reportDisabledControlIds().includes("help-btn"), false);
+  });
+  // Nor do the styles it needed, since nothing draws it any more.
+  assert.doesNotMatch(STYLE, /\.help__btn/);
+  assert.doesNotMatch(STYLE, /\.help__glyph/);
+  assert.doesNotMatch(APP, /help-btn/);
 });
 
-test("the glyph is sized like the control beside it", () => {
-  assert.match(STYLE, /\.help__btn\s*\{[^}]*min-width:\s*var\(--control-h\)/);
-  assert.match(STYLE, /\.help__btn\s*\{[^}]*padding:\s*0/);
+test("Help is the Options menu's first entry, one divider below it and none above", () => {
+  const items = optionsItems(false, false, true, false, false);
+  const groups = optionGroups(items);
+  assert.deepEqual(groups[0], ["help"]);
+  const dividers = optionDividerKeys(items);
+  // Its line falls on the row after it, and Help itself carries none.
+  assert.equal(dividers.includes("help"), false);
+  assert.equal(dividers[0], groups[1][0]);
+  assert.equal(dividers.filter((key) => key === groups[1][0]).length, 1);
+  assert.match(helpItem().label, /\.\.\.$/);
+  // Live on a report: a report's own vocabulary needs the reference too.
+  assert.equal(reportDisabledOptionKeys().includes("help"), false);
 });
 
-test("the panel is the app's own panel shell, over the board", () => {
+test("the menu's first row is built as an action that opens the panel over the board", () => {
+  // Built in buildOptionsMenu ahead of every toggle, from helpItem, as the
+  // Sprints, Holidays, Tags and Milestones entries are.
+  assert.match(APP, /function buildOptionsMenu\(\) \{[\s\S]{0,600}optionGroupDividers = optionDividerKeys\(items\);[\s\S]{0,200}optionsMenu\.appendChild\(buildHelpItem\(\)\);/);
+  assert.match(APP, /function buildHelpItem\(\) \{[\s\S]{0,400}openOptions\(false\);\s*openHelpPanel\(btn\);/);
+  assert.match(APP, /btn\.id = "option-help";/);
+  assert.match(APP, /btn\.setAttribute\("role", "menuitem"\)/);
+  // And the row it opens is the same panel shell as any other panel's.
   assert.match(APP, /function openHelpPanel\(trigger\) \{\n\s+var node = panelShell\("Help"/);
-  assert.match(APP, /getElementById\("help-btn"\)[\s\S]{0,200}openHelpPanel\(e\.currentTarget\)/);
   // Opened, never docked: the panel goes into the shared panel layer, which is
   // what Escape closes and what returns focus to the trigger.
   assert.match(APP, /if \(e\.key === "Escape" && panel\) closePanel\(true\);/);

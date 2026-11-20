@@ -31,7 +31,7 @@ import {
   stepSettingRefusal
 } from "./lib/panels.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
@@ -4893,12 +4893,6 @@ function bindChrome() {
   // shortcut is bound for either.
   if (undoBtn) undoBtn.addEventListener("click", undoPlan);
   if (redoBtn) redoBtn.addEventListener("click", redoPlan);
-  // The `?` between the redo control and the Options glyph opens the help:
-  // opened over the board and closed again, so it costs the grid nothing.
-  var helpBtn = document.getElementById("help-btn");
-  if (helpBtn) {
-    helpBtn.addEventListener("click", function (e) { openHelpPanel(e.currentTarget); });
-  }
   panelLayer.addEventListener("pointerdown", function (e) {
     if (e.target === panelLayer) closePanel(true);
   });
@@ -5630,6 +5624,8 @@ function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
   var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines, assignmentsVisible);
   optionGroupDividers = optionDividerKeys(items);
+  // Help opens the menu, in the first group of its own; then the view group.
+  optionsMenu.appendChild(buildHelpItem());
   // Show archived is drawn after the view group rather than in this pass: it
   // is a group of its own, because it decides which records are included
   // rather than how they are drawn. optionGroups states that shape.
@@ -5729,6 +5725,22 @@ function buildResetViewItem() {
   btn.setAttribute("role", "menuitem");
   btn.appendChild(document.createTextNode("Reset view"));
   btn.addEventListener("click", function () { resetView(); });
+  return btn;
+}
+
+/* The Help entry: an action, not a toggle, and the menu's first row. It opens
+ * the help panel over the board, as the four panel entries below it do. */
+function buildHelpItem() {
+  var item = helpItem();
+  var btn = el("button", optionRowClass(item.key) + " options__item--action");
+  btn.type = "button";
+  btn.id = "option-help";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openHelpPanel(btn);
+  });
   return btn;
 }
 
@@ -6001,10 +6013,10 @@ function openPlanFilePanel(trigger) {
 
 /*
  * The help: the feature reference and the glossary, searched, opened from the
- * `?` in the top bar. It is opened and never docked - the app's own panel shell
- * over the board, so the grid does not move and nothing about the plan is
- * touched. Escape closes it and focus goes back to the glyph, as every other
- * panel's does.
+ * first entry of the Options menu. It is opened and never docked - the app's
+ * own panel shell over the board, so the grid does not move and nothing about
+ * the plan is touched. Escape closes it and focus goes back to the row that
+ * opened it, as every other panel's does.
  *
  * The two documents are read from the server's allowlisted route every time the
  * panel opens, so it can never show a copy that has moved on, and nothing of
