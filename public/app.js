@@ -21,6 +21,7 @@ import {
   withTag,
   withoutTag,
   archivedPersonRefusal,
+  assignmentsHiddenRefusal,
   dropRefusal,
   rangeSettingRefusal,
   clampShare,
@@ -290,6 +291,12 @@ var milestoneMarkList = [];
 // a measurement, never the measurement: the row height, the over-allocation
 // band and every figure are drawn from the plan alone.
 var availabilityLines = VIEW_DEFAULTS.availabilityLines;
+// Whether each row draws its Assignment blocks, on by default so an untouched
+// plan looks exactly as it did. A view setting kept in the config and restored
+// on load, like the line above - never written to the plan. With it off no
+// block is built at all rather than drawn and hidden, so the work is still
+// there in every figure and only its drawing is gone.
+var assignmentsVisible = VIEW_DEFAULTS.assignments;
 var gridDividers = true;
 // The Stack rail's folded state: one of the view settings kept in the config
 // and restored on load, like Zoom and Row height; never written to the plan.
@@ -864,11 +871,18 @@ function drawRows() {
       });
     }
 
-    layoutPerson(person, gridAssignments).forEach(function (group) {
-      group.segs.forEach(function (s) {
-        row.appendChild(blockFor(group, s));
+    // With the setting off no block is built at all, rather than drawn and
+    // hidden: the row holds no invisible element, and the over-allocation
+    // hatch - a child of its block - goes with it, since with nothing drawn
+    // above the ceiling there is nothing for it to mark. The ceiling line is
+    // its own setting and is untouched by this one.
+    if (assignmentsVisible) {
+      layoutPerson(person, gridAssignments).forEach(function (group) {
+        group.segs.forEach(function (s) {
+          row.appendChild(blockFor(group, s));
+        });
       });
-    });
+    }
 
     body.appendChild(row);
   });
@@ -1370,6 +1384,18 @@ function drawStack() {
 
 /* --- interaction: drag a project from the Stack onto a row --------------- */
 
+/*
+ * Whether the grid may make a new Assignment at all, and the message when it
+ * may not: an archived Person or Project is refused by name, and while the
+ * assignment blocks are hidden every grid gesture is refused - a drag, a drop
+ * or a paste would otherwise create work that lands in a row with nothing
+ * drawn to show it. Returns the message, or null when the gesture may go on.
+ */
+function gridCreateRefusal(person, project) {
+  if (!assignmentsVisible) return assignmentsHiddenRefusal();
+  return dropRefusal(person, project);
+}
+
 // A ghost of the extent a drag would create or move: a block outline in the
 // row it would land on, with a small label carrying its dates. `--i`/`--n`
 // place it, `--blk-bottom`/`--blk-height` size it and `--block-ink` gives it
@@ -1454,9 +1480,11 @@ function beginStackDrag(e, project) {
     lastDragAt = Date.now();
     var row = rowInfoAt(ev.clientX, ev.clientY);
     if (!row) return;
-    // An archived Person or Project cannot take new work: the drop is refused
-    // with a message rather than reviving it or doing nothing.
-    var refusal = dropRefusal(personById[row.personId], project);
+    // An archived Person or Project cannot take new work, and the grid makes
+    // nothing at all while the blocks are hidden: the drop is refused with a
+    // message rather than reviving it, drawing something invisible, or doing
+    // nothing.
+    var refusal = gridCreateRefusal(personById[row.personId], project);
     if (refusal) {
       showError(new Error(refusal));
       render();
@@ -1557,7 +1585,7 @@ function updatePastePreview() {
     pasteDropRow.classList.add("is-drop");
   }
   var project = projectById[clipboardAssignment.projectId];
-  if (!project || dropRefusal(personById[row.personId], project)) {
+  if (!project || gridCreateRefusal(personById[row.personId], project)) {
     if (pastePreview) { pastePreview.node.remove(); pastePreview = null; }
     return;
   }
@@ -1574,7 +1602,7 @@ function pasteAssignment(row, dayIdx) {
   var copy = clipboardAssignment;
   var project = projectById[copy.projectId];
   if (!project) return;
-  var refusal = dropRefusal(personById[row.personId], project);
+  var refusal = gridCreateRefusal(personById[row.personId], project);
   if (refusal) {
     showError(new Error(refusal));
     render();
@@ -1791,8 +1819,12 @@ function onBodyPointerDown(e) {
   if (!row) return;
   var person = personById[row.getAttribute("data-person")];
   if (!person) return;
-  if (person.archived) {
-    showError(new Error(archivedPersonRefusal(person.name)));
+  // Dragging on a row is how an Assignment is made, so while the blocks are
+  // hidden the draw is refused with a message that names the setting rather
+  // than opening a panel over a row with nothing on it.
+  var refusal = gridCreateRefusal(person, null);
+  if (refusal) {
+    showError(new Error(refusal));
     return;
   }
   beginRangeDraw(person, row, e);
@@ -5316,6 +5348,7 @@ function currentView() {
     holidays: highlightHolidays,
     milestones: milestoneRules,
     availabilityLines: availabilityLines,
+    assignments: assignmentsVisible,
     dividers: gridDividers,
     minimap: minimapEnabled,
     marker: markerVisible,
@@ -5346,6 +5379,7 @@ function adoptView(view) {
   highlightHolidays = v.holidays;
   milestoneRules = v.milestones;
   availabilityLines = v.availabilityLines;
+  assignmentsVisible = v.assignments;
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
   markerVisible = v.marker;
@@ -5453,6 +5487,7 @@ var OPTION_ACTIONS = {
   holidays: function () { setHighlightHolidays(!highlightHolidays); },
   milestones: function () { setMilestoneRules(!milestoneRules); },
   availabilityLines: function () { setAvailabilityLines(!availabilityLines); },
+  assignments: function () { setAssignmentsVisible(!assignmentsVisible); },
   dividers: function () { setGridDividers(!gridDividers); },
   minimap: function () { setMinimapEnabled(!minimapEnabled); },
   marker: function () { setMarkerVisible(!markerVisible); }
@@ -5502,6 +5537,17 @@ function setAvailabilityLines(on) {
   persistView();
 }
 
+// The assignment blocks are a view change in the same shape: they update the
+// menu, redraw the rows, and store the new view. The plan file is untouched and
+// no figure moves - hidden blocks are hidden drawing, not hidden work, so the
+// People column's figures and the Marker's totals are the same either way.
+function setAssignmentsVisible(on) {
+  assignmentsVisible = on === true;
+  updateOptionsMenu();
+  render();
+  persistView();
+}
+
 function setGridDividers(on) {
   gridDividers = on;
   updateOptionsMenu();
@@ -5531,7 +5577,7 @@ function setMarkerVisible(on) {
 }
 
 function updateOptionsMenu() {
-  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines).forEach(function (item) {
+  optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines, assignmentsVisible).forEach(function (item) {
     var btn = optionButtons[item.key];
     if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
   });
@@ -5567,7 +5613,7 @@ function initPalette() {
 
 function buildOptionsMenu() {
   optionsMenu.innerHTML = "";
-  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines);
+  var items = optionsItems(showArchived, highlightWeekends, gridDividers, minimapEnabled, highlightHolidays, milestoneRules, markerVisible, availabilityLines, assignmentsVisible);
   optionGroupDividers = optionDividerKeys(items);
   // Show archived is drawn after the view group rather than in this pass: it
   // is a group of its own, because it decides which records are included

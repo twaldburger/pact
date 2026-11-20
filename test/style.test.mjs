@@ -200,6 +200,55 @@ test("a hidden availability line is not built, and no figure moves without it", 
   assert.equal(hatch.slice(0, hatch.indexOf("b.appendChild(hatch)")).includes("availabilityLines"), false);
 });
 
+/* --- the assignment blocks ------------------------------------------------ */
+
+// A row's blocks are drawn only while their own view setting says so, and
+// hiding them hides drawing rather than work: every figure is read from the
+// plan. The over-allocation hatch is a child of its block, so it goes with the
+// blocks; the availability line is its own setting and stays independent.
+// Pinned here because the suite has no DOM to draw a row with.
+test("hidden assignments are not built, and no figure moves without them", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  // Built behind the setting, so with it off no .blk element exists in any row
+  // at all - not one drawn and hidden.
+  assert.match(APP, /function drawRows\(\)[\s\S]*if \(assignmentsVisible\) \{\s*layoutPerson\(person, gridAssignments\)/);
+  // The one place a block is made and the one place the loop calls it, so the
+  // guard above is the whole of what the setting controls.
+  assert.equal(APP.match(/function blockFor\(/g).length, 1);
+  assert.equal(APP.match(/row\.appendChild\(blockFor\(group, s\)\);/g).length, 1);
+  // The hatch is built inside its block and appended to it: with no blocks
+  // built there is no band left to mark, and no second guard to fall out of
+  // step with this one.
+  assert.equal(APP.match(/el\("span", "blk__hatch"\)/g).length, 1);
+  const blockFor = APP.slice(APP.indexOf("function blockFor("), APP.indexOf("function drawBlockLabels("));
+  assert.ok(blockFor.includes("b.appendChild(hatch)"), "the hatch must be its block's child");
+  // The ceiling line is its own setting: the block guard never reaches it.
+  const ceiling = APP.slice(APP.indexOf("if (availabilityLines) {"), APP.indexOf("var ceiling"));
+  assert.equal(ceiling.includes("assignmentsVisible"), false);
+  assert.equal(/if \(availabilityLines && assignmentsVisible\)/.test(APP), false);
+  // Every figure is read from the plan, not from the drawn blocks: the People
+  // column's assigned/available and the Marker's totals are the same either
+  // way, so nothing in the figure pass can consult the setting.
+  const figures = APP.slice(APP.indexOf("function updateFigures()"), APP.indexOf("function drawStack()"));
+  assert.match(figures, /totalAt\(person, markerIndex\)/);
+  assert.equal(figures.includes("assignmentsVisible"), false);
+});
+
+// The grid is where an Assignment is drawn, dragged, dropped and pasted, so
+// with the blocks hidden every one of those gestures is refused with a message
+// naming the setting rather than creating work in a row with nothing to show.
+test("a hidden assignment grid refuses to create, and says why", () => {
+  const APP = fs.readFileSync(path.join(PUBLIC, "app.js"), "utf8");
+  assert.match(APP, /function gridCreateRefusal\(person, project\) \{\s*if \(!assignmentsVisible\) return assignmentsHiddenRefusal\(\);/);
+  // The draw on a row, the drop from the rail, the paste preview and the paste
+  // itself all pass through it - no gesture creates work straight past it.
+  ["function onBodyPointerDown(e) {", "function updatePastePreview() {", "function pasteAssignment(row, dayIdx) {"].forEach((head) => {
+    const body = APP.slice(APP.indexOf(head), APP.indexOf(head) + 900);
+    assert.ok(body.includes("gridCreateRefusal("), head + " must refuse before creating");
+  });
+  assert.equal(APP.match(/var refusal = gridCreateRefusal\(personById\[row\.personId\], project\);/g).length, 2);
+});
+
 /* --- the Grid dividers and the axis separators share the boundary --------- */
 
 // The full-height Grid dividers sit on the true day boundary

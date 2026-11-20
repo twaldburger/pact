@@ -21,7 +21,7 @@ import { tagKeys, tagColourSlots } from "./tags.mjs";
  * they are drawn, it is session-only and Reset view leaves it alone, so
  * optionGroups below gives it a group of its own.
  */
-export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible, availabilityLines) {
+export function optionsItems(showArchived, highlightWeekends, gridDividers, minimap, highlightHolidays, milestoneRules, markerVisible, availabilityLines, assignmentsVisible) {
   return [
     { key: "archived", label: "Show archived", checked: !!showArchived },
     { key: "weekends", label: "Weekends", checked: !!highlightWeekends },
@@ -31,6 +31,9 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
     // reader sees rather than the code's "ceiling", and plural like Grid
     // dividers beside it, since every row draws one.
     { key: "availabilityLines", label: "Availability lines", checked: !!availabilityLines },
+    // The blocks each row draws its work as. A noun beside Availability lines,
+    // named for what is drawn rather than for the Assignment it draws.
+    { key: "assignments", label: "Assignments", checked: !!assignmentsVisible },
     { key: "dividers", label: "Grid dividers", checked: !!gridDividers },
     { key: "minimap", label: "Minimap", checked: !!minimap },
     { key: "marker", label: "Marker", checked: !!markerVisible }
@@ -73,17 +76,18 @@ export function optionDividerKeys(items) {
 
 /*
  * The menu entries a report cannot act on, by key: the grid's own display
- * toggles (the weekend band, the holiday band, the availability lines, the Grid
- * dividers, the Minimap and the Marker) and Reset view. A report page draws no grid and makes no plan
- * writes, so these are disabled rather than moved or hidden; the plan-facing
- * entries, Show archived - which decides which records a report includes, so
- * it is a group of its own - and Milestones stay live, since a report's chart
+ * toggles (the weekend band, the holiday band, the availability lines, the
+ * assignment blocks, the Grid dividers, the Minimap and the Marker) and Reset
+ * view. A report page draws no grid and makes no plan writes, so these are
+ * disabled rather than moved or hidden; the plan-facing entries, Show archived
+ * - which decides which records a report includes, so it is a group of its own
+ * - and Milestones stay live, since a report's chart
  * draws the milestone rules and takes the same switch the grid does.
  * Expressed here, beside the menu's own items, so the menu and the report
  * cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
-  return ["weekends", "holidays", "availabilityLines", "dividers", "minimap", "marker", "reset-view"];
+  return ["weekends", "holidays", "availabilityLines", "assignments", "dividers", "minimap", "marker", "reset-view"];
 }
 
 /*
