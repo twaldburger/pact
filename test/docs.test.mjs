@@ -275,5 +275,10 @@ test("the README's What it does section is an offer, not a how-to", () => {
   )].map((match) => match[0].toLowerCase());
   assert.deepEqual(gestures, [], "a gesture belongs in docs/features.md, not in what the plan offers");
   assert.equal(section.filter((line) => line.startsWith("- ")).length, 8);
-  assert.ok(section.length <= 25, "the section is " + section.length + " lines");
+  // The budget is generous on purpose: a capability a first-time reader cannot
+  // follow is worse than a long one, and 25 lines forced the prose into clauses
+  // that read as fragments. The gesture ban above is the rule that matters; this
+  // only stops the section quietly turning into the manual it is meant to
+  // summarise - a manual is far longer than this, and says how rather than what.
+  assert.ok(section.length <= 50, "the section is " + section.length + " lines");
 });
