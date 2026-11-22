@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 /*
  * PACT's tool: answer a question about a plan from a checkout, with no server
- * and no browser, and change one Assignment through the running app.
+ * and no browser, and change a plan through the running app.
  *
  * This file is the front end only: it parses argv, resolves the plan file,
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. Reads never touch the network. The one write,
- * `assignment move --apply`, sends the query module's patch to the app's own
- * PATCH /api/assignments/<id> - the route and body the interface itself uses -
- * so the validation, the atomic write and the changed-underneath guard are the
- * app's, and the change is one step back with its Undo control.
+ * is the report's own. Reads never touch the network. The two writes,
+ * `assignment move --apply` and `assignment add --apply`, send the query
+ * module's patch to the app's own PATCH /api/assignments/<id> and its create
+ * body to POST /api/assignments - the routes and bodies the interface itself
+ * uses - so the validation, the atomic write and the changed-underneath guard
+ * are the app's, and the change is one step back with its Undo control. Nothing
+ * here deletes anything: there is no such command, and no flag that reaches
+ * one.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -79,10 +82,11 @@ const COMMANDS = {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-One command changes a plan: assignment move, which writes through the running
-app so the change is one step back with its Undo control. The figures are
-computed by the report's own modules over the period you ask for, so they are
-the report page's numbers.
+Two commands change a plan: assignment add creates an Assignment, and
+assignment move reschedules or resizes one. Both write through the running app,
+so the change is one step back with its Undo control. The figures are computed
+by the report's own modules over the period you ask for, so they are the report
+page's numbers. The tool never deletes anything; see Deleting below.
 
 Usage
   node bin/pact.mjs --help
@@ -109,6 +113,9 @@ Commands
       node bin/pact.mjs holidays
   milestones                       the Milestones as stored
       node bin/pact.mjs milestones
+  assignment add <project>         create one Assignment, through the app
+      node bin/pact.mjs assignment add Atlas --person "Anna Meier" \\
+          --from 2026-11-23 --to 2026-12-04 --share 60
   assignment move <project>        reschedule or resize one Assignment, through the app
       node bin/pact.mjs assignment move Atlas --person "Anna Meier" \\
           --from 2026-11-02 --to 2026-11-20
@@ -124,15 +131,35 @@ Options
   -h, --help           this text; --help works before or after a command
   --period=<period> and --plan=<path> also work.
 
-assignment move takes these as well
+assignment add and assignment move take these as well
   --person <name>      the Person the Assignment is on; required
-  --from <date>        the new start date, as 2026-11-02
-  --to <date>          the new end date, as 2026-11-20
-  --share <percent>    the new Allocation, a whole number from 1 to 100
+  --from <date>        add: the start date, as 2026-11-23; required
+                       move: the new start date, as 2026-11-02
+  --to <date>          add: the end date, as 2026-12-04; required
+                       move: the new end date, as 2026-11-20
+  --share <percent>    the Allocation, a whole number from 1 to 100
+                       add: 100 when left out
+                       move: the new Allocation, kept when left out
   --apply              write it; without this, and with --dry-run, nothing is written
-  --dry-run            the diff, and nothing written: the same as the default
+  --dry-run            the preview, and nothing written: the same as the default
 
-Writing an Assignment
+Creating an Assignment
+  assignment add creates one Assignment on a Project and a Person, over --from
+  and --to at --share, and prints what it would create: its dates and
+  Allocation, its FTE-days, the Person's Allocated of their Capacity after it,
+  the Project's new total, and every Assignment the Person already holds on
+  those dates, named one by one. Over-allocation is allowed, never refused, so a
+  new Assignment can put a Person over their Capacity; the preview states it
+  before it is made rather than after.
+
+  --apply sends the create body through the app's own POST /api/assignments, so
+  the server mints the id, and its validation, its atomic write and its guard
+  against a file changed underneath all apply. The tool then reads the plan back
+  and confirms the Assignment the app holds has the Project, Person, dates and
+  Allocation it asked for; a creation the plan does not show exits non-zero and
+  says it did not land.
+
+Rescheduling or resizing an Assignment
   assignment move identifies one Assignment by a Project and a Person, and sets
   its dates and its Allocation: --from and --to are the dates, --share the
   Allocation, and a field left out keeps what the Assignment holds.
@@ -154,13 +181,21 @@ Writing an Assignment
   The change is one step back with the app's Undo control, because the app made
   it: nothing about the write bypasses the plan store.
 
+Deleting
+  The tool never deletes anything. There is no command and no flag that removes
+  a Person, a Project, an Assignment or a Milestone, and no --force to reach
+  one: what this tool can do to a plan is add an Assignment and move one. That
+  boundary is deliberate, and it is not a gap waiting to be filled. Removing
+  work from a plan is done in the app, where it can be seen, and Undo takes it
+  back.
+
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
-  Reads never write it. Its one write, assignment move --apply, goes through the
-  running app's API, so validation, the atomic write and the guard against a
-  file changed underneath are the app's, not a second copy here. It reads the
-  live plan, so archived People, Projects and Assignments are left out, as on
-  the default grid.
+  Reads never write it. Its writes, assignment add --apply and assignment move
+  --apply, go through the running app's API, so validation, the atomic write and
+  the guard against a file changed underneath are the app's, not a second copy
+  here. It reads the live plan, so archived People, Projects and Assignments are
+  left out, as on the default grid.
 
 Subjects
   A name or an id, case-insensitive: person anna and person "Anna Meier" find
@@ -190,6 +225,13 @@ JSON
      "units":{...},"people":[{"id":"...","name":"...","capacity":16,
      "allocated":19.2,"remaining":-3.2,"ofOffer":1.2,"overAllocated":true,
      "buckets":[...]}],"totals":{...}}
+
+  assignment add adds "action" and "applied" (false until it is written), and
+  once written "server" and "readBack" (the id and the dates, Project, Person
+  and Allocation the app's plan holds afterwards). Its "assignment" is the one
+  it would create, "create" the body POST /api/assignments takes - no id, since
+  the server mints one - and "overlaps" the Assignments the Person already
+  holds on those dates.
 
   assignment move adds "action" and "applied" (false until it is written), and
   once written "server" and "readBack" (the dates and Allocation the app's plan
@@ -736,6 +778,67 @@ function renderAssignmentMove(data) {
   return lines.join("\n") + "\n";
 }
 
+function renderAssignmentAdd(data) {
+  const lines = header(data);
+  const created = data.assignment;
+  lines.push("");
+  lines.push("New Assignment");
+  lines.push("  " + created.project + " / " + created.person);
+  lines.push("  " + created.start + " to " + created.end + ", " + created.share + "%");
+  lines.push("  " + figure(data.fteDays) + " FTE-days");
+  lines.push("");
+
+  const pairs = [[
+    data.person.name + ": " + positionText(data.person.before),
+    "->  " + positionText(data.person.after)
+  ]];
+  // An Absence Project contributes no FTE-day, so it has no total to compare.
+  if (!data.project.absence) {
+    pairs.push([
+      data.project.name + ": " + figure(data.project.before.allocated) + " FTE-days",
+      "->  " + figure(data.project.after.allocated) + " FTE-days"
+    ]);
+  }
+  lines.push.apply(lines, renderPairs(pairs.map(function (pair) {
+    return ["  " + pair[0], pair[1]];
+  })));
+
+  if (data.project.absence) {
+    lines.push("");
+    lines.push("Note: " + created.project + " is an Absence Project, so this");
+    lines.push("Assignment is the Person's time away: it changes Capacity, not Allocated.");
+  }
+
+  lines.push("");
+  if (data.overlaps.length === 0) {
+    lines.push("No other Assignment of " + created.person + " meets " + created.start +
+      " to " + created.end + ".");
+  } else {
+    lines.push(created.person + " already holds " +
+      (data.overlaps.length === 1 ? "an Assignment" : "Assignments") + " on those dates:");
+    lines.push.apply(lines, renderColumns(
+      ["Project", "Start", "End", "Allocation (%)", "Sharing"],
+      data.overlaps.map(function (overlap) {
+        return [overlap.project, overlap.start, overlap.end, String(overlap.share),
+          overlap.overlapStart + " to " + overlap.overlapEnd];
+      }),
+      [false, false, false, true, false]
+    ).map(function (line) { return "  " + line; }));
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const readBack = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + readBack.id + ",");
+  lines.push("  " + readBack.project + " / " + readBack.person + "  " + readBack.start +
+    " to " + readBack.end + " at " + readBack.share + "%.");
+  lines.push("Undo: the creation is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
 function rejectForeignOptions(args) {
   [
     ["person", "--person"], ["from", "--from"], ["to", "--to"], ["share", "--share"],
@@ -744,16 +847,24 @@ function rejectForeignOptions(args) {
     const key = entry[0];
     const flag = entry[1];
     const taken = key === "apply" || key === "dryRun" ? args[key] : args[key] !== undefined;
-    if (taken) throw usage(args.command + " does not take " + flag + "; assignment move does");
+    if (taken) throw usage(args.command + " does not take " + flag +
+      "; the assignment commands do");
   });
 }
 
-async function runAssignmentMove(args) {
+async function runAssignment(args) {
   const action = args.subject.length > 0 ? args.subject[0] : "";
   if (action === "") {
-    throw usage("assignment needs an action; the action is move: assignment move <project> --person <name>");
+    throw usage("assignment needs an action; the actions are move and add: " +
+      "assignment move <project> --person <name>, or assignment add <project> --person <name> " +
+      "--from <date> --to <date>");
   }
-  if (action !== "move") throw usage('unknown assignment action "' + action + '"; the action is move');
+  if (action === "move") return runAssignmentMove(args);
+  if (action === "add") return runAssignmentAdd(args);
+  throw usage('unknown assignment action "' + action + '"; the actions are move and add');
+}
+
+async function runAssignmentMove(args) {
   const project = args.subject.slice(1).join(" ").trim();
   if (project === "") throw usage("assignment move needs a Project name");
   if (args.person === undefined) throw usage("assignment move needs --person <name>");
@@ -789,6 +900,43 @@ async function runAssignmentMove(args) {
 
   if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
   else process.stdout.write(renderAssignmentMove(data));
+}
+
+async function runAssignmentAdd(args) {
+  const project = args.subject.slice(1).join(" ").trim();
+  if (project === "") throw usage("assignment add needs a Project name");
+  if (args.person === undefined) throw usage("assignment add needs --person <name>");
+  if (args.from === undefined) throw usage("assignment add needs --from <date>");
+  if (args.to === undefined) throw usage("assignment add needs --to <date>");
+  if (args.apply && args.dryRun) throw usage("--apply and --dry-run contradict each other");
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const created = query.assignmentAdd(plan, {
+    project: project,
+    person: args.person,
+    from: args.from,
+    to: args.to,
+    share: args.share,
+    period: args.period
+  });
+  const data = Object.assign({
+    command: "assignment",
+    action: "add",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, created);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = await applyAdd(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderAssignmentAdd(data));
 }
 
 /* --- the running app, for the one write ---------------------------------- */
@@ -908,6 +1056,41 @@ async function applyMove(base, diff, planPath) {
   return { start: landed.start, end: landed.end, share: landed.share };
 }
 
+// The creation: the app's own POST /api/assignments, then a read back of its
+// plan. The reply names the Assignment the server minted; the write is done
+// when that Assignment is in the plan the tool reads, holding what was asked
+// for, never when the request returned 201.
+async function applyAdd(base, add, planPath) {
+  await requireSamePlan(base, planPath);
+  const reply = await ask(base, "POST", "/api/assignments", add.create);
+  const plan = await ask(base, "GET", "/api/plan");
+  const landed = ((plan && plan.assignments) || []).find(function (assignment) {
+    return assignment.id === reply.id;
+  });
+  if (!landed) {
+    throw new CliError("the creation did not land: the app's plan holds no Assignment " +
+      reply.id, "write-lost", 1,
+      "the app is the authority here: read the plan there before trying again");
+  }
+  const asked = add.create;
+  if (landed.projectId !== asked.projectId || landed.personId !== asked.personId ||
+      landed.start !== asked.start || landed.end !== asked.end || landed.share !== asked.share) {
+    throw new CliError("the creation did not land: the app's plan holds " + landed.projectId +
+      " / " + landed.personId + " from " + landed.start + " to " + landed.end + " at " +
+      landed.share + "%, not " + asked.projectId + " / " + asked.personId + " from " +
+      asked.start + " to " + asked.end + " at " + asked.share + "%", "write-lost", 1,
+      "the app is the authority here: read the plan there before trying again");
+  }
+  return {
+    id: landed.id,
+    project: add.assignment.project,
+    person: add.assignment.person,
+    start: landed.start,
+    end: landed.end,
+    share: landed.share
+  };
+}
+
 /* --- the run ------------------------------------------------------------- */
 
 function reportError(err, json) {
@@ -939,7 +1122,7 @@ async function run() {
     return;
   }
   if (args.command === "assignment") {
-    await runAssignmentMove(args);
+    await runAssignment(args);
     return;
   }
   const spec = COMMANDS[args.command];
