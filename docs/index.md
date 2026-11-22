@@ -16,6 +16,8 @@ sits outside it is listed first.
   rules for answering.
 - [features.md](features.md) - the feature reference: what each capability does,
   how it behaves and where its controls live.
+- [agent-tooling.md](agent-tooling.md) - the command line: the reads, the writes,
+  the limits, and the command table the tool generates for itself.
 - [scope.md](scope.md) - what the first version covers, and what is deliberately
   left out of it.
 - [checking-appearance.md](checking-appearance.md) - how to check what the app

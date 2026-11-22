@@ -11,8 +11,10 @@
  *
  * The README is held to the same rule one step out: every relative link in it
  * has to name a file that exists and, where it carries a fragment, an anchor
- * that document defines. The README is the front door, so a link that goes
- * nowhere is the one failure a reader is certain to meet.
+ * that document defines. So is `docs/agent-tooling.md`, the one page whose
+ * links are followed from inside the app as well as from the repository. The
+ * README is the front door, so a link that goes nowhere is the one failure a
+ * reader is certain to meet.
  *
  * What this cannot do is grade the prose. A section that exists may still be
  * wrong, thin or stale in its detail, and a green run says the section is
@@ -243,21 +245,32 @@ function localLinks(markdown) {
     .filter((target) => !/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith("#"));
 }
 
-test("every relative link in README.md names a file, and an anchor, that exists", () => {
+// Every relative link in a document resolved from the directory it sits in:
+// the file it names, and the heading or glossary term its fragment names, by
+// the app's own anchor rule.
+function deadLinks(markdown, directory) {
   const dead = [];
-  for (const target of localLinks(fs.readFileSync(README, "utf8"))) {
+  for (const target of localLinks(markdown)) {
     const [file, anchor] = target.split("#");
-    const full = path.join(ROOT, file);
+    const full = path.join(directory, file);
     if (!fs.existsSync(full)) {
       dead.push(target + " (no such file)");
     } else if (anchor && file.endsWith(".md") &&
       !helpAnchors(fs.readFileSync(full, "utf8")).includes(anchor)) {
-      // The anchor rule is the app's own: a heading's slug, or a glossary
-      // term's, which is what the documents already link to each other by.
       dead.push(target + " (no such heading or term)");
     }
   }
-  assert.deepEqual(dead, [], "these README.md links are dead ends");
+  return dead;
+}
+
+test("every relative link in README.md names a file, and an anchor, that exists", () => {
+  assert.deepEqual(deadLinks(fs.readFileSync(README, "utf8"), ROOT), [],
+    "these README.md links are dead ends");
+});
+
+test("every relative link in docs/agent-tooling.md names a file, and an anchor, that exists", () => {
+  assert.deepEqual(deadLinks(pageText("agent-tooling.md"), DOCS), [],
+    "these docs/agent-tooling.md links are dead ends");
 });
 
 // A section of the README, by its heading, with its body as its own lines.

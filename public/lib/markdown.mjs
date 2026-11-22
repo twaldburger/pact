@@ -1,15 +1,20 @@
 /*
  * PACT's Markdown subset: the little of Markdown the in-app help can draw.
  *
- * The help panel reads `docs/features.md` and `GLOSSARY.md` out of the
- * repository, so it must draw whatever those two documents actually contain -
- * and nothing more than it needs. This is a deliberate subset, not a Markdown
- * implementation: headings, paragraphs, unordered and ordered lists, tables,
- * links, inline emphasis and code spans, a rule, and the front matter block a
- * page opens with (which is metadata, so it is stripped rather than drawn).
+ * The help panel reads `docs/features.md`, `GLOSSARY.md` and
+ * `docs/agent-tooling.md` out of the repository, so it must draw whatever those
+ * documents actually contain - and nothing more than it needs. This is a
+ * deliberate subset, not a Markdown implementation: headings, paragraphs,
+ * unordered and ordered lists, tables, links, inline emphasis and code spans, a
+ * rule, and the two metadata constructs - the front matter block a page opens
+ * with, and an HTML comment - which are stripped rather than drawn.
  * `MARKDOWN_CONSTRUCTS` names the subset, and `test/help.test.mjs` fails when a
  * document starts using a construct the subset does not list, so the two cannot
  * silently drift apart.
+ *
+ * An HTML comment is how a page carries a note to whoever maintains it - the
+ * command table's begin and end markers are one - so it is dropped before the
+ * text is drawn or searched: the help is read, not edited.
  *
  * The subset is also where the help's two reading rules live, because both are
  * about what a line means rather than about the panel:
@@ -45,23 +50,32 @@ export const MARKDOWN_CONSTRUCTS = Object.freeze([
   "link",
   "emphasis",
   "code",
-  "rule"
+  "rule",
+  "comment"
 ]);
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+// A comment in the source: a note to whoever maintains the document, not to
+// whoever reads it, so it is dropped rather than drawn or searched.
+const COMMENT = /<!--[\s\S]*?-->/g;
+
+function withoutComments(text) {
+  return text.replace(COMMENT, "");
+}
 
 // The page's metadata block, and the text that follows it. A page without one
 // is returned whole, so a document that never gains front matter reads the same.
 export function splitFrontMatter(markdown) {
   const text = String(markdown == null ? "" : markdown);
   const block = FRONT_MATTER.exec(text);
-  if (!block) return { fields: {}, body: text };
+  if (!block) return { fields: {}, body: withoutComments(text) };
   const fields = {};
   for (const line of block[1].split("\n")) {
     const field = /^([A-Za-z-]+):\s*(.*)$/.exec(line.trim());
     if (field) fields[field[1]] = field[2].trim();
   }
-  return { fields: fields, body: text.slice(block[0].length) };
+  return { fields: fields, body: withoutComments(text.slice(block[0].length)) };
 }
 
 export function escapeHtml(text) {

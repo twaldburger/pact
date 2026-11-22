@@ -131,7 +131,7 @@ export function paletteItems(active) {
  * The Help entry in the Options menu: like the Sprints entry below it, an
  * action rather than a checked state, opening the help panel over the board.
  * It states no detail, because there is nothing to count: the panel always
- * holds the two documents it holds. Its label carries the ellipsis every
+ * holds the documents it holds. Its label carries the ellipsis every
  * panel-opener here carries, which is what makes it read as one.
  */
 export function helpItem() {

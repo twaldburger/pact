@@ -18,7 +18,7 @@ behave while finding it, and answers nothing itself.
 | Can it do X, and where is the control? | [docs/features.md](docs/features.md) |
 | What documentation is there at all? | [docs/index.md](docs/index.md) |
 | What did the first version promise, and what was left out? | [docs/scope.md](docs/scope.md) |
-| What are the plan's numbers, and who is over capacity? | `node bin/pact.mjs --help`, the tool over a plan file |
+| What are the plan's numbers, and how do I work the plan from a terminal? | [docs/agent-tooling.md](docs/agent-tooling.md), the command line over a plan file |
 | How do I check how the app draws a plan? | [docs/checking-appearance.md](docs/checking-appearance.md) |
 | Why is it built this way? | [docs/adr/](docs/adr/) |
 | Where is that in the code? | `server.mjs`, `bin/` (the tool), `lib/` (the plan store, its validation and its atomic write, and the queries the tool asks), `public/` (the app, and the pure rules it shares with the tests), `test/` (one file per set of rules) |
