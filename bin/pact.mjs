@@ -7,18 +7,22 @@
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. Reads never touch the network. The ten writes -
+ * is the report's own. Reads never touch the network. The twelve writes -
  * `person add --apply`, `project add --apply`, `assignment move --apply`,
- * `assignment add --apply`, and archive and restore for each of the three
- * collections - send the query module's body, patch or archive to the app's own
+ * `assignment add --apply`, archive and restore for each of the three
+ * collections, and `holiday add --apply` and `holiday remove --apply` - send
+ * the query module's body, patch or archive to the app's own
  * POST /api/people, POST /api/projects, PATCH /api/assignments/<id>,
  * POST /api/assignments, DELETE /api/<collection>/<id> (the archive, as it has
- * always been) and PATCH /api/<collection>/<id> with `archived: false` (the
- * restore) - the routes and bodies the interface itself uses - so the
- * validation, the atomic write and the changed-underneath guard are the app's,
- * and the change is one step back with its Undo control. Nothing here deletes
- * anything: the tool has no route to the app's destruction, no such command,
- * and no flag that reaches one.
+ * always been), PATCH /api/<collection>/<id> with `archived: false` (the
+ * restore) and PATCH /api/plan with the whole rebuilt holiday list (the app's
+ * one holiday write) - the routes and bodies the interface itself uses - so
+ * the validation, the atomic write and the changed-underneath guard are the
+ * app's, and the change is one step back with its Undo control. Nothing here
+ * deletes a record: the tool has no route to the app's destruction, no such
+ * command, and no flag that reaches one. `holiday remove` takes a holiday date
+ * out of one plan setting, which is not a record and is restorable by adding
+ * the date back; see Deleting in the help.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -86,12 +90,13 @@ const COMMANDS = {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-Ten commands change a plan: person add, project add, assignment add and
-assignment move create and change work, and person, project and assignment each
-take archive and restore. All of them write through the running app, so the
-change is one step back with its Undo control. The figures are computed by the
-report's own modules over the period you ask for, so they are the report page's
-numbers. The tool never deletes anything; see Deleting below.
+Twelve commands change a plan: person add, project add, assignment add and
+assignment move create and change work, person, project and assignment each
+take archive and restore, and holiday add and holiday remove each write one
+holiday date for one Location. All of them write through the running app, so
+the change is one step back with its Undo control. The figures are computed
+by the report's own modules over the period you ask for, so they are the report
+page's numbers. The tool never deletes anything; see Deleting below.
 
 Usage
   node bin/pact.mjs --help
@@ -141,6 +146,10 @@ Commands
       node bin/pact.mjs assignment archive Atlas --person "Anna Meier"
   assignment restore <project>     restore an archived Assignment, through the app
       node bin/pact.mjs assignment restore Atlas --person "Anna Meier"
+  holiday add <location> <date>    add one holiday date for one Location, through the app
+      node bin/pact.mjs holiday add Berlin 2026-12-24
+  holiday remove <location> <date> remove one holiday date for one Location, through the app
+      node bin/pact.mjs holiday remove Berlin 2026-12-24
 
 Options
   --period <period>    the stretch to count; without it, the plan's own period
@@ -193,6 +202,39 @@ assignment archive and assignment restore take these as well
                        required, as it is for assignment move
   --apply              write it; without this, and with --dry-run, nothing is written
   --dry-run            the preview, and nothing written: the same as the default
+
+holiday add takes this as well
+  --kind full|half     a whole or a half day off; full when left out, as the
+                       app's own default is
+
+holiday add and holiday remove take these as well
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
+
+Holidays, one date at a time
+  holiday add and holiday remove write one holiday date for one Location. The
+  app's only holiday write replaces every Location's dates at once, so the tool
+  reads the plan, adds or removes that one date, and sends the whole list back
+  rebuilt from that read - through the app's own PATCH /api/plan, so the
+  validation, the atomic write, the changed-underneath guard and the undo step
+  are the app's. The preview therefore prints the resulting holiday list for
+  that Location in full, and says that the other Locations are untouched: a lost
+  entry is visible before it is written. The read back then asks the app's plan
+  for exactly the array that was sent - every Location's group and every date in
+  it, in order - so a rebuild that lost or moved anything fails rather than
+  reports success.
+
+  The preview states what a reader cannot see: the weekday of the date, whether
+  it falls on a weekend, how many People the Location affects, and the FTE-days
+  the date takes off or puts back over --period - all of them the report's own
+  figure for those People, before and after, so a weekend date and a half day
+  say exactly what they change. A date outside the plan period is allowed and
+  noted.
+
+  It refuses a date that is already a holiday there, a date that is not one
+  there, a Location no live Person is at (the holiday would change nothing), a
+  --kind the app does not have, and a date the plan's format does not accept.
+  The kind is the app's own list: full or half.
 
 Creating a Person or a Project
   person add creates one Person and prints what it would create: their name,
@@ -281,13 +323,19 @@ Deleting
   The tool never deletes anything. There is no command and no flag that
   destroys a Person, a Project, an Assignment or a Milestone, and no --force to
   reach one: what this tool can do to a plan is add a Person, add a Project or
-  add an Assignment, move an Assignment, and archive or restore a Person, a
-  Project or an Assignment, and nothing more. That boundary is deliberate, and
-  it is not a gap waiting to be filled.
+  add an Assignment, move an Assignment, archive or restore a Person, a Project
+  or an Assignment, and add or remove one holiday date for one Location, and
+  nothing more. That boundary is deliberate, and it is not a gap waiting to be
+  filled.
 
   Archiving is how work leaves a plan reversibly: archive takes a record out of
   the plan and restore puts it back, and neither destroys anything. A deletion
   stays in the app, where it can be seen, and Undo takes it back.
+
+  holiday remove is not a deletion either: a holiday date is one setting in the
+  plan, not a record, so taking it out edits one entry and destroys nothing. It
+  is restorable by adding the date back, it costs one Undo step, and the plan
+  keeps every other date of that Location and every other Location's list.
 
   A Milestone has no archived state - it either exists or it is destroyed - so
   this tool cannot take one out of a plan at all. It creates and edits no
@@ -295,12 +343,13 @@ Deleting
 
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
-  Reads never write it. Its writes - the four that create and change work, and
-  the six that archive and restore - go through the running app's API, so
-  validation, the atomic write and the guard against a file changed underneath
-  are the app's, not a second copy here. It reads the live plan, so archived
-  People, Projects and Assignments are left out, as on the default grid; a
-  restore is the one command that looks past that rule.
+  Reads never write it. Its writes - the four that create and change work, the
+  six that archive and restore, and the two that add and remove a holiday date -
+  go through the running app's API, so validation, the atomic write and the
+  guard against a file changed underneath are the app's, not a second copy
+  here. It reads the live plan, so archived People, Projects and Assignments
+  are left out, as on the default grid; a restore is the one command that looks
+  past that rule.
 
 Subjects
   A name or an id, case-insensitive: person anna and person "Anna Meier" find
@@ -354,6 +403,17 @@ JSON
   holds afterwards). Its "change" is the patch that was sent: only the fields
   that differ, in the shape the app's PATCH /api/assignments/<id> takes.
 
+  holiday add and holiday remove add "action", "applied" (false until it is
+  written) and, once written, "server" and "readBack" (the Location and the
+  dates the app's plan holds afterwards). Its "location", "date", "kind",
+  "weekday" and "weekend" are the date it writes; "before" and "after" are
+  that Location's dates as stored and as they would be; "others" names the
+  Locations whose holidays are untouched; "people" is each live Person there
+  with the Capacity they offer before and after and the "fteDays" that moves,
+  and "fteDays" is the signed sum of those - negative for capacity taken off,
+  positive for capacity put back; "change" is the body PATCH /api/plan takes,
+  the whole holiday list rebuilt.
+
   person archive and person restore are one shape, and so is each of the other
   two pairs: "kind", "action" and "applied" (false until it is written), then
   "subject" (the record as stored, with the archived state it had before the
@@ -396,7 +456,8 @@ const VALUE_OPTIONS = {
   "--location": "location",
   "--availability": "availability",
   "--colour": "colour",
-  "--note": "note"
+  "--note": "note",
+  "--kind": "kind"
 };
 
 // The options that repeat, each value added to a list: one --tag per tag, since
@@ -414,8 +475,8 @@ function parseArgs(argv) {
   const out = {
     command: null, subject: [], plan: undefined, period: undefined, person: undefined,
     from: undefined, to: undefined, share: undefined, location: undefined,
-    availability: undefined, colour: undefined, note: undefined, tags: [],
-    json: false, apply: false, dryRun: false, help: false
+    availability: undefined, colour: undefined, note: undefined, kind: undefined,
+    tags: [], json: false, apply: false, dryRun: false, help: false
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -847,6 +908,88 @@ function renderMilestones(data) {
   return lines.join("\n") + "\n";
 }
 
+/* --- one holiday date ---------------------------------------------------- */
+
+// What the change is worth over the period, in the report's own FTE-days: taken
+// off for a date that lands on a working day, put back for one removed, and
+// named as no change at all where nothing moves - a weekend date is recorded
+// and takes nothing off anyone, which must read as that rather than as a saving.
+// How many People, in the glossary's own words: one Person, two People.
+function peopleCount(count) {
+  return count + (count === 1 ? " Person" : " People");
+}
+
+function holidayFigure(data) {
+  const who = peopleCount(data.people.length) + " at " + data.location;
+  if (Math.abs(data.fteDays) < 1e-9) {
+    return "Affects " + who + ": no FTE-day changes over " + data.period.label + " figures";
+  }
+  return "Affects " + who + ": " + figure(Math.abs(data.fteDays)) + " FTE-days " +
+    (data.fteDays < 0 ? "off" : "put back over") + " " + data.period.label + " figures";
+}
+
+// The command that puts a removed date back, so a removal is one line from
+// being undone by hand as well as by the app's Undo.
+function holidayAddCommand(data) {
+  return "holiday add \"" + data.location + "\" " + data.date +
+    (data.kind === "half" ? " --kind half" : "");
+}
+
+function renderHoliday(data) {
+  const lines = header(data);
+  lines.push("");
+  lines.push("Holiday");
+  lines.push("  " + data.location + ", " + data.date + ", a " + data.weekday + ", " +
+    (data.kind === "half" ? "half day" : "full day"));
+  lines.push("  " + holidayFigure(data));
+  // The whole list, not the change: a lost entry has to be visible before the
+  // write, and a list is only readable when all of it is there.
+  lines.push("  " + data.location + "'s holidays after this: " + (data.after.length === 0
+    ? "none"
+    : data.after.map(function (day) {
+      return day.date + (day.kind === "half" ? " (half)" : "");
+    }).join(", ")));
+  lines.push("  " + (data.others.length === 0
+    ? "No other Location has holidays configured."
+    : "Other Locations' holidays are untouched: " + data.others.join(", ") + "."));
+
+  if (data.weekend) {
+    lines.push("");
+    lines.push("Note: " + data.date + " is a " + data.weekday + ", a weekend date. It changes");
+    lines.push("no working day, so it takes nothing off anyone's Capacity: the plan records");
+    lines.push("it and no figure moves.");
+  }
+  if (!data.inPeriod) {
+    lines.push("");
+    lines.push("Note: the date lies outside " + data.period.label + ", the period counted, so its");
+    lines.push("FTE-days are not in the figure above.");
+  }
+  if (data.outsidePlan) {
+    lines.push("");
+    lines.push("Note: the date lies outside the plan period (" + data.planPeriod.start + " to " +
+      data.planPeriod.end + "), so the app");
+    lines.push("draws no holiday band for it; the plan still records it.");
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const back = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + back.location +
+    " holds " + (back.dates.length === 0 ? "no dates" : countText(back.dates.length, "date")) +
+    ", and every other");
+  lines.push("Location's holidays are exactly as they were.");
+  lines.push("Undo: the change is one step back with the app's Undo control.");
+  if (data.action === "remove") {
+    lines.push("");
+    lines.push("Nothing else was touched: a holiday date is one plan setting, not a record,");
+    lines.push("and nothing was destroyed. Put it back with: " + holidayAddCommand(data));
+  }
+  return lines.join("\n") + "\n";
+}
+
 const RENDERERS = {
   plan: renderPlan,
   people: renderPeople,
@@ -1219,10 +1362,14 @@ function refuseOptions(args, keys, where) {
 }
 
 const READ_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "colour", "note", "tags", "apply", "dryRun"];
-const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "tags"];
-const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour"];
-const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "location", "availability"];
+  "colour", "note", "kind", "tags", "apply", "dryRun"];
+const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "kind", "tags"];
+const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour", "kind"];
+const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "location", "availability", "kind"];
+// A holiday is named by its Location, its date and its kind, and by nothing a
+// Person, a Project or an Assignment is named by.
+const HOLIDAY_REFUSALS = ["person", "from", "to", "share", "location", "availability",
+  "colour", "note", "tags"];
 
 function rejectForeignOptions(args) {
   refuseOptions(args, READ_REFUSALS, "the commands that change a plan do");
@@ -1403,7 +1550,7 @@ async function runProjectAdd(args) {
 // Allocation. --apply and --dry-run are theirs, as they are every write's.
 const ASSIGNMENT_ARCHIVE_REFUSALS = ASSIGNMENT_REFUSALS.concat(["from", "to", "share"]);
 const RECORD_ARCHIVE_REFUSALS = ["person", "from", "to", "share", "location",
-  "availability", "colour", "note", "tags"];
+  "availability", "colour", "note", "kind", "tags"];
 
 // The six commands are one command with two directions and three collections:
 // the same preview-then-apply, the same refusals and the same read back.
@@ -1451,6 +1598,55 @@ async function runSubjectMove(args, action) {
 
   if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
   else process.stdout.write(renderSubjectMove(data));
+}
+
+/* --- one holiday date, added or removed ---------------------------------- */
+
+// The Location is every word before the last one, so a Location with a space in
+// it stays one Location and the date is always unambiguous.
+async function runHoliday(args) {
+  const action = args.subject[0];
+  const words = args.subject.slice(1);
+  if (words.length < 2) {
+    throw usage("holiday " + action + " needs a Location and a date, as holiday " + action +
+      " Berlin 2026-12-24");
+  }
+  const date = words[words.length - 1];
+  const location = words.slice(0, -1).join(" ").trim();
+  if (location === "") throw usage("holiday " + action + " needs a Location before the date");
+  rejectWriteFlags(args);
+  refuseOptions(args, HOLIDAY_REFUSALS,
+    "a holiday is a Location, a date and a kind, and nothing else");
+  if (action === "remove" && args.kind !== undefined) {
+    throw usage("holiday remove does not take --kind: a holiday date is removed as it is " +
+      "stored, and adding it again with --kind records it as that kind");
+  }
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const change = query.holidayChange(plan, {
+    action: action,
+    location: location,
+    date: date,
+    kind: args.kind,
+    period: args.period
+  });
+  const data = Object.assign({
+    command: "holiday",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, change);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = await applyHoliday(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderHoliday(data));
 }
 
 /* --- the running app, for the one write ---------------------------------- */
@@ -1739,6 +1935,56 @@ async function applyRestore(base, move, planPath) {
   return { id: id, name: recordLabel(move), archived: false, live: true };
 }
 
+// Which Locations the holidays the app holds and the ones this command sent
+// disagree about, so a failed read back says where to look rather than only
+// that something moved. The map is keyed by the Location's spelling, so two
+// spellings of one Location read as two, which is what differs.
+function holidayDiff(stored, expected) {
+  const byLocation = function (list) {
+    const map = new Map();
+    (list || []).forEach(function (group) {
+      const name = group && typeof group.location === "string" ? group.location : "";
+      map.set(name, JSON.stringify(group));
+    });
+    return map;
+  };
+  const sent = byLocation(expected);
+  const held = byLocation(stored);
+  const names = new Set(Array.from(sent.keys()).concat(Array.from(held.keys())));
+  const differ = Array.from(names).filter(function (name) {
+    return sent.get(name) !== held.get(name);
+  });
+  if (differ.length === 0) return "the same Locations, but in a different order";
+  return "the Locations that differ: " + differ.map(function (name) {
+    return name === "" ? "(no Location)" : name;
+  }).join(", ");
+}
+
+// The holiday write, and the proof of the rebuild. The app has one holiday
+// write, setHolidays, which replaces every Location's dates at once, so this
+// sends the whole list rebuilt from a read taken moments before - and then asks
+// the app's plan for that exact array back: every group, every date, in order.
+// Equal arrays are what make "exactly one date changed and no other Location
+// was touched" a measured fact rather than a hope. The rest of the safety - the
+// validation, the atomic write, the changed-underneath guard and the undo step -
+// is the app's, because the route and the body are the app's own.
+async function applyHoliday(base, change, planPath) {
+  await requireSamePlan(base, planPath);
+  await ask(base, "PATCH", "/api/plan", change.change);
+  const plan = await ask(base, "GET", "/api/plan");
+  const stored = (plan && plan.holidays) || [];
+  const expected = change.change.holidays;
+  if (JSON.stringify(stored) !== JSON.stringify(expected)) {
+    throw new CliError("the write did not land: the app's plan holds different holidays from " +
+      "the ones this command sent (" + holidayDiff(stored, expected) + ")", "write-lost", 1,
+      "the app is the authority here: read the holidays in the app before trying again");
+  }
+  const kept = query.holidays(plan).holidays.find(function (group) {
+    return group.location === change.location;
+  });
+  return { location: change.location, dates: kept ? kept.dates : [] };
+}
+
 /* --- the run ------------------------------------------------------------- */
 
 function reportError(err, json) {
@@ -1782,6 +2028,17 @@ async function run() {
   if (args.command === "project" && args.subject[0] === "add") {
     await runProjectAdd(args);
     return;
+  }
+  // `holiday add` and `holiday remove`: one date at a time, for one Location.
+  if (args.command === "holiday") {
+    if (args.subject[0] === "add" || args.subject[0] === "remove") {
+      await runHoliday(args);
+      return;
+    }
+    const said = args.subject.length > 0 ? 'unknown holiday action "' + args.subject[0] + '"' : "";
+    throw usage((said === "" ? "" : said + "; ") +
+      "holiday needs an action, and they are add and remove: holiday add <location> <date>, " +
+      "or holiday remove <location> <date>");
   }
   // `person archive` and `person restore`, and the same on a Project: the
   // action is the first word, as it is for `assignment`.

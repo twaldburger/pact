@@ -1496,12 +1496,15 @@ test("no action, option or code path in the tool deletes anything", async () => 
   // Milestone has no archived state for it to reach.
   const help = await cli(["--help"]);
   assert.match(help.stdout, /The tool never deletes anything\./);
-  assert.match(help.stdout, /Ten commands change a plan/);
+  assert.match(help.stdout, /Twelve commands change a plan/);
   assert.match(help.stdout, /Archiving is how work leaves a plan reversibly/);
   assert.match(help.stdout, /and no --force to\s+reach one/);
   assert.match(help.stdout, /person archive <name>/);
   assert.match(help.stdout, /A Milestone has no archived state/);
   assert.match(help.stdout, /this tool cannot take one out of a plan at all/);
+  // Removing a holiday date is the one removal here, and the help says what it
+  // is: one plan setting edited, not a record destroyed.
+  assert.match(help.stdout, /holiday remove is not a deletion either/);
 
   // And in the code: the one DELETE the tool sends is the record's own archive
   // route, and the destruction route is named nowhere, so no code path here can
