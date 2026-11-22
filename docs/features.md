@@ -680,6 +680,29 @@ its value, so `api: Stellar` is a tag of key `api` with value `Stellar`. Nothing
 is validated and nothing is enforced; `DevOps` is an ordinary untyped tag and
 `api:` is not a typed tag at all, because nothing follows the colon.
 
+The tag field offers the vocabulary of its own editor as you type, from the
+same fixed dropdown the Filter uses, and several tags can be taken from it at
+once. The list narrows by a case-insensitive match anywhere in the tag, so
+`sign` finds both `design` and `Design review`, and an empty field lists the
+whole vocabulary. A tag the edited record already carries is not offered, and
+neither is one added as a chip earlier in the same edit, because the chips
+beside the field already say what is applied.
+
+A tick chooses a row before anything lands. The arrow keys move the highlight,
+`Space` ticks the highlighted row, and `Enter` adds every ticked tag in one
+step and closes the list. While a row is ticked the last row reads `Add N tags`
+and commits the same set, so a pointer ticks rows by clicking them and commits
+from there. The typed text stays in the field while the list is open - one
+narrowing serves several picks - and clears when the list closes, whether by
+`Enter`, `Escape` or a click away. `Enter` with nothing ticked still makes the
+typed text a new tag, stored exactly as typed, so free text is never lost to
+the list; `Escape` closes the list and adds nothing, and a second `Escape` then
+closes the panel. A comma commits the typed text as it always did, and
+Backspace on an empty field removes the last chip.
+
+A Location is single-valued, so its suggestion stays a plain browser list: one
+value at a time, with nothing to tick.
+
 Colour by key turns those keys into colours. A key can be chosen for each of
 three levels - Projects, People and Assignments - and then every typed tag whose
 key is chosen takes a palette slot, which is the same ten slots Projects use.
@@ -699,7 +722,8 @@ sprint cadence, so they travel with the plan and Undo steps through them. The
 report's tag chips carry the same colours, which is why a tag reads the same in
 both places.
 
-**Where the controls are.** `Options` then `Tags...`, whose detail counts the
+**Where the controls are.** The tag field in the Person, Project, Assignment
+and Milestone panels; `Options` then `Tags...`, whose detail counts the
 keys and colours set, opens the panel: a `Projects`, `People` and `Assignments`
 select for the key, then the values grouped by key with their swatches.
 

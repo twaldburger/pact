@@ -18,7 +18,6 @@ import {
   suggestPersonLocations,
   suggestAssignmentTags,
   suggestMilestoneTags,
-  withTag,
   withoutTag,
   archivedPersonRefusal,
   assignmentsHiddenRefusal,
@@ -30,6 +29,7 @@ import {
   normalizeStep,
   stepSettingRefusal
 } from "./lib/panels.mjs";
+import { offeredTags, tickToggled, commitLabel, committedTags } from "./lib/tag-picker.mjs";
 import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
@@ -2330,13 +2330,24 @@ function shareControl(value) {
   });
 }
 
-var tagListSeq = 0;
+var tagMenuSeq = 0;
 
-// Tag chips plus an input that takes a new tag or one from `suggest`.
+// The tag field: chips, an input that takes a new tag, and the suggestion list
+// it opens. The list is the Filter's own fixed dropdown - it narrows as you
+// type, the arrow keys move the highlight, Space ticks a row and Enter adds
+// every ticked tag at once - so one narrowing serves several picks, and the
+// plan's vocabulary can be taken more than a tag at a time.
 // `onChange`, when given, is called with the new list after a chip is added or
 // removed, so a list that saves itself needs no Save button of its own.
 function tagEditor(initial, suggest, onChange) {
   var tags = (initial || []).slice();
+  // The ticks belong to the open list rather than to the query, so narrowing
+  // keeps them and one commit adds them all.
+  var ticks = [];
+  var shown = [];      // the tags the list is showing, in row order
+  var rowIndex = -1;   // the highlighted row, -1 for none
+  var watching = false;
+
   var wrap = el("div", "tags");
   var chips = el("span", "chips");
   var input = document.createElement("input");
@@ -2344,10 +2355,25 @@ function tagEditor(initial, suggest, onChange) {
   input.className = "tags__input";
   input.placeholder = "Add a tag";
   input.setAttribute("aria-label", "Add a tag");
-  var listId = "tag-suggest-" + (++tagListSeq);
-  input.setAttribute("list", listId);
-  var datalist = document.createElement("datalist");
-  datalist.id = listId;
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+
+  var menu = el("div", "filter__suggest tags__menu");
+  menu.id = "tag-menu-" + (++tagMenuSeq);
+  menu.hidden = true;
+  var list = el("div", "tags__list");
+  list.id = menu.id + "-list";
+  list.setAttribute("role", "listbox");
+  menu.appendChild(list);
+  // While a row is ticked the list ends with the one row a pointer commits
+  // through, so ticking several is not a keyboard-only road.
+  var commitRow = el("button", "filter__hit tags__commit");
+  commitRow.type = "button";
+  commitRow.hidden = true;
+  menu.appendChild(commitRow);
+  input.setAttribute("aria-controls", list.id);
+
   // The input sits in the chip row once and never moves again, so rebuilding
   // the chips around it cannot drop its focus.
   chips.appendChild(input);
@@ -2377,33 +2403,184 @@ function tagEditor(initial, suggest, onChange) {
       chip.appendChild(remove);
       chips.insertBefore(chip, input);
     });
-    datalist.innerHTML = "";
-    suggest().forEach(function (tag) {
-      var option = document.createElement("option");
-      option.value = tag;
-      datalist.appendChild(option);
-    });
   }
 
-  function commit() {
-    if (input.value.trim() === "") { input.value = ""; return; }
-    tags = withTag(tags, input.value);
+  // The list is fixed, so a panel that scrolls under it has to carry it along.
+  function place() {
+    // The tag field is a chip row's width, not the Filter's, so the list hangs
+    // from the field's left edge rather than being centred on it.
+    if (!menu.hidden) placePopover(menu, input, "left");
+  }
+
+  function watch(on) {
+    if (on === watching) return;
+    watching = on;
+    if (on) document.addEventListener("scroll", place, true);
+    else document.removeEventListener("scroll", place, true);
+  }
+
+  function highlight() {
+    var rows = list.querySelectorAll("button");
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle("is-sel", i === rowIndex);
+    }
+    var active = rows[rowIndex];
+    if (active) {
+      input.setAttribute("aria-activedescendant", active.id);
+      active.scrollIntoView({ block: "nearest" });
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function close() {
+    ticks = [];
+    shown = [];
+    rowIndex = -1;
+    menu.hidden = true;
+    list.innerHTML = "";
+    commitRow.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    watch(false);
+  }
+
+  function updateCommitRow() {
+    commitRow.hidden = ticks.length === 0;
+    commitRow.textContent = commitLabel(ticks.length);
+  }
+
+  function draw() {
+    shown = offeredTags(suggest(), tags, input.value);
+    list.innerHTML = "";
+    shown.forEach(function (tag, i) {
+      var ticked = ticks.indexOf(tag) !== -1;
+      var row = el("button", "filter__hit");
+      row.type = "button";
+      row.id = menu.id + "-row-" + i;
+      row.setAttribute("role", "option");
+      // The row's announced state is its tick, not the highlight: the
+      // highlight is where the keyboard is, the tick is what will be added.
+      row.setAttribute("aria-selected", ticked ? "true" : "false");
+      if (ticked) row.classList.add("is-ticked");
+      var mark = el("span", "tags__tick");
+      mark.textContent = "\u2713";
+      mark.setAttribute("aria-hidden", "true");
+      var val = el("span", "filter__val");
+      val.textContent = tag;
+      row.appendChild(mark);
+      row.appendChild(val);
+      // Keep the input focused so the click lands and the list stays put.
+      row.addEventListener("mousedown", function (e) { e.preventDefault(); });
+      row.addEventListener("click", function () { tickRow(tag); });
+      list.appendChild(row);
+    });
+    var open = shown.length > 0 || ticks.length > 0;
+    menu.hidden = !open;
+    input.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) {
+      rowIndex = -1;
+      input.removeAttribute("aria-activedescendant");
+      watch(false);
+      return;
+    }
+    if (rowIndex >= shown.length) rowIndex = shown.length - 1;
+    updateCommitRow();
+    watch(true);
+    place();
+    highlight();
+  }
+
+  function tickRow(tag) {
+    ticks = tickToggled(ticks, tag);
+    var ticked = ticks.indexOf(tag) !== -1;
+    var rows = list.querySelectorAll("button");
+    for (var i = 0; i < rows.length; i++) {
+      if (shown[i] !== tag) continue;
+      rows[i].classList.toggle("is-ticked", ticked);
+      rows[i].setAttribute("aria-selected", ticked ? "true" : "false");
+    }
+    updateCommitRow();
+  }
+
+  function commitTicks() {
+    tags = committedTags(tags, "", ticks);
     input.value = "";
     render();
+    close();
     if (onChange) onChange(tags.slice());
   }
 
+  // The typed text is committed as it always was, so free text is never lost to
+  // the list: Enter with nothing ticked, a comma, or leaving the field makes a
+  // new tag of it.
+  function commitTyped() {
+    if (input.value.trim() === "") { input.value = ""; close(); return; }
+    tags = committedTags(tags, input.value, []);
+    input.value = "";
+    render();
+    close();
+    if (onChange) onChange(tags.slice());
+  }
+
+  commitRow.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  commitRow.addEventListener("click", commitTicks);
+
+  input.addEventListener("input", draw);
+
   input.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit(); }
-    else if (e.key === "Backspace" && input.value === "" && tags.length) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (menu.hidden) {
+        // The list opens where the field was left, with its first row in reach.
+        rowIndex = 0;
+        draw();
+      } else if (shown.length) {
+        rowIndex = e.key === "ArrowDown"
+          ? Math.min(rowIndex + 1, shown.length - 1)
+          : Math.max(rowIndex - 1, 0);
+        highlight();
+      }
+      return;
+    }
+    if (e.key === " ") {
+      // A space ticks the highlighted row; with nothing highlighted it is a
+      // space in the tag being typed, so multi-word free text still reads.
+      if (!menu.hidden && rowIndex >= 0 && shown[rowIndex]) {
+        e.preventDefault();
+        tickRow(shown[rowIndex]);
+      }
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (ticks.length) commitTicks();
+      else commitTyped();
+      return;
+    }
+    if (e.key === ",") { e.preventDefault(); commitTyped(); return; }
+    if (e.key === "Escape") {
+      // The list closes and adds nothing; only then does Escape reach the panel.
+      if (!menu.hidden) {
+        e.preventDefault();
+        e.stopPropagation();
+        input.value = "";
+        close();
+      }
+      return;
+    }
+    if (e.key === "Tab") { close(); return; }
+    if (e.key === "Backspace" && input.value === "" && tags.length) {
       tags = tags.slice(0, -1);
       render();
     }
   });
-  input.addEventListener("blur", commit);
+  // A click on a row or on the commit row keeps the focus, so a blur is a click
+  // away: the list closes and the typed text is committed, as it always was.
+  input.addEventListener("blur", commitTyped);
 
   wrap.appendChild(chips);
-  wrap.appendChild(datalist);
+  wrap.appendChild(menu);
   render();
 
   return {
