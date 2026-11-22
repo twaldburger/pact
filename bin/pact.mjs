@@ -37,55 +37,71 @@ import * as query from "../lib/query.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.dirname(HERE);
 
+// The options that narrow a list: `people` takes every one of them, `projects`
+// the two a Project is known by, and a read of one subject none, because it is
+// already one. An option a command does not take is refused, never ignored.
+const ALL_NARROWS = ["location", "tags", "over", "under", "top"];
+const PROJECT_NARROWS = ["tags", "top"];
+
 const COMMANDS = {
   plan: {
     period: true,
     subject: false,
+    narrows: [],
     run: function (plan, period) { return query.planSummary(plan, period); }
   },
   people: {
     period: true,
     subject: false,
-    run: function (plan, period) { return query.people(plan, period); }
+    narrows: ALL_NARROWS,
+    run: function (plan, period, narrow) { return query.people(plan, period, narrow); }
   },
   person: {
     period: true,
     subject: true,
+    narrows: [],
     run: function (plan, period, name) { return query.person(plan, period, name); }
   },
   projects: {
     period: true,
     subject: false,
-    run: function (plan, period) { return query.projects(plan, period); }
+    narrows: PROJECT_NARROWS,
+    run: function (plan, period, narrow) { return query.projects(plan, period, narrow); }
   },
   project: {
     period: true,
     subject: true,
+    narrows: [],
     run: function (plan, period, name) { return query.project(plan, period, name); }
   },
   tags: {
     period: true,
     subject: false,
+    narrows: [],
     run: function (plan, period) { return query.tags(plan, period); }
   },
   tag: {
     period: true,
     subject: true,
+    narrows: [],
     run: function (plan, period, key) { return query.tag(plan, period, key); }
   },
   capacity: {
     period: true,
     subject: false,
+    narrows: [],
     run: function (plan, period) { return query.capacity(plan, period); }
   },
   holidays: {
     period: false,
     subject: false,
+    narrows: [],
     run: function (plan) { return query.holidays(plan); }
   },
   milestones: {
     period: false,
     subject: false,
+    narrows: [],
     run: function (plan) { return query.milestones(plan); }
   }
 };
@@ -100,7 +116,9 @@ holiday date for one Location, and milestone add and milestone edit create a
 Milestone and change one. All of them write through the running app, so
 the change is one step back with its Undo control. The figures are computed
 by the report's own modules over the period you ask for, so they are the report
-page's numbers. The tool never deletes anything; see Deleting below.
+page's numbers, and the two list reads can be narrowed to the rows a question is
+about: see Narrowing a list below. The tool never deletes anything; see Deleting
+below.
 
 Usage
   node bin/pact.mjs --help
@@ -111,10 +129,12 @@ Commands
       node bin/pact.mjs plan --period 2026-11
   people               [--period]  each Person: Capacity, Allocated, Remaining, of offer
       node bin/pact.mjs people --period 2026-11
+      node bin/pact.mjs people --location Berlin --over --period 2026-11
   person <name>        [--period]  one Person, and the Assignments meeting the period
       node bin/pact.mjs person "Anna Meier" --period 2026-11
   projects             [--period]  each Project: Allocated, of plan, of capacity
       node bin/pact.mjs projects --period 2026-11
+      node bin/pact.mjs projects --tag api --top 3 --period 2026-11
   project <name>       [--period]  one Project, and the Assignments meeting the period
       node bin/pact.mjs project Atlas --period 2026-11
   tags                 [--period]  each tag with its FTE-days
@@ -170,6 +190,26 @@ Options
   --json               the same data as JSON; see JSON below
   -h, --help           this text; --help works before or after a command
   --period=<period> and --plan=<path> also work.
+
+people takes these as well
+  --location <location>  a Person's own Location, matched case-insensitively
+  --over                 Allocated above Capacity
+  --under                Allocated below Capacity, so a Person at exactly their
+                       Capacity is in neither; --over and --under together are
+                       refused
+
+people and projects take these as well
+  --tag <tag>          a tag of the subject's own vocabulary, repeated to
+                       require every one of them: --tag team:atlas --tag lead.
+                       A term that names one of its tags matches that tag, and
+                       a term that names a tag key matches every tag under that
+                       key, case-insensitively - exactly as tag <key> resolves
+                       one
+  --top <n>            the n largest by the FTE-days column, highest first
+
+  No other read takes any of these five, and one it is given is refused rather
+  than ignored: person <name> and project <name> are already one subject, so
+  there is nothing there to narrow.
 
 assignment add and assignment move take these as well
   --person <name>      the Person the Assignment is on; required
@@ -420,6 +460,29 @@ Subjects
   matches, never a zero. A Milestone is found by name or id the same way, and so
   is a Project named by --project.
 
+Narrowing a list
+  people and projects print whole lists, which is the wrong size for one
+  question: "who in Berlin is over capacity" wants the People it names, not
+  every Person in the plan. The five options above answer that and nothing more.
+  Each is a named term the tool applies itself: there is no expression, no
+  operator and no text to parse, because a query language is where an answer
+  goes subtly wrong with nobody checking it.
+
+  A narrowed answer states the filter in plain words and how much of the list it
+  kept - "Filter location: Berlin, over capacity" and "Matched 2 of 14 People" -
+  because a partial list that does not say it is partial can be read as the
+  whole plan. Its Total row is still the whole plan's, so it is headed Plan
+  total there. A --top answer states its order too ("Order FTE-days, highest
+  first") and, where the cut falls inside a tie, says how many rows share the
+  boundary figure and that the plan's own order decided which of them are shown.
+
+  An empty result is still an answer: it says no Person matched, names the
+  filter, and exits zero.
+
+  The options narrow and compute nothing. Every figure on a narrowed row is that
+  row's own, over the same plan and the same period, exactly as the unfiltered
+  list would print it: a filter can hide a number, never make one up.
+
 What the figures mean, in the glossary's words
   Capacity is what a Person offers over the period, net of their Location's
   holidays and their absences. Allocated is the FTE-days their Assignments
@@ -443,6 +506,14 @@ JSON
      "units":{...},"people":[{"id":"...","name":"...","capacity":16,
      "allocated":19.2,"remaining":-3.2,"ofOffer":1.2,"overAllocated":true,
      "buckets":[...]}],"totals":{...}}
+
+  A narrowed people or projects answer carries one more key, "filter": the
+  filter in plain words ("text"); the terms it was given ("location", "tags",
+  "over", "under", "top"); the rows it kept ("matched") and the rows the list
+  held ("total"); what it counted ("unit", "People" or "Projects"); "ordering"
+  when --top set one; and "tie": { figure, tied, shown, unit } when the cut fell
+  inside one. An unfiltered answer carries no "filter" at all, so a caller can
+  tell a narrowed answer from a complete one.
 
   person add adds "action" and "applied" (false until it is written), and once
   written "server" and "readBack" (the id and values the app's plan holds
@@ -538,7 +609,8 @@ const VALUE_OPTIONS = {
   "--colour": "colour",
   "--note": "note",
   "--kind": "kind",
-  "--date": "date"
+  "--date": "date",
+  "--top": "top"
 };
 
 // The options that repeat, each value added to a list: one --tag per tag, since
@@ -550,7 +622,9 @@ const REPEATABLE_OPTIONS = { "--tag": "tags", "--project": "projects" };
 const FLAG_OPTIONS = {
   "--json": "json",
   "--apply": "apply",
-  "--dry-run": "dryRun"
+  "--dry-run": "dryRun",
+  "--over": "over",
+  "--under": "under"
 };
 
 function parseArgs(argv) {
@@ -558,7 +632,7 @@ function parseArgs(argv) {
     command: null, subject: [], plan: undefined, period: undefined, person: undefined,
     from: undefined, to: undefined, share: undefined, location: undefined,
     availability: undefined, colour: undefined, note: undefined, kind: undefined,
-    date: undefined,
+    date: undefined, top: undefined, over: false, under: false,
     tags: [], projects: [], json: false, apply: false, dryRun: false, help: false
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -695,7 +769,30 @@ function header(data) {
       pairs.push(["Note", "the period lies wholly outside the plan period"]);
     }
   }
+  if (data.filter) pairs.push.apply(pairs, narrowLines(data.filter));
   return renderPairs(pairs);
+}
+
+// The narrowing as the header states it: the filter in plain words, the order
+// --top set, how much of the list it kept, and the tie the cut fell inside. A
+// partial list that does not say it is partial is the failure this prevents.
+function narrowLines(filter) {
+  const pairs = [["Filter", filter.text]];
+  if (filter.ordering) pairs.push(["Order", filter.ordering]);
+  pairs.push(["Matched", filter.matched + " of " + filter.total + " " + filter.unit]);
+  if (filter.tie) {
+    const tie = filter.tie;
+    pairs.push(["Note", tie.shown + " of " + tie.tied + " " + tie.unit + " share " +
+      (tie.figure === null ? "no figure" : figure(tie.figure) + " FTE-days") +
+      " at the cut; the plan's own order decides which of them are shown"]);
+  }
+  return pairs;
+}
+
+// An empty narrowed answer is an answer: it says what was asked and that nothing
+// matched, rather than printing an empty list.
+function noMatchText(one, filter) {
+  return "No " + one + " matched: " + filter.text + ".";
 }
 
 const ABSENCE_NOTE = "Absence Projects are left out of every figure.";
@@ -749,8 +846,9 @@ function renderAssignments(assignments, subject) {
 function renderPeople(data) {
   const lines = header(data);
   lines.push("");
-  if (data.people.length === 0) lines.push("(no People)");
-  else {
+  if (data.people.length === 0) {
+    lines.push(data.filter ? noMatchText("Person", data.filter) : "(no People)");
+  } else {
     const rows = data.people.map(function (person) {
       return [
         person.name,
@@ -761,8 +859,10 @@ function renderPeople(data) {
         person.overAllocated ? "over-allocated" : ""
       ];
     });
+    // A narrowed list's total is still the whole plan's, so it says so rather
+    // than reading as the total of the rows above it.
     rows.push([
-      "Total",
+      data.filter ? "Plan total" : "Total",
       figure(data.totals.capacity),
       figure(data.totals.allocated),
       figure(data.totals.remaining),
@@ -821,8 +921,9 @@ function renderPerson(data) {
 function renderProjects(data) {
   const lines = header(data);
   lines.push("");
-  if (data.projects.length === 0) lines.push("(no Projects)");
-  else {
+  if (data.projects.length === 0) {
+    lines.push(data.filter ? noMatchText("Project", data.filter) : "(no Projects)");
+  } else {
     const rows = data.projects.map(function (project) {
       return [
         project.name + (project.absence ? " (absence)" : ""),
@@ -832,7 +933,7 @@ function renderProjects(data) {
       ];
     });
     rows.push([
-      "Total",
+      data.filter ? "Plan total" : "Total",
       figure(data.totals.allocated),
       percent(data.totals.ofPlan),
       percent(data.totals.ofCapacity)
@@ -1529,20 +1630,105 @@ function dayCount(value) {
 // takes the other's.
 function taken(args, key) {
   if (key === "apply" || key === "dryRun") return args[key] === true;
+  if (key === "over" || key === "under") return args[key] === true;
   if (key === "tags" || key === "projects") return args[key].length > 0;
   return args[key] !== undefined;
+}
+
+function flagOf(key) {
+  if (key === "tags") return "--tag";
+  if (key === "projects") return "--project";
+  return "--" + key;
 }
 
 function refuseOptions(args, keys, where) {
   keys.forEach(function (key) {
     if (!taken(args, key)) return;
-    const flag = key === "tags" ? "--tag" : key === "projects" ? "--project" : "--" + key;
-    throw usage(args.command + " does not take " + flag + "; " + where);
+    throw usage(args.command + " does not take " + flagOf(key) + "; " + where);
   });
 }
 
-const READ_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "colour", "note", "kind", "date", "tags", "projects", "apply", "dryRun"];
+// Where each narrow belongs, for the refusal that names it. A filter that
+// cannot apply is refused rather than ignored: a silently ignored one answers
+// a question nobody asked, and the answer looks complete while doing it.
+const NARROW_WHERE = {
+  location: "only the people command takes --location, a Person's own Location",
+  tags: "only the people and projects commands take --tag, a subject's own tags",
+  over: "only the people command takes --over: it reads Allocated against Capacity",
+  under: "only the people command takes --under: it reads Allocated against Capacity",
+  top: "only the people and projects commands take --top: a list has an order to cut, " +
+    "one subject does not"
+};
+
+// A command as the refusal names it: `person add`, `projects`, `assignment move`.
+function commandName(args) {
+  return args.command + (args.subject.length > 0 ? " " + args.subject[0] : "");
+}
+
+// The read of one subject is already one thing, so it takes none of them, and
+// says that rather than naming a command that would have taken the option.
+const SUBJECT_ACTIONS = ["add", "archive", "restore"];
+
+function narrowWhere(args, key) {
+  const action = args.subject.length > 0 ? args.subject[0] : "";
+  if ((args.command === "person" || args.command === "project") &&
+      SUBJECT_ACTIONS.indexOf(action) === -1) {
+    return "it is already one " + (args.command === "person" ? "Person" : "Project") +
+      ", so there is nothing to narrow";
+  }
+  return NARROW_WHERE[key];
+}
+
+// --over, --under and --top cut a list, so only the two list reads take them. A
+// write, or a read of one subject, refuses them before a plan is read or
+// anything is written.
+const CUT_OPTIONS = ["over", "under", "top"];
+const WRITE_COMMANDS = ["assignment", "milestone", "holiday"];
+
+function refuseCut(args) {
+  const takes = Object.prototype.hasOwnProperty.call(COMMANDS, args.command)
+    ? COMMANDS[args.command].narrows
+    : [];
+  CUT_OPTIONS.forEach(function (key) {
+    if (takes.indexOf(key) !== -1 || !taken(args, key)) return;
+    throw usage(commandName(args) + " does not take " + flagOf(key) + "; " + narrowWhere(args, key));
+  });
+}
+
+// --location and --tag are a field of one write and a narrow of one read each,
+// so a read that takes neither refuses them as well.
+function refuseNarrowing(args, takes) {
+  ["location", "tags"].forEach(function (key) {
+    if (takes.indexOf(key) !== -1 || !taken(args, key)) return;
+    throw usage(commandName(args) + " does not take " + flagOf(key) + "; " + narrowWhere(args, key));
+  });
+}
+
+// The narrowing a read was asked for, or nothing at all when it was asked for
+// none: an unfiltered answer then carries no filter and is unchanged.
+function narrowRequest(args) {
+  if (args.over && args.under) throw usage("--over and --under contradict each other; give one");
+  const filter = {};
+  if (args.location !== undefined) filter.location = args.location;
+  if (args.tags.length > 0) filter.tags = args.tags.slice();
+  if (args.over) filter.over = true;
+  if (args.under) filter.under = true;
+  if (args.top !== undefined) filter.top = topCount(args.top);
+  return Object.keys(filter).length > 0 ? filter : undefined;
+}
+
+// --top is a whole number of rows from 1: a cut of nothing, or of half a Person,
+// is a refusal rather than a quietly different answer.
+function topCount(value) {
+  const text = String(value).trim();
+  if (!/^[0-9]+$/.test(text)) throw usage("--top needs a whole number, as in --top 3");
+  const n = Number(text);
+  if (n < 1) throw usage("--top needs a whole number of 1 or more");
+  return n;
+}
+
+const READ_REFUSALS = ["person", "from", "to", "share", "availability",
+  "colour", "note", "kind", "date", "projects", "apply", "dryRun"];
 const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "kind", "date",
   "tags", "projects"];
 const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour", "kind", "date",
@@ -2345,6 +2531,13 @@ async function run() {
     process.stdout.write(HELP);
     return;
   }
+  // The three that cut a list are refused for every command that does not take
+  // them - a write and a read of one subject alike - before anything is read.
+  // An unknown command still gets its own refusal, from below.
+  if (Object.prototype.hasOwnProperty.call(COMMANDS, args.command) ||
+      WRITE_COMMANDS.indexOf(args.command) !== -1) {
+    refuseCut(args);
+  }
   if (args.command === "assignment") {
     await runAssignment(args);
     return;
@@ -2397,6 +2590,7 @@ async function run() {
       Object.keys(COMMANDS).concat("assignment").join(", "));
   }
   rejectForeignOptions(args);
+  refuseNarrowing(args, spec.narrows);
   if (!spec.subject && args.subject.length > 0) {
     throw usage(args.command + " takes no subject");
   }
@@ -2406,13 +2600,14 @@ async function run() {
   if (!spec.period && args.period !== undefined) {
     throw usage(args.command + " does not take a period; it reports the plan as stored");
   }
+  const narrow = spec.narrows.length > 0 ? narrowRequest(args) : undefined;
 
   const resolved = resolvePlanFile(args.plan);
   const plan = loadPlan(resolved);
   const period = spec.period ? query.resolvePeriod(plan, args.period) : undefined;
   const result = spec.subject
     ? spec.run(plan, period, args.subject.join(" "))
-    : spec.run(plan, period);
+    : spec.run(plan, period, narrow);
   const data = Object.assign({
     command: args.command,
     planFile: resolved.path,
