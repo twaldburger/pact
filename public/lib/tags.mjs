@@ -56,6 +56,24 @@ export function isTypedTag(tag) {
 }
 
 /*
+ * How one term reads one tag, the rule `tag <term>` resolves with and the one a
+ * `--tag` filter narrows by: "tag" when the term is the tag's own text, "key"
+ * when the term is the kind of a typed tag - so a key names its whole family -
+ * and "" when it is neither. Case is ignored on both sides.
+ *
+ * The two answers are distinct because the caller's precedence needs them: a
+ * plan that carries a tag named `api` beside tags typed `api:Solar` has an exact
+ * answer to `tag api`, and the family is what a term naming no tag falls back to.
+ */
+export function tagTermMatch(term, tag) {
+  const wanted = String(term == null ? "" : term).trim().toLowerCase();
+  if (wanted === "") return "";
+  if (String(tag == null ? "" : tag).trim().toLowerCase() === wanted) return "tag";
+  if (isTypedTag(tag) && tagKind(tag).trim().toLowerCase() === wanted) return "key";
+  return "";
+}
+
+/*
  * The first tag in the list whose kind matches the chosen key, or "" when the
  * key is unchosen or no tag carries it. The tag list is ordered and the first
  * listed wins, so a second tag under the same key never overrides the first.

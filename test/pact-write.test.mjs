@@ -1016,9 +1016,11 @@ test("person add and project add state what they need, and refuse what is not th
   assert.equal(period.status, 2);
   assert.match(period.stderr, /project add does not take a period/);
 
-  const readTag = await cli(["people", "--tag", "api", "--plan", started.planPath]);
-  assert.equal(readTag.status, 2);
-  assert.match(readTag.stderr, /people does not take --tag/);
+  // A read does not take a write's option. (The narrows a read does take, and
+  // the ones it refuses, are test/narrow.test.mjs' own.)
+  const readPerson = await cli(["people", "--person", "Anna Meier", "--plan", started.planPath]);
+  assert.equal(readPerson.status, 2);
+  assert.match(readPerson.stderr, /people does not take --person/);
 
   const assignmentTag = await cli(["assignment", "add", "Atlas", "--person", "Anna Meier",
     "--from", "2026-11-16", "--to", "2026-11-19", "--tag", "api", "--plan", started.planPath]);

@@ -86,7 +86,12 @@ PACT is meant to be read by a colleague's agent as well as by the colleague.
 - **The numbers are computable.** `bin/pact.mjs` reads the plan file and prints
   the same figures the report draws - FTE-days by project, person or tag, and
   allocation against capacity - so an agent can answer *who is over capacity in
-  March* without a browser, and without adding anything up itself. Its writes
+  March* without a browser, and without adding anything up itself. The two list
+  reads narrow as they read - `people --location Berlin --over`,
+  `projects --tag api --top 3` - and a narrowed answer prints the filter it
+  applied and "Matched 2 of 14 People", so a short list is never mistaken for
+  the plan. The options are named terms, one flag each, with no expression to
+  parse and no operator to get subtly wrong. Its writes
   create a Person, a Project or an Assignment, reschedule and resize one,
   archive and restore any of the three, add or remove one holiday date for
   one Location, and create or move a Milestone, and only through the running

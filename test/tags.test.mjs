@@ -8,6 +8,7 @@ import {
   tagValue,
   isTypedTag,
   tagUnderKey,
+  tagTermMatch,
   slotForTags,
   tagKeys,
   tagColourSlots,
@@ -256,4 +257,21 @@ test("pressing a value's chosen slot clears it, pressing another chooses it", ()
   const colours = { "api:A": 3 };
   chooseTagSlot(colours, "api:A", 6);
   assert.deepEqual(colours, { "api:A": 3 });
+});
+
+test("a term names a tag, or the key of a typed tag, case-insensitively", () => {
+  // The two answers are distinct, because a caller that reads tags plan-wide
+  // prefers a tag named by the term over the family its key would bring.
+  assert.equal(tagTermMatch("api", "api"), "tag");
+  assert.equal(tagTermMatch("API", " api "), "tag");
+  assert.equal(tagTermMatch("api", "api:Solar"), "key");
+  assert.equal(tagTermMatch("  Api ", "api:Solar"), "key");
+  assert.equal(tagTermMatch("api:Solar", "api:Solar"), "tag");
+  // A kind with no value is not a typed tag, so it names no family.
+  assert.equal(tagTermMatch("api", "api:"), "");
+  // A value is not a term: naming a value finds the tag, never its siblings.
+  assert.equal(tagTermMatch("Solar", "api:Solar"), "");
+  assert.equal(tagTermMatch("", "api:Solar"), "");
+  assert.equal(tagTermMatch(undefined, "api:Solar"), "");
+  assert.equal(tagTermMatch("devops", "DevOps"), "tag");
 });
