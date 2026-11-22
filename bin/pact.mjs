@@ -7,14 +7,18 @@
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. Reads never touch the network. The four writes -
- * `person add --apply`, `project add --apply`, `assignment move --apply` and
- * `assignment add --apply` - send the query module's create body or patch to the
- * app's own POST /api/people, POST /api/projects, PATCH /api/assignments/<id>
- * and POST /api/assignments - the routes and bodies the interface itself uses -
- * so the validation, the atomic write and the changed-underneath guard are the
- * app's, and the change is one step back with its Undo control. Nothing here
- * deletes anything: there is no such command, and no flag that reaches one.
+ * is the report's own. Reads never touch the network. The ten writes -
+ * `person add --apply`, `project add --apply`, `assignment move --apply`,
+ * `assignment add --apply`, and archive and restore for each of the three
+ * collections - send the query module's body, patch or archive to the app's own
+ * POST /api/people, POST /api/projects, PATCH /api/assignments/<id>,
+ * POST /api/assignments, DELETE /api/<collection>/<id> (the archive, as it has
+ * always been) and PATCH /api/<collection>/<id> with `archived: false` (the
+ * restore) - the routes and bodies the interface itself uses - so the
+ * validation, the atomic write and the changed-underneath guard are the app's,
+ * and the change is one step back with its Undo control. Nothing here deletes
+ * anything: the tool has no route to the app's destruction, no such command,
+ * and no flag that reaches one.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -82,12 +86,12 @@ const COMMANDS = {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-Four commands change a plan: person add creates a Person, project add creates a
-Project, assignment add creates an Assignment, and assignment move reschedules
-or resizes one. All four write through the running app, so the change is one
-step back with its Undo control. The figures are computed by the report's own
-modules over the period you ask for, so they are the report page's numbers. The
-tool never deletes anything; see Deleting below.
+Ten commands change a plan: person add, project add, assignment add and
+assignment move create and change work, and person, project and assignment each
+take archive and restore. All of them write through the running app, so the
+change is one step back with its Undo control. The figures are computed by the
+report's own modules over the period you ask for, so they are the report page's
+numbers. The tool never deletes anything; see Deleting below.
 
 Usage
   node bin/pact.mjs --help
@@ -125,6 +129,18 @@ Commands
   assignment move <project>        reschedule or resize one Assignment, through the app
       node bin/pact.mjs assignment move Atlas --person "Anna Meier" \\
           --from 2026-11-02 --to 2026-11-20
+  person archive <name>            archive one Person, through the app
+      node bin/pact.mjs person archive "Anna Meier"
+  person restore <name>            restore an archived Person, through the app
+      node bin/pact.mjs person restore "Anna Meier"
+  project archive <name>           archive one Project, through the app
+      node bin/pact.mjs project archive Atlas
+  project restore <name>           restore an archived Project, through the app
+      node bin/pact.mjs project restore Atlas
+  assignment archive <project>     archive one Assignment, through the app
+      node bin/pact.mjs assignment archive Atlas --person "Anna Meier"
+  assignment restore <project>     restore an archived Assignment, through the app
+      node bin/pact.mjs assignment restore Atlas --person "Anna Meier"
 
 Options
   --period <period>    the stretch to count; without it, the plan's own period
@@ -170,6 +186,13 @@ project add takes these as well
   --colour <slot>      the Project's colour slot, 0 to 9; without it the app takes
                        the least-used slot, and the preview names the one it
                        expects to be taken
+
+person archive, person restore, project archive, project restore,
+assignment archive and assignment restore take these as well
+  --person <name>      the two assignment ones: the Person the Assignment is on;
+                       required, as it is for assignment move
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
 
 Creating a Person or a Project
   person add creates one Person and prints what it would create: their name,
@@ -227,23 +250,57 @@ Rescheduling or resizing an Assignment
   The change is one step back with the app's Undo control, because the app made
   it: nothing about the write bypasses the plan store.
 
+Archiving and restoring
+  person archive, project archive and assignment archive take a record out of
+  the plan and destroy nothing: it is one flag in the plan file, written by the
+  app's own DELETE on the record, which has always been the archive rather than
+  a deletion. The preview states what leaves the plan - the record's own figure
+  going to nothing, the FTE-days that leave the plan's total, and the
+  Assignments that stay in the file and stop counting - and nothing is written
+  without --apply.
+
+  Archiving does not cascade. A Person's or a Project's Assignments stay in the
+  file exactly as they were and stop counting, which is why the preview states
+  them: nothing is lost, and the plan's totals simply no longer carry them. An
+  archived Person or Project cannot take new work, and the app's Show archived
+  draws whatever this tool has archived.
+
+  person restore, project restore and assignment restore are the same move the
+  other way: the app's own PATCH that sets archived back to false, with the
+  record, the Assignments and the FTE-days it brings back stated before it is
+  made. Every read leaves archived records out, so a restore cannot find its
+  subject the way the other commands do: it looks past that rule, and where an
+  archived record and a live one answer to one name it refuses and names both
+  rather than choosing between them.
+
+  Either way the read back is the proof: an archived record must be absent from
+  the app's live plan and still in its file, marked archived; a restored one
+  must be in the live plan again. Anything less exits non-zero.
+
 Deleting
-  The tool never deletes anything. There is no command and no flag that removes
-  a Person, a Project, an Assignment or a Milestone, and no --force to reach
-  one: what this tool can do to a plan is add a Person, add a Project or add an
-  Assignment, and move an Assignment. That boundary is deliberate, and it is not
-  a gap waiting to be filled. Removing work from a plan is done in the app,
-  where it can be seen, and Undo takes it back. Archiving is not a command here
-  either: it is done in the app.
+  The tool never deletes anything. There is no command and no flag that
+  destroys a Person, a Project, an Assignment or a Milestone, and no --force to
+  reach one: what this tool can do to a plan is add a Person, add a Project or
+  add an Assignment, move an Assignment, and archive or restore a Person, a
+  Project or an Assignment, and nothing more. That boundary is deliberate, and
+  it is not a gap waiting to be filled.
+
+  Archiving is how work leaves a plan reversibly: archive takes a record out of
+  the plan and restore puts it back, and neither destroys anything. A deletion
+  stays in the app, where it can be seen, and Undo takes it back.
+
+  A Milestone has no archived state - it either exists or it is destroyed - so
+  this tool cannot take one out of a plan at all. It creates and edits no
+  Milestone either, and deleting one stays in the app, where it can be seen.
 
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
-  Reads never write it. Its writes - person add --apply, project add --apply,
-  assignment add --apply and assignment move --apply - go through the running
-  app's API, so validation, the atomic write and the guard against a file
-  changed underneath are the app's, not a second copy here. It reads the live
-  plan, so archived People, Projects and Assignments are left out, as on the
-  default grid.
+  Reads never write it. Its writes - the four that create and change work, and
+  the six that archive and restore - go through the running app's API, so
+  validation, the atomic write and the guard against a file changed underneath
+  are the app's, not a second copy here. It reads the live plan, so archived
+  People, Projects and Assignments are left out, as on the default grid; a
+  restore is the one command that looks past that rule.
 
 Subjects
   A name or an id, case-insensitive: person anna and person "Anna Meier" find
@@ -296,6 +353,17 @@ JSON
   once written "server" and "readBack" (the dates and Allocation the app's plan
   holds afterwards). Its "change" is the patch that was sent: only the fields
   that differ, in the shape the app's PATCH /api/assignments/<id> takes.
+
+  person archive and person restore are one shape, and so is each of the other
+  two pairs: "kind", "action" and "applied" (false until it is written), then
+  "subject" (the record as stored, with the archived state it had before the
+  move), "assignments" (what the move takes with it or brings back, each with
+  its Project's and Person's names), and "before" and "after". Each of the last
+  two carries "plan" - the plan's "capacity" and "allocated" - and the figure
+  the move changes: "person" for a Person or an Assignment, "project" for a
+  Project. A figure the move takes out of the plan is null. An Assignment's
+  answer carries "fteDays", its own size, and no "assignments" list, because it
+  is the Assignment itself; once written it carries "server" and "readBack".
 
   If the tool is on your PATH as pact, "pact --help" and "pact help"
   print this too.
@@ -968,6 +1036,165 @@ function renderProjectAdd(data) {
   return lines.join("\n") + "\n";
 }
 
+/* --- one record archived or restored ------------------------------------- */
+
+// What each direction says: what the record does, what its Assignments do, and
+// which way the FTE-days go. Both directions print the same layout, so the two
+// cannot drift into different shapes.
+const MOVE_WORDS = {
+  archive: {
+    title: "Archive",
+    record: "leaves the plan",
+    one: "stays in the file and stops counting",
+    many: "stay in the file and stop counting",
+    fte: "leave the plan",
+    allocated: "leaves the plan with it"
+  },
+  restore: {
+    title: "Restore",
+    record: "returns to the plan",
+    one: "comes back and counts again",
+    many: "come back and count again",
+    fte: "return to the plan",
+    allocated: "returns to the plan with it"
+  }
+};
+
+const KIND_TITLES = { person: "Person", project: "Project", assignment: "Assignment" };
+
+function countText(count, noun) {
+  return count + " " + noun + (count === 1 ? "" : "s");
+}
+
+// A Person's Allocated of their Capacity, as a bare pair of figures: the over
+// clause says the rest. A Person the plan no longer holds reads as nothing at
+// all, which is what an archive leaves behind.
+function personAmount(position) {
+  if (!position) return "0.0 of 0.0";
+  return figure(position.allocated) + " of " + figure(position.capacity);
+}
+
+// A Project's Allocated as a figure, or "0.0" once the plan no longer holds
+// the Project. An Absence Project has no such figure at all.
+function projectAmount(project) {
+  return project && !project.absence ? figure(project.allocated) : "0.0";
+}
+
+// Whether the Person is over their Capacity, and where that changed: an archive
+// can take them out of over-allocation, a restore can put them back into it.
+function overClause(move) {
+  const before = move.before.person;
+  const after = move.after.person;
+  if (!after) return "";
+  if (after.overAllocated) {
+    return ", " + (before && before.overAllocated ? "still " : "") +
+      "over-allocated by " + figure(after.overBy);
+  }
+  if (before && before.overAllocated) return ", no longer over-allocated";
+  return "";
+}
+
+function moveSubjectLine(move) {
+  const subject = move.subject;
+  const words = MOVE_WORDS[move.action];
+  if (move.kind === "assignment") {
+    return subject.project + " / " + subject.person + ", " + subject.start + " to " +
+      subject.end + " at " + subject.share + "%";
+  }
+  const parts = [];
+  if (move.kind === "person") {
+    parts.push("available " + subject.availability + "%");
+    if (subject.location !== "") parts.push(subject.location);
+  } else {
+    parts.push("colour slot " + subject.colour);
+    if (subject.absence) parts.push("an Absence Project");
+  }
+  if (subject.tags.length > 0) parts.push(countText(subject.tags.length, "tag"));
+  return subject.name + " " + words.record + ": " + parts.join(", ");
+}
+
+// The command that undoes this one: an archive is only worth making if the way
+// back is one line away.
+function restoreCommand(move) {
+  if (move.kind === "assignment") {
+    return "assignment restore " + move.subject.project + " --person \"" +
+      move.subject.person + "\"";
+  }
+  return move.kind + " restore \"" + move.subject.name + "\"";
+}
+
+function renderSubjectMove(data) {
+  const words = MOVE_WORDS[data.action];
+  const before = data.before;
+  const after = data.after;
+  const lines = header(data).concat([""]);
+  lines.push(words.title + " " + KIND_TITLES[data.kind]);
+  lines.push("  " + moveSubjectLine(data));
+
+  if (data.kind === "assignment") {
+    if (data.subject.absence) {
+      lines.push("  " + data.subject.project + " is an Absence Project, so this Assignment is");
+      lines.push("  the Person's time away: it contributes no FTE-day, and no Allocated");
+      lines.push("  " + words.allocated + ".");
+    } else {
+      lines.push("  " + figure(data.fteDays) + " FTE-days " + words.fte + ".");
+    }
+    lines.push("  " + data.subject.person + ": " + personAmount(before.person) +
+      " FTE-days  ->  " + personAmount(after.person) + overClause(data));
+    lines.push("  " + data.period.label + ": plan total " + figure(before.plan.allocated) +
+      " -> " + figure(after.plan.allocated));
+  } else {
+    // An Absence Project has no Allocated to lose, so there is no figure of its
+    // own to state: the time away it was taking out of Capacity is the whole of
+    // what it was doing in the plan.
+    const absence = data.kind === "project" && data.subject.absence;
+    if (absence) {
+      lines.push("  An Absence Project contributes no FTE-day, so no Allocated " +
+        words.allocated + ".");
+    }
+    const held = data.assignments.length;
+    lines.push("  " + data.subject.name + "'s " + countText(held, "Assignment") + " " +
+      (held === 1 ? words.one : words.many));
+    if (data.kind === "person") {
+      lines.push("  " + data.period.label + ": " + personAmount(before.person) +
+        " FTE-days -> " + personAmount(after.person) + ", plan total " +
+        figure(before.plan.allocated) + " -> " + figure(after.plan.allocated));
+    } else if (!absence) {
+      lines.push("  " + data.period.label + ": " + projectAmount(before.project) +
+        " FTE-days -> " + projectAmount(after.project) + ", plan total " +
+        figure(before.plan.allocated) + " -> " + figure(after.plan.allocated));
+    }
+  }
+
+  // Capacity is the second figure, and only the one that moves is worth a line:
+  // a Person takes their own capacity with them, and an Absence Project takes
+  // the time away it was holding out of everyone's.
+  if (Math.abs(before.plan.capacity - after.plan.capacity) > 1e-9) {
+    lines.push("  Plan Capacity: " + figure(before.plan.capacity) + " -> " +
+      figure(after.plan.capacity) + " FTE-days");
+  }
+
+  if (data.action === "archive") {
+    lines.push("");
+    lines.push("Further commands will not find this " + KIND_TITLES[data.kind] +
+      " until it is restored.");
+    lines.push("Bring it back with: " + restoreCommand(data) + ".");
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const back = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + back.name +
+    " (" + back.id + ")" + (back.live
+      ? " is in the live plan again."
+      : " is out of the live plan and still in the file, archived."));
+  lines.push("Undo: the " + data.action + " is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
 // A count of working days: whole days read as whole, a half day as 0.5.
 function dayCount(value) {
   const n = Math.round(Number(value) * 100) / 100;
@@ -1004,13 +1231,15 @@ function rejectForeignOptions(args) {
 async function runAssignment(args) {
   const action = args.subject.length > 0 ? args.subject[0] : "";
   if (action === "") {
-    throw usage("assignment needs an action; the actions are move and add: " +
-      "assignment move <project> --person <name>, or assignment add <project> --person <name> " +
-      "--from <date> --to <date>");
+    throw usage("assignment needs an action; the actions are move, add, archive and " +
+      "restore: assignment move <project> --person <name>, or assignment add <project> " +
+      "--person <name> --from <date> --to <date>");
   }
   if (action === "move") return runAssignmentMove(args);
   if (action === "add") return runAssignmentAdd(args);
-  throw usage('unknown assignment action "' + action + '"; the actions are move and add');
+  if (action === "archive" || action === "restore") return runSubjectMove(args, action);
+  throw usage('unknown assignment action "' + action + '"; the actions are move, add, ' +
+    "archive and restore");
 }
 
 async function runAssignmentMove(args) {
@@ -1165,6 +1394,63 @@ async function runProjectAdd(args) {
 
   if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
   else process.stdout.write(renderProjectAdd(data));
+}
+
+/* --- archiving and restoring --------------------------------------------- */
+
+// The options the archive and the restore do not take: an Assignment is named
+// by its Project and --person, and neither direction changes a date or an
+// Allocation. --apply and --dry-run are theirs, as they are every write's.
+const ASSIGNMENT_ARCHIVE_REFUSALS = ASSIGNMENT_REFUSALS.concat(["from", "to", "share"]);
+const RECORD_ARCHIVE_REFUSALS = ["person", "from", "to", "share", "location",
+  "availability", "colour", "note", "tags"];
+
+// The six commands are one command with two directions and three collections:
+// the same preview-then-apply, the same refusals and the same read back.
+async function runSubjectMove(args, action) {
+  const kind = args.command;
+  const name = args.subject.slice(1).join(" ").trim();
+  if (kind === "assignment") {
+    if (name === "") throw usage("assignment " + action + " needs a Project name");
+    if (args.person === undefined) throw usage("assignment " + action + " needs --person <name>");
+    refuseOptions(args, ASSIGNMENT_ARCHIVE_REFUSALS,
+      "an archive or a restore changes no date and no Allocation");
+  } else {
+    if (name === "") throw usage(kind + " " + action + " needs a name");
+    refuseOptions(args, RECORD_ARCHIVE_REFUSALS,
+      "an archive or a restore changes nothing but which records are in the plan");
+  }
+  rejectWriteFlags(args);
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const request = {
+    kind: kind,
+    subject: name,
+    project: kind === "assignment" ? name : undefined,
+    person: args.person,
+    period: args.period
+  };
+  const answer = action === "archive" ? query.archive(plan, request) : query.restore(plan, request);
+  const data = Object.assign({
+    command: kind,
+    action: action,
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, answer);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = action === "archive"
+      ? await applyArchive(base, data, resolved.path)
+      : await applyRestore(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderSubjectMove(data));
 }
 
 /* --- the running app, for the one write ---------------------------------- */
@@ -1389,6 +1675,70 @@ async function applyProjectAdd(base, add, planPath) {
   };
 }
 
+// The collection a kind of record lives in, in the API and in the plan alike.
+function collectionOf(kind) {
+  return kind === "person" ? "people" : kind === "project" ? "projects" : "assignments";
+}
+
+// The one record's route in the API: the collection route the interface itself
+// writes for a Person, a Project and an Assignment.
+function recordRoute(kind, id) {
+  return "/api/" + collectionOf(kind) + "/" + encodeURIComponent(id);
+}
+
+// What a read back calls the record it went looking for: the Person's or the
+// Project's name, or the Assignment's Project and Person.
+function recordLabel(move) {
+  if (move.kind === "assignment") return move.subject.project + " / " + move.subject.person;
+  return move.subject.name;
+}
+
+function findRecord(plan, kind, id) {
+  return ((plan && plan[collectionOf(kind)]) || []).find(function (record) {
+    return record.id === id;
+  }) || null;
+}
+
+// The archive: the app's own DELETE on the record, which has always been the
+// archive rather than a deletion, so the bare DELETE is not the destruction
+// route and this tool has no way to reach that one. The read back asks two
+// questions, because "gone from the plan" alone cannot tell an archive from a
+// deletion: the live plan must not hold the record any more, and the archive
+// view must hold it, marked archived. A record answering neither was deleted.
+async function applyArchive(base, move, planPath) {
+  await requireSamePlan(base, planPath);
+  const id = move.subject.id;
+  await ask(base, "DELETE", recordRoute(move.kind, id));
+  if (findRecord(await ask(base, "GET", "/api/plan"), move.kind, id)) {
+    throw new CliError("the archive did not land: the app's live plan still holds " + id,
+      "write-lost", 1,
+      "the app is the authority here: read this record there before trying again");
+  }
+  const kept = findRecord(await ask(base, "GET", "/api/plan?archived=1"), move.kind, id);
+  if (!kept || kept.archived !== true) {
+    throw new CliError("the archive did not land: the app's file does not hold " + id +
+      " as archived, so the record is gone from the plan rather than archived",
+      "write-lost", 1, "read the plan in the app before doing anything else");
+  }
+  return { id: id, name: recordLabel(move), archived: true, live: false };
+}
+
+// The restore: the app's own PATCH that sets archived back to false, the same
+// request the Restore control sends, then a read back of the live plan, which
+// must hold the record again.
+async function applyRestore(base, move, planPath) {
+  await requireSamePlan(base, planPath);
+  const id = move.subject.id;
+  await ask(base, "PATCH", recordRoute(move.kind, id), { archived: false });
+  const live = findRecord(await ask(base, "GET", "/api/plan"), move.kind, id);
+  if (!live || live.archived === true) {
+    throw new CliError("the restore did not land: the app's live plan does not hold " + id,
+      "write-lost", 1,
+      "the app is the authority here: read this record there before trying again");
+  }
+  return { id: id, name: recordLabel(move), archived: false, live: true };
+}
+
 /* --- the run ------------------------------------------------------------- */
 
 function reportError(err, json) {
@@ -1431,6 +1781,13 @@ async function run() {
   }
   if (args.command === "project" && args.subject[0] === "add") {
     await runProjectAdd(args);
+    return;
+  }
+  // `person archive` and `person restore`, and the same on a Project: the
+  // action is the first word, as it is for `assignment`.
+  if ((args.command === "person" || args.command === "project") &&
+      (args.subject[0] === "archive" || args.subject[0] === "restore")) {
+    await runSubjectMove(args, args.subject[0]);
     return;
   }
   const spec = COMMANDS[args.command];

@@ -56,6 +56,20 @@ const DIR = scratchDir();
 const PLAN = path.join(DIR, "fixture.pact.json");
 fs.writeFileSync(PLAN, JSON.stringify(FIXTURE, null, 2) + "\n");
 
+// The fixture with one record of each kind archived, so the restore path has a
+// subject the reads cannot see. One plan per kind: an Assignment is only found
+// on a Project and a Person that are themselves live.
+const ARCHIVED_PERSON = Object.assign({}, FIXTURE, {
+  people: FIXTURE.people.map((p) => (p.id === "anna" ? Object.assign({}, p, { archived: true }) : p))
+});
+const ARCHIVED_PROJECT = Object.assign({}, FIXTURE, {
+  projects: FIXTURE.projects.map((p) => (p.id === "solar" ? Object.assign({}, p, { archived: true }) : p))
+});
+const ARCHIVED_ASSIGNMENT = Object.assign({}, FIXTURE, {
+  assignments: FIXTURE.assignments.map((a) =>
+    (a.id === "a-borealis-anna" ? Object.assign({}, a, { archived: true }) : a))
+});
+
 // A plan with two People of one name, for the ambiguous-subject path.
 const DUPLICATE = Object.assign({}, FIXTURE, {
   people: [
@@ -255,8 +269,9 @@ test("importing lib/query.mjs is silent and side-effect free", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
   assert.equal(result.stdout, "before" + [
-    "QueryError", "assignmentAdd", "assignmentMove", "capacity", "holidays", "milestones", "people", "person",
-    "personAdd", "planSummary", "project", "projectAdd", "projects", "resolvePeriod", "tag", "tags"
+    "QueryError", "archive", "assignmentAdd", "assignmentMove", "capacity", "holidays", "milestones",
+    "people", "person", "personAdd", "planSummary", "project", "projectAdd", "projects", "resolvePeriod",
+    "restore", "tag", "tags"
   ].join(","));
 });
 
@@ -277,7 +292,14 @@ test("every query result survives JSON round-tripping", () => {
     query.assignmentMove(FIXTURE, { project: "Solar", person: "Anna Meier", to: "2026-11-20", period: period }),
     query.assignmentAdd(FIXTURE, { project: "Borealis", person: "Ben Falk", from: "2026-11-02", to: "2026-11-06", share: 50, period: period }),
     query.personAdd(FIXTURE, { name: "Clara Nowak", location: "Berlin", availability: 80, tags: ["skill:frontend"], period: period }),
-    query.projectAdd(FIXTURE, { name: "Northwind", tags: ["api:Northwind"] })
+    query.projectAdd(FIXTURE, { name: "Northwind", tags: ["api:Northwind"] }),
+    query.archive(FIXTURE, { kind: "person", subject: "Anna Meier", period: period }),
+    query.archive(FIXTURE, { kind: "project", subject: "Solar", period: period }),
+    query.archive(FIXTURE, { kind: "assignment", project: "Solar", person: "Anna Meier", period: period }),
+    query.restore(ARCHIVED_PERSON, { kind: "person", subject: "Anna Meier", period: period }),
+    query.restore(ARCHIVED_PROJECT, { kind: "project", subject: "Solar", period: period }),
+    query.restore(ARCHIVED_ASSIGNMENT,
+      { kind: "assignment", project: "Borealis", person: "Anna Meier", period: period })
   ];
   results.forEach((result) => {
     assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
