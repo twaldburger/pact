@@ -1498,7 +1498,7 @@ test("no action, option or code path in the tool deletes anything", async () => 
   // Milestone has no archived state for it to reach.
   const help = await cli(["--help"]);
   assert.match(help.stdout, /The tool never deletes anything\./);
-  assert.match(help.stdout, /Fourteen commands change a plan/);
+  assert.match(help.stdout, /Sixteen commands change a plan/);
   assert.match(help.stdout, /Archiving is how work leaves a plan reversibly/);
   assert.match(help.stdout, /and no --force to\s+reach one/);
   assert.match(help.stdout, /person archive <name>/);
@@ -1517,7 +1517,10 @@ test("no action, option or code path in the tool deletes anything", async () => 
   // A Milestone has no archived state, so its only routes here are the app's own
   // create and edit - POST and PATCH on the collection - and no removal.
   assert.match(source, /readBackCreate\(base, "\/api\/milestones"/);
-  assert.match(source, /"PATCH", "\/api\/milestones\/" \+ encodeURIComponent\(id\)/);
+  // The PATCH an edit sends is the record's own route, built from its kind;
+  // a Milestone's is the milestones collection.
+  assert.match(source, /"PATCH", recordRoute\(kind, id\)/);
+  assert.match(source, /if \(kind === "milestone"\) return "milestones";/);
 
   assert.deepEqual(started.bytes(), before);
 });
@@ -1963,7 +1966,10 @@ test("no action, option or code path in the tool removes a Milestone", async () 
   // named nowhere, so no code path here can reach it.
   const source = fs.readFileSync(BIN, "utf8");
   assert.match(source, /readBackCreate\(base, "\/api\/milestones"/);
-  assert.match(source, /"PATCH", "\/api\/milestones\/" \+ encodeURIComponent\(id\)/);
+  // The PATCH an edit sends is the record's own route, built from its kind;
+  // a Milestone's is the milestones collection.
+  assert.match(source, /"PATCH", recordRoute\(kind, id\)/);
+  assert.match(source, /if \(kind === "milestone"\) return "milestones";/);
   assert.doesNotMatch(source, /destroyMilestone|\/destroy/);
   // The one DELETE in the file is the archive route, and no DELETE names the
   // milestones collection at all.
