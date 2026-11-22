@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 /*
- * PACT's read tool: answer a question about a plan from a checkout, with no
- * server and no browser.
+ * PACT's tool: answer a question about a plan from a checkout, with no server
+ * and no browser, and change one Assignment through the running app.
  *
  * This file is the front end only: it parses argv, resolves the plan file,
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. It only ever reads the plan.
+ * is the report's own. Reads never touch the network. The one write,
+ * `assignment move --apply`, sends the query module's patch to the app's own
+ * PATCH /api/assignments/<id> - the route and body the interface itself uses -
+ * so the validation, the atomic write and the changed-underneath guard are the
+ * app's, and the change is one step back with its Undo control.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -72,11 +76,13 @@ const COMMANDS = {
   }
 };
 
-const HELP = `PACT read tool
+const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-The figures are computed by the report's own modules over the period you ask
-for, so they are the report page's numbers.
+One command changes a plan: assignment move, which writes through the running
+app so the change is one step back with its Undo control. The figures are
+computed by the report's own modules over the period you ask for, so they are
+the report page's numbers.
 
 Usage
   node bin/pact.mjs --help
@@ -103,6 +109,9 @@ Commands
       node bin/pact.mjs holidays
   milestones                       the Milestones as stored
       node bin/pact.mjs milestones
+  assignment move <project>        reschedule or resize one Assignment, through the app
+      node bin/pact.mjs assignment move Atlas --person "Anna Meier" \\
+          --from 2026-11-02 --to 2026-11-20
 
 Options
   --period <period>    the stretch to count; without it, the plan's own period
@@ -115,11 +124,43 @@ Options
   -h, --help           this text; --help works before or after a command
   --period=<period> and --plan=<path> also work.
 
+assignment move takes these as well
+  --person <name>      the Person the Assignment is on; required
+  --from <date>        the new start date, as 2026-11-02
+  --to <date>          the new end date, as 2026-11-20
+  --share <percent>    the new Allocation, a whole number from 1 to 100
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the diff, and nothing written: the same as the default
+
+Writing an Assignment
+  assignment move identifies one Assignment by a Project and a Person, and sets
+  its dates and its Allocation: --from and --to are the dates, --share the
+  Allocation, and a field left out keeps what the Assignment holds.
+
+  It prints a diff and writes nothing - the old and new dates, the old and new
+  FTE-days, and the Person's Allocated of their Capacity before and after, so an
+  over-allocation is visible before it is made rather than after. --apply sends
+  exactly the fields the diff shows, through the app's own
+  PATCH /api/assignments/<id>, then reads the plan back and confirms the
+  Assignment holds them; a write that did not land exits non-zero.
+
+  A Person may hold several Assignments of one Project. More than one match is
+  an error naming the candidates, never a guess.
+
+  The app must be the one holding this plan file: the tool reads the app's
+  /api/plan-file and refuses rather than change a different plan. Where the app
+  is: PACT_URL, else http://localhost:4173. Reads need no server.
+
+  The change is one step back with the app's Undo control, because the app made
+  it: nothing about the write bypasses the plan store.
+
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
-  The tool only reads it and never writes a plan. It reads the live plan, so
-  archived People, Projects and Assignments are left out, as on the default
-  grid.
+  Reads never write it. Its one write, assignment move --apply, goes through the
+  running app's API, so validation, the atomic write and the guard against a
+  file changed underneath are the app's, not a second copy here. It reads the
+  live plan, so archived People, Projects and Assignments are left out, as on
+  the default grid.
 
 Subjects
   A name or an id, case-insensitive: person anna and person "Anna Meier" find
@@ -150,6 +191,11 @@ JSON
      "allocated":19.2,"remaining":-3.2,"ofOffer":1.2,"overAllocated":true,
      "buckets":[...]}],"totals":{...}}
 
+  assignment move adds "action" and "applied" (false until it is written), and
+  once written "server" and "readBack" (the dates and Allocation the app's plan
+  holds afterwards). Its "change" is the patch that was sent: only the fields
+  that differ, in the shape the app's PATCH /api/assignments/<id> takes.
+
   If the tool is on your PATH as pact, "pact --help" and "pact help"
   print this too.
 `;
@@ -170,40 +216,54 @@ function usage(message) {
 
 /* --- argv ---------------------------------------------------------------- */
 
+// The options that carry a value, by the name they are typed with.
+const VALUE_OPTIONS = {
+  "--plan": "plan",
+  "--period": "period",
+  "--person": "person",
+  "--from": "from",
+  "--to": "to",
+  "--share": "share"
+};
+
+// The options that are a flag alone.
+const FLAG_OPTIONS = {
+  "--json": "json",
+  "--apply": "apply",
+  "--dry-run": "dryRun"
+};
+
 function parseArgs(argv) {
-  const out = { command: null, subject: [], period: undefined, plan: undefined, json: false, help: false };
+  const out = {
+    command: null, subject: [], plan: undefined, period: undefined, person: undefined,
+    from: undefined, to: undefined, share: undefined,
+    json: false, apply: false, dryRun: false, help: false
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "-h" || arg === "--help") {
+    if (arg === "-h" || arg === "--help" || (out.command === null && arg === "help")) {
       out.help = true;
       continue;
     }
-    if (out.command === null && arg === "help") {
-      out.help = true;
+    if (Object.prototype.hasOwnProperty.call(FLAG_OPTIONS, arg)) {
+      out[FLAG_OPTIONS[arg]] = true;
       continue;
     }
-    if (arg === "--json") {
-      out.json = true;
-      continue;
-    }
-    if (arg === "--plan" || arg === "--period") {
-      const value = argv[i + 1];
-      if (value === undefined || value.trim() === "" || value.startsWith("-")) {
-        throw usage(arg + " needs a value");
+    const equals = arg.indexOf("=");
+    const name = equals === -1 ? arg : arg.slice(0, equals);
+    if (Object.prototype.hasOwnProperty.call(VALUE_OPTIONS, name)) {
+      let value;
+      if (equals === -1) {
+        value = argv[i + 1];
+        if (value === undefined || value.trim() === "" || value.startsWith("-")) {
+          throw usage(name + " needs a value");
+        }
+        i += 1;
+      } else {
+        value = arg.slice(equals + 1);
+        if (value.trim() === "") throw usage(name + " needs a value");
       }
-      if (arg === "--plan") out.plan = value;
-      else out.period = value;
-      i += 1;
-      continue;
-    }
-    if (arg.startsWith("--plan=")) {
-      out.plan = arg.slice("--plan=".length);
-      if (out.plan === "") throw usage("--plan needs a value");
-      continue;
-    }
-    if (arg.startsWith("--period=")) {
-      out.period = arg.slice("--period=".length);
-      if (out.period === "") throw usage("--period needs a value");
+      out[VALUE_OPTIONS[name]] = value;
       continue;
     }
     if (arg.startsWith("-")) {
@@ -620,6 +680,234 @@ const RENDERERS = {
   milestones: renderMilestones
 };
 
+/* --- one Assignment's change --------------------------------------------- */
+
+// "16.5 of 18.0": what a Person is Allocated of the Capacity they offer - the
+// columns the people command prints - with the over-allocation named where there
+// is one, so both ends of a move state it rather than leave it to be worked out.
+function positionText(position) {
+  return figure(position.allocated) + " of " + figure(position.capacity) +
+    (position.overAllocated ? "  (over by " + figure(position.overBy) + ")" : "");
+}
+
+function renderAssignmentMove(data) {
+  const lines = header(data);
+  const before = data.before;
+  const after = data.after;
+  lines.push("");
+  lines.push("Assignment " + data.assignment.project + " / " + data.assignment.person);
+  const pairs = [
+    [before.start + " to " + before.end, "->  " + after.start + " to " + after.end]
+  ];
+  // The Allocation is its own line only when it moves: the FTE-days already
+  // show a resize, and a line that never changes is noise.
+  if (before.share !== after.share) {
+    pairs.push([before.share + "%", "->  " + after.share + "%"]);
+  }
+  pairs.push([figure(before.fteDays) + " FTE-days", "->  " + figure(after.fteDays) + " FTE-days"]);
+  pairs.push([
+    data.person.name + ": " + positionText(data.person.before),
+    "->  " + positionText(data.person.after)
+  ]);
+  lines.push.apply(lines, renderPairs(pairs.map(function (pair) {
+    return ["  " + pair[0], pair[1]];
+  })));
+
+  if (data.assignment.absence) {
+    lines.push("");
+    lines.push("Note: " + data.assignment.project + " is an Absence Project, so this");
+    lines.push("Assignment is the Person's time away: it changes Capacity, not Allocated.");
+  }
+  if (after.outsidePlan && !before.outsidePlan) {
+    lines.push("");
+    lines.push("Note: the new dates lie outside the plan period, so the app draws no");
+    lines.push("block for this Assignment.");
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const readBack = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " +
+    readBack.start + " to " + readBack.end + " at " + readBack.share + "%.");
+  lines.push("Undo: the change is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
+function rejectForeignOptions(args) {
+  [
+    ["person", "--person"], ["from", "--from"], ["to", "--to"], ["share", "--share"],
+    ["apply", "--apply"], ["dryRun", "--dry-run"]
+  ].forEach(function (entry) {
+    const key = entry[0];
+    const flag = entry[1];
+    const taken = key === "apply" || key === "dryRun" ? args[key] : args[key] !== undefined;
+    if (taken) throw usage(args.command + " does not take " + flag + "; assignment move does");
+  });
+}
+
+async function runAssignmentMove(args) {
+  const action = args.subject.length > 0 ? args.subject[0] : "";
+  if (action === "") {
+    throw usage("assignment needs an action; the action is move: assignment move <project> --person <name>");
+  }
+  if (action !== "move") throw usage('unknown assignment action "' + action + '"; the action is move');
+  const project = args.subject.slice(1).join(" ").trim();
+  if (project === "") throw usage("assignment move needs a Project name");
+  if (args.person === undefined) throw usage("assignment move needs --person <name>");
+  if (args.apply && args.dryRun) throw usage("--apply and --dry-run contradict each other");
+  if (args.from === undefined && args.to === undefined && args.share === undefined) {
+    throw usage("assignment move needs at least one of --from, --to or --share");
+  }
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const diff = query.assignmentMove(plan, {
+    project: project,
+    person: args.person,
+    from: args.from,
+    to: args.to,
+    share: args.share,
+    period: args.period
+  });
+  const data = Object.assign({
+    command: "assignment",
+    action: "move",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, diff);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = await applyMove(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderAssignmentMove(data));
+}
+
+/* --- the running app, for the one write ---------------------------------- */
+
+const DEFAULT_SERVER = "http://localhost:4173";
+const SERVER_TIMEOUT_MS = 5000;
+
+// Where the app serves: PACT_URL when it is set, else the port the app prints.
+function serverBase() {
+  const env = process.env.PACT_URL;
+  const raw = typeof env === "string" && env.trim() !== "" ? env.trim() : DEFAULT_SERVER;
+  let url = null;
+  try {
+    url = new URL(raw);
+  } catch (_) {
+    url = null;
+  }
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) {
+    throw new CliError('PACT_URL is not an http address: "' + raw + '"', "no-server", 1,
+      "it is where the app serves, such as " + DEFAULT_SERVER);
+  }
+  return raw.replace(/\/+$/, "");
+}
+
+// Nothing answered, or nothing answered in time. A short, actionable error
+// rather than the fetch failure: the fix is always to start the app.
+function unreachable(base, err) {
+  const code = err && err.cause && err.cause.code ? err.cause.code : "";
+  const why = err && err.name === "TimeoutError"
+    ? "it did not answer within " + SERVER_TIMEOUT_MS / 1000 + "s"
+    : code === "ECONNREFUSED" ? "nothing is listening there"
+      : "the request failed: " + (err && err.message ? err.message : String(err));
+  return new CliError("no PACT server at " + base + " (" + why + ")", "no-server", 1,
+    "--apply writes through the running app: start it with node server.mjs, " +
+    "or set PACT_URL to where it serves");
+}
+
+async function ask(base, method, route, body) {
+  const options = { method: method, signal: AbortSignal.timeout(SERVER_TIMEOUT_MS) };
+  if (body !== undefined) {
+    options.headers = { "content-type": "application/json" };
+    options.body = JSON.stringify(body);
+  }
+  let response;
+  let text;
+  try {
+    response = await fetch(base + route, options);
+    text = await response.text();
+  } catch (err) {
+    throw unreachable(base, err);
+  }
+  let payload = null;
+  try {
+    payload = text.trim() === "" ? null : JSON.parse(text);
+  } catch (_) {
+    payload = null;
+  }
+  if (!response.ok) {
+    const said = payload && typeof payload.error === "string" ? payload.error : "HTTP " + response.status;
+    throw new CliError("the app refused " + method + " " + route + ": " + said, "server-refused", 1);
+  }
+  return payload;
+}
+
+// Symlinks resolved when the path exists, so two spellings of one file compare
+// equal; the resolved absolute path otherwise.
+function realPath(filePath) {
+  try {
+    return fs.realpathSync(filePath);
+  } catch (_) {
+    return path.resolve(filePath);
+  }
+}
+
+// The app has its own active plan file, and writing through it would change
+// whichever plan it holds. This is the check that makes the write safe: prove
+// the app has the file this command read, and refuse rather than guess.
+async function requireSamePlan(base, planPath) {
+  const state = await ask(base, "GET", "/api/plan-file");
+  if (!state || typeof state.path !== "string" || state.path === "") {
+    throw new CliError("the app at " + base + " did not say which plan it holds", "plan-mismatch", 1,
+      "nothing was written");
+  }
+  const theirs = realPath(state.path);
+  const mine = realPath(planPath);
+  if (theirs !== mine) {
+    throw new CliError("refusing to write: the app at " + base + " has a different plan open",
+      "plan-mismatch", 1,
+      "it holds " + theirs + ", this command read " + mine +
+      "; pass --plan " + theirs + ", or open this plan in the app");
+  }
+}
+
+// The write: the same route and body the interface sends for a drag or a panel
+// save, then a read back of the app's plan. A write is done when the plan shows
+// it, never when the request returned 200.
+async function applyMove(base, diff, planPath) {
+  await requireSamePlan(base, planPath);
+  const route = "/api/assignments/" + encodeURIComponent(diff.assignment.id);
+  await ask(base, "PATCH", route, diff.change);
+  const plan = await ask(base, "GET", "/api/plan");
+  const landed = ((plan && plan.assignments) || []).find(function (assignment) {
+    return assignment.id === diff.assignment.id;
+  });
+  if (!landed) {
+    throw new CliError("the write did not land: the app's plan holds no Assignment " +
+      diff.assignment.id, "write-lost", 1,
+      "the app is the authority here: read the Assignment there before trying again");
+  }
+  if (landed.start !== diff.after.start || landed.end !== diff.after.end ||
+      landed.share !== diff.after.share) {
+    throw new CliError("the write did not land: the app's plan holds " + landed.start + " to " +
+      landed.end + " at " + landed.share + "%, not " + diff.after.start + " to " +
+      diff.after.end + " at " + diff.after.share + "%", "write-lost", 1,
+      "the app is the authority here: read the Assignment there before trying again");
+  }
+  return { start: landed.start, end: landed.end, share: landed.share };
+}
+
 /* --- the run ------------------------------------------------------------- */
 
 function reportError(err, json) {
@@ -644,17 +932,22 @@ function reportError(err, json) {
   process.exitCode = exit;
 }
 
-function run() {
+async function run() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || args.command === null) {
     process.stdout.write(HELP);
     return;
   }
+  if (args.command === "assignment") {
+    await runAssignmentMove(args);
+    return;
+  }
   const spec = COMMANDS[args.command];
   if (!spec) {
     throw usage('unknown command "' + args.command + '"; commands: ' +
-      Object.keys(COMMANDS).join(", "));
+      Object.keys(COMMANDS).concat("assignment").join(", "));
   }
+  rejectForeignOptions(args);
   if (!spec.subject && args.subject.length > 0) {
     throw usage(args.command + " takes no subject");
   }
@@ -681,9 +974,7 @@ function run() {
   else process.stdout.write(RENDERERS[args.command](data));
 }
 
-try {
-  run();
-} catch (err) {
+function fail(err) {
   if (err instanceof CliError || err instanceof query.QueryError) {
     reportError(err, process.argv.includes("--json"));
   } else {
@@ -691,3 +982,5 @@ try {
     process.exitCode = 1;
   }
 }
+
+run().catch(fail);

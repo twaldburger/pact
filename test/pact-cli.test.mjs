@@ -255,7 +255,7 @@ test("importing lib/query.mjs is silent and side-effect free", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
   assert.equal(result.stdout, "before" + [
-    "QueryError", "capacity", "holidays", "milestones", "people", "person",
+    "QueryError", "assignmentMove", "capacity", "holidays", "milestones", "people", "person",
     "planSummary", "project", "projects", "resolvePeriod", "tag", "tags"
   ].join(","));
 });
@@ -273,7 +273,8 @@ test("every query result survives JSON round-tripping", () => {
     query.tag(FIXTURE, period, "api:Solar"),
     query.capacity(FIXTURE, period),
     query.holidays(FIXTURE),
-    query.milestones(FIXTURE)
+    query.milestones(FIXTURE),
+    query.assignmentMove(FIXTURE, { project: "Solar", person: "Anna Meier", to: "2026-11-20", period: period })
   ];
   results.forEach((result) => {
     assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
