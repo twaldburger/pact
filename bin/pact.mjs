@@ -7,22 +7,25 @@
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. Reads never touch the network. The twelve writes -
+ * is the report's own. Reads never touch the network. The fourteen writes -
  * `person add --apply`, `project add --apply`, `assignment move --apply`,
  * `assignment add --apply`, archive and restore for each of the three
- * collections, and `holiday add --apply` and `holiday remove --apply` - send
- * the query module's body, patch or archive to the app's own
+ * collections, `holiday add --apply` and `holiday remove --apply`, and
+ * `milestone add --apply` and `milestone edit --apply` - send the query
+ * module's body, patch or archive to the app's own
  * POST /api/people, POST /api/projects, PATCH /api/assignments/<id>,
  * POST /api/assignments, DELETE /api/<collection>/<id> (the archive, as it has
  * always been), PATCH /api/<collection>/<id> with `archived: false` (the
- * restore) and PATCH /api/plan with the whole rebuilt holiday list (the app's
- * one holiday write) - the routes and bodies the interface itself uses - so
- * the validation, the atomic write and the changed-underneath guard are the
- * app's, and the change is one step back with its Undo control. Nothing here
- * deletes a record: the tool has no route to the app's destruction, no such
- * command, and no flag that reaches one. `holiday remove` takes a holiday date
- * out of one plan setting, which is not a record and is restorable by adding
- * the date back; see Deleting in the help.
+ * restore), PATCH /api/plan with the whole rebuilt holiday list (the app's
+ * one holiday write) and POST /api/milestones and PATCH /api/milestones/<id>
+ * (the app's two Milestone writes) - the routes and bodies the interface
+ * itself uses - so the validation, the atomic write and the changed-underneath
+ * guard are the app's, and the change is one step back with its Undo control.
+ * Nothing here deletes a record: the tool has no route to the app's
+ * destruction, no such command, and no flag that reaches one. `holiday remove`
+ * takes a holiday date out of one plan setting, which is not a record and is
+ * restorable by adding the date back, and a Milestone is created and edited but
+ * never removed, because it has no archived state; see Deleting in the help.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -90,10 +93,11 @@ const COMMANDS = {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-Twelve commands change a plan: person add, project add, assignment add and
+Fourteen commands change a plan: person add, project add, assignment add and
 assignment move create and change work, person, project and assignment each
-take archive and restore, and holiday add and holiday remove each write one
-holiday date for one Location. All of them write through the running app, so
+take archive and restore, holiday add and holiday remove each write one
+holiday date for one Location, and milestone add and milestone edit create a
+Milestone and change one. All of them write through the running app, so
 the change is one step back with its Undo control. The figures are computed
 by the report's own modules over the period you ask for, so they are the report
 page's numbers. The tool never deletes anything; see Deleting below.
@@ -150,6 +154,11 @@ Commands
       node bin/pact.mjs holiday add Berlin 2026-12-24
   holiday remove <location> <date> remove one holiday date for one Location, through the app
       node bin/pact.mjs holiday remove Berlin 2026-12-24
+  milestone add <name>             create one Milestone, through the app
+      node bin/pact.mjs milestone add "API launch" --date 2026-12-04 \\
+          --project Atlas --tag "delivery:phase-2"
+  milestone edit <name>            move or change one Milestone, through the app
+      node bin/pact.mjs milestone edit "API launch" --date 2026-12-11
 
 Options
   --period <period>    the stretch to count; without it, the plan's own period
@@ -210,6 +219,31 @@ holiday add takes this as well
 holiday add and holiday remove take these as well
   --apply              write it; without this, and with --dry-run, nothing is written
   --dry-run            the preview, and nothing written: the same as the default
+
+milestone add takes these as well
+  --date <date>        the Milestone's one date, as 2026-12-04; required
+  --colour <slot>      the colour slot, 0 to 9; without it the app takes the
+                       least-used slot among the Milestones, and the preview
+                       names the one it expects to be taken
+  --tag <tag>          a tag, repeated once per tag. A Milestone's tags are their
+                       own vocabulary, separate from a Person's or a Project's
+  --project <project>  a Project the Milestone relates to, repeated once per
+                       Project, by the name the reads resolve
+  --note <text>        free text; it lands in the Milestone's notes
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
+
+milestone edit takes these as well
+  --date <date>        the new date; the weekday of it is stated
+  --colour <slot>      the new colour slot, 0 to 9
+  --tag <tag>          the Milestone's new tags, replacing the ones it holds;
+                       repeated once per tag
+  --project <project>  the Projects it now relates to, replacing those it named;
+                       repeated once per Project
+  --note <text>        the new notes
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
+                       A field left out keeps what the Milestone holds.
 
 Holidays, one date at a time
   holiday add and holiday remove write one holiday date for one Location. The
@@ -292,6 +326,34 @@ Rescheduling or resizing an Assignment
   The change is one step back with the app's Undo control, because the app made
   it: nothing about the write bypasses the plan store.
 
+Creating a Milestone, and moving one
+  milestone add creates one Milestone and prints what it would create: its name
+  and date, the weekday that date falls on, the colour slot it would take, its
+  tags, its notes, and whether it relates to Projects or to none. A Milestone
+  related to Projects draws its rule only while one of them is in view; one
+  related to none is plan-wide. The preview says which, because that is what the
+  reader of the plan cannot see from a date alone, and adds the reminder that no
+  total, share or over-allocation check counts a Milestone: it is an annotation.
+
+  A new Milestone with no --colour takes the least-used slot among the plan's
+  Milestones, and the server picks it: the preview names the slot it expects,
+  but the create body carries no colour at all. A named --colour is honoured and
+  the preview says it was named rather than predicted.
+
+  milestone edit identifies one Milestone by name, and sets the fields it names:
+  --date, --colour, --tag, --project and --note, with a field left out keeping
+  what the Milestone holds. It prints a diff of exactly the fields that change
+  and writes nothing; --apply sends exactly those fields, through the app's own
+  PATCH /api/milestones/<id>, then reads the plan back and confirms the
+  Milestone holds them. A write that did not land exits non-zero.
+
+  It refuses a name a Milestone already answers to (the reads find a Milestone
+  by name, so two of one name would make every later command ambiguous), a date
+  the plan's format does not accept, an unknown or ambiguous Project, an unknown
+  colour, and an edit that would change nothing. It never removes a Milestone:
+  a Milestone has no archived state, so there is no action, option or route here
+  to the app's deletion, which stays in the app where it can be seen.
+
 Archiving and restoring
   person archive, project archive and assignment archive take a record out of
   the plan and destroy nothing: it is one flag in the plan file, written by the
@@ -324,9 +386,9 @@ Deleting
   destroys a Person, a Project, an Assignment or a Milestone, and no --force to
   reach one: what this tool can do to a plan is add a Person, add a Project or
   add an Assignment, move an Assignment, archive or restore a Person, a Project
-  or an Assignment, and add or remove one holiday date for one Location, and
-  nothing more. That boundary is deliberate, and it is not a gap waiting to be
-  filled.
+  or an Assignment, add or remove one holiday date for one Location, and create
+  or edit a Milestone, and nothing more. That boundary is deliberate, and it is
+  not a gap waiting to be filled.
 
   Archiving is how work leaves a plan reversibly: archive takes a record out of
   the plan and restore puts it back, and neither destroys anything. A deletion
@@ -338,23 +400,25 @@ Deleting
   keeps every other date of that Location and every other Location's list.
 
   A Milestone has no archived state - it either exists or it is destroyed - so
-  this tool cannot take one out of a plan at all. It creates and edits no
-  Milestone either, and deleting one stays in the app, where it can be seen.
+  this tool cannot take one out of a plan at all. It creates one and it edits
+  one, and deleting one stays in the app, where it can be seen and Undo takes it
+  back.
 
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
   Reads never write it. Its writes - the four that create and change work, the
-  six that archive and restore, and the two that add and remove a holiday date -
-  go through the running app's API, so validation, the atomic write and the
-  guard against a file changed underneath are the app's, not a second copy
-  here. It reads the live plan, so archived People, Projects and Assignments
-  are left out, as on the default grid; a restore is the one command that looks
-  past that rule.
+  six that archive and restore, the two that add and remove a holiday date, and
+  the two that create and edit a Milestone - go through the running app's API,
+  so validation, the atomic write and the guard against a file changed
+  underneath are the app's, not a second copy here. It reads the live plan, so
+  archived People, Projects and Assignments are left out, as on the default
+  grid; a restore is the one command that looks past that rule.
 
 Subjects
   A name or an id, case-insensitive: person anna and person "Anna Meier" find
   the same Person. An unknown or ambiguous name is an error naming the nearest
-  matches, never a zero.
+  matches, never a zero. A Milestone is found by name or id the same way, and so
+  is a Project named by --project.
 
 What the figures mean, in the glossary's words
   Capacity is what a Person offers over the period, net of their Location's
@@ -425,6 +489,22 @@ JSON
   answer carries "fteDays", its own size, and no "assignments" list, because it
   is the Assignment itself; once written it carries "server" and "readBack".
 
+  milestone add adds "action" and "applied" (false until it is written), and
+  once written "server" and "readBack" (the id and fields the app's plan holds
+  afterwards). Its "create" is the body POST /api/milestones takes - no id,
+  since the server mints one, and no "colour" at all when none was named - and
+  its "colour" is { slot, named }: the slot the app is expected to take, and
+  whether the tool named it or the server chooses. "weekday" is the day the
+  date falls on, and "projects" the related Projects as { id, name }.
+
+  milestone edit adds "action" and "applied" (false until it is written), and
+  once written "server" and "readBack". Its "subject" is the Milestone as
+  stored, its "after" the Milestone as the edit would leave it, both carrying
+  their related "projects" as { id, name }; "change" is the patch that was
+  sent - only the fields that differ, in the shape the app's
+  PATCH /api/milestones/<id> takes - and "diff" is those fields as
+  [{ field, before, after }] in the order the preview prints them.
+
   If the tool is on your PATH as pact, "pact --help" and "pact help"
   print this too.
 `;
@@ -457,12 +537,14 @@ const VALUE_OPTIONS = {
   "--availability": "availability",
   "--colour": "colour",
   "--note": "note",
-  "--kind": "kind"
+  "--kind": "kind",
+  "--date": "date"
 };
 
 // The options that repeat, each value added to a list: one --tag per tag, since
-// a tag is free text and cannot be split on a comma without being rewritten.
-const REPEATABLE_OPTIONS = { "--tag": "tags" };
+// a tag is free text and cannot be split on a comma without being rewritten,
+// and one --project per Project a Milestone relates to.
+const REPEATABLE_OPTIONS = { "--tag": "tags", "--project": "projects" };
 
 // The options that are a flag alone.
 const FLAG_OPTIONS = {
@@ -476,7 +558,8 @@ function parseArgs(argv) {
     command: null, subject: [], plan: undefined, period: undefined, person: undefined,
     from: undefined, to: undefined, share: undefined, location: undefined,
     availability: undefined, colour: undefined, note: undefined, kind: undefined,
-    tags: [], json: false, apply: false, dryRun: false, help: false
+    date: undefined,
+    tags: [], projects: [], json: false, apply: false, dryRun: false, help: false
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -1156,6 +1239,103 @@ function renderPersonAdd(data) {
   return lines.join("\n") + "\n";
 }
 
+/* --- one Milestone, before it is written --------------------------------- */
+
+// A Milestone's own sentence, in every preview: a deadline that nobody adds up
+// is the one thing a reader of the plan could mistake for work.
+const MILESTONE_ANNOTATION = "Milestones are annotations: no total, share or " +
+  "over-allocation check counts them.";
+
+// What the reader cannot see about where the rule is drawn: a Milestone related
+// to Projects appears only while one of them is in view, and one related to no
+// Project - or to Projects the plan no longer holds - is plan-wide.
+function milestoneRelation(projects) {
+  const names = projects.map(function (project) { return project.name; });
+  if (names.length === 0) return "Related to no Project, so the rule is plan-wide";
+  if (names.length === 1) {
+    return "Related to " + names[0] + ", so the rule is drawn while " + names[0] + " is in view";
+  }
+  return "Related to " + names.join(", ") + ", so the rule is drawn while one of them is in view";
+}
+
+// One field as a diff line says it, in the plan's own words: a tag list and a
+// related-Projects list read as "none" when empty, so an empty value is stated
+// rather than left as a gap in the output.
+function milestoneFieldText(field, value, projects) {
+  if (field === "colour") return "colour slot " + value;
+  if (field === "tags") return "Tags: " + (value.length === 0 ? "none" : value.join(", "));
+  if (field === "notes") return "Notes: " + (value === "" ? "none" : value);
+  if (field === "projectIds") {
+    return projects.length === 0
+      ? "Related to no Project"
+      : "Related to " + projects.map(function (project) { return project.name; }).join(", ");
+  }
+  return String(value);
+}
+
+// What a read back holds, in one line: the fields the store keeps, in the order
+// a reader meets them.
+function milestoneReadBack(record) {
+  return record.name + ", " + record.date + ", colour slot " + record.colour + ", " +
+    (record.tags.length === 0 ? "no tags" : countText(record.tags.length, "tag")) + ", " +
+    (record.projectIds.length === 0
+      ? "related to no Project"
+      : "related to " + countText(record.projectIds.length, "Project"));
+}
+
+function renderMilestoneAdd(data) {
+  const create = data.create;
+  const lines = header(data);
+  lines.push("");
+  lines.push("New Milestone");
+  lines.push("  " + create.name + ", " + create.date + ", a " + data.weekday +
+    ", colour slot " + data.colour.slot +
+    (data.colour.named ? " (as named)" : " (the least used)"));
+  lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "none"));
+  if (create.notes !== "") lines.push("  Notes: " + create.notes);
+  lines.push("  " + milestoneRelation(data.projects) + ".");
+  lines.push("  " + MILESTONE_ANNOTATION);
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const back = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + back.id + ",");
+  lines.push("  " + milestoneReadBack(back) + ".");
+  lines.push("Undo: the creation is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
+function renderMilestoneEdit(data) {
+  const lines = header(data);
+  lines.push("");
+  lines.push("Milestone " + data.subject.name);
+  lines.push.apply(lines, renderPairs(data.diff.map(function (entry) {
+    // The related-Projects list is ids in the patch and names here, so each side
+    // of the diff is read through the Projects the plan resolved for it.
+    const before = entry.field === "projectIds" ? data.subject.projects : data.projects;
+    const after = entry.field === "projectIds" ? data.projects : data.subject.projects;
+    return ["  " + milestoneFieldText(entry.field, entry.before, before),
+      "->  " + milestoneFieldText(entry.field, entry.after, after)];
+  })));
+  lines.push("  " + data.after.date + " is a " + data.weekday + ".");
+  lines.push("  " + milestoneRelation(data.projects) + ".");
+  lines.push("  " + MILESTONE_ANNOTATION);
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const back = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + back.id + ",");
+  lines.push("  " + milestoneReadBack(back) + ".");
+  lines.push("Undo: the change is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
 function renderProjectAdd(data) {
   const create = data.create;
   const lines = header(data);
@@ -1349,27 +1529,35 @@ function dayCount(value) {
 // takes the other's.
 function taken(args, key) {
   if (key === "apply" || key === "dryRun") return args[key] === true;
-  if (key === "tags") return args.tags.length > 0;
+  if (key === "tags" || key === "projects") return args[key].length > 0;
   return args[key] !== undefined;
 }
 
 function refuseOptions(args, keys, where) {
   keys.forEach(function (key) {
     if (!taken(args, key)) return;
-    const flag = key === "tags" ? "--tag" : "--" + key;
+    const flag = key === "tags" ? "--tag" : key === "projects" ? "--project" : "--" + key;
     throw usage(args.command + " does not take " + flag + "; " + where);
   });
 }
 
 const READ_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "colour", "note", "kind", "tags", "apply", "dryRun"];
-const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "kind", "tags"];
-const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour", "kind"];
-const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "location", "availability", "kind"];
+  "colour", "note", "kind", "date", "tags", "projects", "apply", "dryRun"];
+const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "kind", "date",
+  "tags", "projects"];
+const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour", "kind", "date",
+  "projects"];
+const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "location", "availability",
+  "kind", "date", "projects"];
 // A holiday is named by its Location, its date and its kind, and by nothing a
 // Person, a Project or an Assignment is named by.
 const HOLIDAY_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "colour", "note", "tags"];
+  "colour", "note", "tags", "projects"];
+// A Milestone is named by its own name, and takes the six fields it has: a date,
+// a colour, tags, a note and the Projects it relates to. Nothing a Person, an
+// Assignment or a holiday is named by belongs here.
+const MILESTONE_REFUSALS = ["person", "from", "to", "share", "location", "availability",
+  "kind"];
 
 function rejectForeignOptions(args) {
   refuseOptions(args, READ_REFUSALS, "the commands that change a plan do");
@@ -1543,6 +1731,73 @@ async function runProjectAdd(args) {
   else process.stdout.write(renderProjectAdd(data));
 }
 
+/* --- one new Milestone, and one edited ----------------------------------- */
+
+// `milestone add` creates one and `milestone edit` moves one. There is no third
+// action and no flag: a Milestone has no archived state, so a removal would be
+// the app's own destruction route, and nothing here can reach it.
+async function runMilestone(args) {
+  const action = args.subject[0];
+  const name = args.subject.slice(1).join(" ").trim();
+  if (name === "") throw usage("milestone " + action + " needs a name");
+  rejectWriteFlags(args);
+  refuseOptions(args, MILESTONE_REFUSALS,
+    "a Milestone is a name, a date, a colour, tags, a note and its Projects");
+  if (args.period !== undefined) {
+    throw usage("milestone " + action + " does not take a period; a Milestone is an annotation " +
+      "and no figure counts it");
+  }
+  if (action === "add" && args.date === undefined) {
+    throw usage("milestone add needs --date <date>");
+  }
+  if (action === "edit" && args.date === undefined && args.colour === undefined &&
+      args.note === undefined && args.tags.length === 0 && args.projects.length === 0) {
+    throw usage("milestone edit needs at least one of --date, --colour, --tag, --project or --note");
+  }
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  // An edit that names no tag and no Project keeps the ones the Milestone
+  // holds: an empty list here means "not named", which is why the parser's own
+  // empty list is passed as nothing at all.
+  const answer = action === "add"
+    ? query.milestoneAdd(plan, {
+      name: name,
+      date: args.date,
+      colour: args.colour,
+      tags: args.tags,
+      note: args.note,
+      projects: args.projects
+    })
+    : query.milestoneEdit(plan, {
+      subject: name,
+      date: args.date,
+      colour: args.colour,
+      tags: args.tags.length > 0 ? args.tags : undefined,
+      note: args.note,
+      projects: args.projects.length > 0 ? args.projects : undefined
+    });
+  const data = Object.assign({
+    command: "milestone",
+    action: action,
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, answer);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = action === "add"
+      ? await applyMilestoneAdd(base, data, resolved.path)
+      : await applyMilestoneEdit(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(action === "add" ? renderMilestoneAdd(data) : renderMilestoneEdit(data));
+}
+
 /* --- archiving and restoring --------------------------------------------- */
 
 // The options the archive and the restore do not take: an Assignment is named
@@ -1550,7 +1805,7 @@ async function runProjectAdd(args) {
 // Allocation. --apply and --dry-run are theirs, as they are every write's.
 const ASSIGNMENT_ARCHIVE_REFUSALS = ASSIGNMENT_REFUSALS.concat(["from", "to", "share"]);
 const RECORD_ARCHIVE_REFUSALS = ["person", "from", "to", "share", "location",
-  "availability", "colour", "note", "kind", "tags"];
+  "availability", "colour", "note", "kind", "date", "tags", "projects"];
 
 // The six commands are one command with two directions and three collections:
 // the same preview-then-apply, the same refusals and the same read back.
@@ -1847,6 +2102,81 @@ async function applyPersonAdd(base, add, planPath) {
   };
 }
 
+// Whether a Milestone in the app's plan holds every field this command named.
+// A field left out is not the tool's to pin, so a colour the server chose and a
+// note nobody changed are both passed over; the two lists are sets, because the
+// store sorts tags and the related Projects are a set of ids.
+function milestoneHolds(record, asked) {
+  if (asked.name !== undefined && record.name !== asked.name) return false;
+  if (asked.date !== undefined && record.date !== asked.date) return false;
+  if (asked.colour !== undefined && record.colour !== asked.colour) return false;
+  if (asked.notes !== undefined && String(record.notes || "") !== String(asked.notes)) return false;
+  if (asked.tags !== undefined && !sameTags(record.tags, asked.tags)) return false;
+  if (asked.projectIds !== undefined && !sameTags(record.projectIds, asked.projectIds)) return false;
+  return true;
+}
+
+// What a read back or a refusal says a Milestone holds, so a lost write names
+// the plan it found rather than only the plan it asked for.
+function milestoneDescription(record) {
+  const related = Array.isArray(record.projectIds) ? record.projectIds.length : 0;
+  return '"' + record.name + '" on ' + record.date + " in colour slot " +
+    (record.colour === undefined ? "unset" : record.colour) + " with " + tagsText(record.tags) +
+    " and " + (related === 0 ? "no related Project" : countText(related, "related Project"));
+}
+
+function milestoneRecord(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    date: record.date,
+    colour: record.colour,
+    tags: Array.isArray(record.tags) ? record.tags.slice() : [],
+    notes: typeof record.notes === "string" ? record.notes : "",
+    projectIds: Array.isArray(record.projectIds) ? record.projectIds.slice() : []
+  };
+}
+
+// The creation: the app's own POST /api/milestones, then a read back of its
+// plan. The reply names the Milestone the server minted, and the creation is
+// done when the plan the tool reads holds that record with the name, the date,
+// the tags, the note and the related Projects asked for - and the colour, only
+// where one was named.
+async function applyMilestoneAdd(base, add, planPath) {
+  await requireSamePlan(base, planPath);
+  const asked = add.create;
+  const landed = await readBackCreate(base, "/api/milestones", "milestones", asked, "Milestone",
+    function (record) { return milestoneHolds(record, asked); },
+    milestoneDescription);
+  return milestoneRecord(landed);
+}
+
+// The edit: the app's own PATCH /api/milestones/<id> with the fields the diff
+// showed and nothing else, then a read back of the plan, which must hold every
+// one of them. The record is found by id, so an edit can never write a second
+// Milestone by mistake.
+async function applyMilestoneEdit(base, edit, planPath) {
+  await requireSamePlan(base, planPath);
+  const id = edit.subject.id;
+  await ask(base, "PATCH", "/api/milestones/" + encodeURIComponent(id), edit.change);
+  const plan = await ask(base, "GET", "/api/plan");
+  const landed = ((plan && plan.milestones) || []).find(function (milestone) {
+    return milestone.id === id;
+  });
+  if (!landed) {
+    throw new CliError("the write did not land: the app's plan holds no Milestone " + id,
+      "write-lost", 1,
+      "the app is the authority here: read the Milestone there before trying again");
+  }
+  if (!milestoneHolds(landed, edit.change)) {
+    throw new CliError("the write did not land: the app's plan holds " + milestoneDescription(landed) +
+      ", not " + milestoneDescription(Object.assign({}, edit.subject, edit.change)),
+      "write-lost", 1,
+      "the app is the authority here: read the Milestone there before trying again");
+  }
+  return milestoneRecord(landed);
+}
+
 async function applyProjectAdd(base, add, planPath) {
   await requireSamePlan(base, planPath);
   const asked = add.create;
@@ -2018,6 +2348,20 @@ async function run() {
   if (args.command === "assignment") {
     await runAssignment(args);
     return;
+  }
+  // `milestone add` and `milestone edit` change a Milestone; `milestones` reads
+  // every one. A Milestone has no archived state, so the actions are two and
+  // neither of them removes one: the app's own destruction route is unreachable
+  // from here, which is why there is no third word to type.
+  if (args.command === "milestone") {
+    if (args.subject[0] === "add" || args.subject[0] === "edit") {
+      await runMilestone(args);
+      return;
+    }
+    const said = args.subject.length > 0 ? 'unknown milestone action "' + args.subject[0] + '"' : "";
+    throw usage((said === "" ? "" : said + "; ") +
+      "milestone needs an action, and they are add and edit: milestone add <name> --date <date>, " +
+      "or milestone edit <name> --date <date>. A Milestone is never removed from this tool");
   }
   // `person add` and `project add` create a record; `person <name>` and
   // `project <name>` read one. The action is the first word, as in `assignment`.

@@ -88,12 +88,15 @@ PACT is meant to be read by a colleague's agent as well as by the colleague.
   allocation against capacity - so an agent can answer *who is over capacity in
   March* without a browser, and without adding anything up itself. Its writes
   create a Person, a Project or an Assignment, reschedule and resize one,
-  archive and restore any of the three, and add or remove one holiday date for
-  one Location, and only through the running app: the preview comes first,
+  archive and restore any of the three, add or remove one holiday date for
+  one Location, and create or move a Milestone, and only through the running
+  app: the preview comes first,
   nothing is written without `--apply`, and each change is one the person at the
   screen can step back with Undo. Archiving is how an agent takes work out of a
   plan and puts it back, and it never deletes anything: a holiday date is one
-  plan setting rather than a record, and a permanent deletion stays in the app.
+  plan setting rather than a record, and a permanent deletion stays in the app;
+  a Milestone can be created and moved but never removed, since it has no
+  archived state.
 - **Nothing is hidden behind the interface.** A question the documents do not
   answer is a documentation bug, and the repository is written to be read: the
   plan is one file, the rules behind it are plain modules, and the tests that

@@ -1496,7 +1496,7 @@ test("no action, option or code path in the tool deletes anything", async () => 
   // Milestone has no archived state for it to reach.
   const help = await cli(["--help"]);
   assert.match(help.stdout, /The tool never deletes anything\./);
-  assert.match(help.stdout, /Twelve commands change a plan/);
+  assert.match(help.stdout, /Fourteen commands change a plan/);
   assert.match(help.stdout, /Archiving is how work leaves a plan reversibly/);
   assert.match(help.stdout, /and no --force to\s+reach one/);
   assert.match(help.stdout, /person archive <name>/);
@@ -1512,8 +1512,10 @@ test("no action, option or code path in the tool deletes anything", async () => 
   const source = fs.readFileSync(BIN, "utf8");
   assert.equal((source.match(/"DELETE"/g) || []).length, 1, "one DELETE, and it is the archive");
   assert.doesNotMatch(source, /\/destroy/);
-  // A Milestone has no archived state, so there is no route here to one at all.
-  assert.doesNotMatch(source, /\/api\/milestones/);
+  // A Milestone has no archived state, so its only routes here are the app's own
+  // create and edit - POST and PATCH on the collection - and no removal.
+  assert.match(source, /readBackCreate\(base, "\/api\/milestones"/);
+  assert.match(source, /"PATCH", "\/api\/milestones\/" \+ encodeURIComponent\(id\)/);
 
   assert.deepEqual(started.bytes(), before);
 });
@@ -1583,4 +1585,435 @@ test("assignment move states what it needs", async () => {
   const read = await cli(["people", "--from", "2026-11-02", "--plan", started.planPath]);
   assert.equal(read.status, 2);
   assert.match(read.stderr, /people does not take --from/);
+});
+
+/* --- one Milestone created, and one edited ------------------------------- */
+
+// The fixture's two Milestones both sit in slot 0, so the least-used Milestone
+// slot is 1 - the same prediction a new Project would get, since the Projects
+// sit in 0, 3 and 4: each collection counts its own colours.
+function milestoneFixture() {
+  const plan = fixture();
+  plan.milestones = [
+    { id: "m-launch", name: "Launch", date: "2026-11-20", colour: 0, tags: ["delivery"], notes: "", projectIds: ["atlas"] },
+    { id: "m-review", name: "Review", date: "2026-11-25", colour: 0, tags: [], notes: "plan-wide", projectIds: [] }
+  ];
+  return plan;
+}
+
+function milestoneCreate(planPath, extra, env) {
+  return cli(["milestone", "add", "API launch", "--plan", planPath].concat(extra || []),
+    { env: env });
+}
+
+function milestoneEdit(planPath, name, extra, env) {
+  return cli(["milestone", "edit", name, "--plan", planPath].concat(extra || []),
+    { env: env });
+}
+
+function milestoneOf(plan, id) {
+  return (plan.milestones || []).find((entry) => entry.id === id);
+}
+
+test("the Milestone add preview is the default and the plan file is not touched", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+  const mtime = fs.statSync(started.planPath).mtimeMs;
+
+  const result = await milestoneCreate(started.planPath, ["--date", "2026-12-04",
+    "--project", "Atlas", "--tag", "delivery:phase-2"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+
+  // The shape the issue asked for: the date and its weekday, the colour slot,
+  // the tags, where the rule is drawn, and that no figure counts a Milestone.
+  assert.match(result.stdout, /New Milestone/);
+  assert.match(result.stdout,
+    /API launch, 2026-12-04, a Friday, colour slot 1 \(the least used\)/);
+  assert.match(result.stdout, /Tags: delivery:phase-2/);
+  assert.match(result.stdout, /Related to Atlas, so the rule is drawn while Atlas is in view\./);
+  assert.match(result.stdout,
+    /Milestones are annotations: no total, share or over-allocation check counts them\./);
+  assert.match(result.stdout, /Nothing written\. Re-run with --apply\./);
+
+  assert.deepEqual(started.bytes(), before, "the default must not write");
+  assert.equal(fs.statSync(started.planPath).mtimeMs, mtime);
+
+  // --dry-run is the same thing said on purpose, and a Milestone related to no
+  // Project says it is plan-wide rather than leaving the reader to work it out.
+  const stated = await milestoneCreate(started.planPath, ["--date", "2026-12-04", "--dry-run"]);
+  assert.equal(stated.status, 0, stated.stderr);
+  assert.equal(stated.stdout, result.stdout.replace(
+    "Related to Atlas, so the rule is drawn while Atlas is in view.",
+    "Related to no Project, so the rule is plan-wide.").replace(
+    "Tags: delivery:phase-2", "Tags: none"));
+  assert.match(stated.stdout, /Related to no Project, so the rule is plan-wide\./);
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("--apply creates exactly one Milestone with the name, date, tags and Projects asked for", async () => {
+  const started = await app(milestoneFixture());
+  const original = started.file();
+
+  const result = await milestoneCreate(started.planPath, ["--date", "2026-12-04",
+    "--project", "Atlas", "--tag", "delivery:phase-2", "--note", "signed off", "--apply"],
+  { PACT_URL: started.base });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Applied through http:\/\/127\.0\.0\.1:\d+/);
+  assert.match(result.stdout, /read back from its plan: milestone-[a-z0-9-]+,/);
+  assert.match(result.stdout, /API launch, 2026-12-04, colour slot 1, 1 tag, related to 1 Project\./);
+  assert.match(result.stdout, /Undo: the creation is one step back with the app's Undo control\./);
+
+  const after = started.file();
+  const added = after.milestones.filter((entry) =>
+    !original.milestones.some((existing) => existing.id === entry.id));
+  assert.equal(added.length, 1, "exactly one Milestone is created");
+  const created = added[0];
+  assert.match(created.id, /^milestone-/);
+  assert.equal(created.name, "API launch");
+  assert.equal(created.date, "2026-12-04");
+  assert.equal(created.colour, 1, "the least-used Milestone slot, chosen by the app");
+  assert.deepEqual(created.tags, ["delivery:phase-2"]);
+  assert.equal(created.notes, "signed off");
+  assert.deepEqual(created.projectIds, ["atlas"], "the related Project is stored by id");
+
+  // Nothing else moved: the plan is the one it started from plus the new record.
+  const expected = structuredClone(original);
+  expected.milestones.push(created);
+  assert.deepEqual(after, expected);
+
+  // And the app's plan holds it, which is what the read back asked.
+  const plan = await json(started.base, "/api/plan");
+  const held = plan.body.milestones.find((entry) => entry.id === created.id);
+  assert.equal(held.date, "2026-12-04");
+  assert.deepEqual(held.projectIds, ["atlas"]);
+  assert.deepEqual(held.tags, ["delivery:phase-2"]);
+});
+
+test("a colour is only sent when it is named, and the predicted slot is only reported", async () => {
+  const started = await app(milestoneFixture());
+
+  // The preview predicts slot 1, and the create body carries no colour at all:
+  // the server takes the least-used slot, not the tool.
+  const preview = await milestoneCreate(started.planPath, ["--date", "2026-12-04", "--json"]);
+  assert.equal(preview.status, 0, preview.stderr);
+  const data = JSON.parse(preview.stdout);
+  assert.deepEqual(data.colour, { slot: 1, named: false });
+  assert.equal("colour" in data.create, false, "the predicted slot is never sent");
+
+  const applied = await milestoneCreate(started.planPath, ["--date", "2026-12-04", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(applied.status, 0, applied.stderr);
+  const chosen = started.file().milestones.find((entry) => entry.name === "API launch");
+  assert.equal(chosen.colour, 1, "the app's own least-used slot, which matched the prediction");
+
+  // A named colour is said to be named rather than predicted, and it is sent.
+  const named = await cli(["milestone", "add", "API beta", "--date", "2026-12-05",
+    "--colour", "7", "--plan", started.planPath, "--json"]);
+  assert.equal(named.status, 0, named.stderr);
+  const namedData = JSON.parse(named.stdout);
+  assert.deepEqual(namedData.colour, { slot: 7, named: true });
+  assert.equal(namedData.create.colour, 7, "a named colour is in the body");
+
+  const namedText = await cli(["milestone", "add", "API beta", "--date", "2026-12-05",
+    "--colour", "7", "--plan", started.planPath]);
+  assert.match(namedText.stdout, /API beta, 2026-12-05, a Saturday, colour slot 7 \(as named\)/);
+
+  const namedApplied = await cli(["milestone", "add", "API beta", "--date", "2026-12-05",
+    "--colour", "7", "--plan", started.planPath, "--apply"], { env: { PACT_URL: started.base } });
+  assert.equal(namedApplied.status, 0, namedApplied.stderr);
+  assert.equal(started.file().milestones.find((entry) => entry.name === "API beta").colour, 7);
+});
+
+test("an edit prints the diff of exactly the fields it changes, and --apply writes those", async () => {
+  const started = await app(milestoneFixture());
+  const original = started.file();
+  const before = started.bytes();
+
+  // The preview names every value that moves, the weekday of the new date, the
+  // tags and the Projects as words rather than ids, and writes nothing.
+  const preview = await milestoneEdit(started.planPath, "Review", ["--date", "2026-12-01",
+    "--colour", "4", "--tag", "signed", "--project", "Borealis", "--note", "internal review"]);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /Milestone Review/);
+  assert.match(preview.stdout, /2026-11-25 {2,}-> {2}2026-12-01/);
+  assert.match(preview.stdout, /colour slot 0 {2,}-> {2}colour slot 4/);
+  assert.match(preview.stdout, /Tags: none {2,}-> {2}Tags: signed/);
+  assert.match(preview.stdout, /Notes: plan-wide {2,}-> {2}Notes: internal review/);
+  assert.match(preview.stdout, /Related to no Project {2,}-> {2}Related to Borealis/);
+  assert.match(preview.stdout, /2026-12-01 is a Tuesday\./);
+  assert.match(preview.stdout, /Related to Borealis, so the rule is drawn while Borealis is in view\./);
+  assert.match(preview.stdout, /Nothing written\. Re-run with --apply\./);
+  assert.deepEqual(started.bytes(), before, "the preview must not write");
+
+  // The JSON carries exactly what the apply will send, and nothing more.
+  const asJson = await milestoneEdit(started.planPath, "Review", ["--colour", "4", "--json"]);
+  assert.equal(asJson.status, 0, asJson.stderr);
+  const previewData = JSON.parse(asJson.stdout);
+  assert.deepEqual(previewData.change, { colour: 4 });
+  assert.deepEqual(previewData.diff, [{ field: "colour", before: 0, after: 4 }]);
+  assert.equal(previewData.subject.name, "Review");
+  assert.equal(previewData.applied, false);
+
+  const applied = await milestoneEdit(started.planPath, "Review", ["--date", "2026-12-01",
+    "--colour", "4", "--tag", "signed", "--project", "Borealis", "--note", "internal review",
+    "--apply"], { PACT_URL: started.base });
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(applied.stdout, /read back from its plan: m-review,/);
+  assert.match(applied.stdout, /Review, 2026-12-01, colour slot 4, 1 tag, related to 1 Project\./);
+  assert.match(applied.stdout, /Undo: the change is one step back with the app's Undo control\./);
+
+  // The diff named five fields and those five are the only ones that moved.
+  const after = started.file();
+  const edited = milestoneOf(after, "m-review");
+  assert.equal(edited.date, "2026-12-01");
+  assert.equal(edited.colour, 4);
+  assert.deepEqual(edited.tags, ["signed"]);
+  assert.equal(edited.notes, "internal review");
+  assert.deepEqual(edited.projectIds, ["borealis"]);
+  assert.equal(edited.name, "Review");
+  assert.equal(edited.id, "m-review");
+
+  const expected = structuredClone(original);
+  Object.assign(milestoneOf(expected, "m-review"), {
+    date: "2026-12-01", colour: 4, tags: ["signed"], notes: "internal review",
+    projectIds: ["borealis"]
+  });
+  assert.deepEqual(after, expected, "nothing the diff did not name moved");
+
+  // A one-field edit says one line, and leaves the rest as it was.
+  const oneLine = await milestoneEdit(started.planPath, "Launch", ["--date", "2026-11-19", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(oneLine.status, 0, oneLine.stderr);
+  assert.match(oneLine.stdout, /2026-11-20 {2,}-> {2}2026-11-19/);
+  assert.doesNotMatch(oneLine.stdout.split("Applied through")[0], /colour slot|Tags:|Notes:/);
+  const launch = milestoneOf(started.file(), "m-launch");
+  assert.equal(launch.date, "2026-11-19");
+  assert.equal(launch.colour, 0);
+  assert.deepEqual(launch.tags, ["delivery"]);
+  assert.deepEqual(launch.projectIds, ["atlas"]);
+});
+
+test("a name a Milestone already answers to is refused, and nothing is written", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+
+  const byName = await cli(["milestone", "add", "Review", "--date", "2026-12-04",
+    "--plan", started.planPath]);
+  assert.equal(byName.status, 1);
+  assert.match(byName.stderr, /the plan already holds a Milestone called "Review" \(m-review\)/);
+  assert.match(byName.stderr, /would make every later command ambiguous/);
+
+  const byId = await cli(["milestone", "add", "m-launch", "--date", "2026-12-04",
+    "--plan", started.planPath]);
+  assert.equal(byId.status, 1);
+  assert.match(byId.stderr, /the plan already holds a Milestone called "Launch" \(m-launch\)/);
+
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("an unknown Project, colour or date is refused with the reads' own words", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+
+  const project = await milestoneCreate(started.planPath, ["--date", "2026-12-04",
+    "--project", "Atls"]);
+  assert.equal(project.status, 1);
+  assert.match(project.stderr, /unknown project "Atls"/);
+  assert.match(project.stderr, /nearest: "Atlas"/);
+
+  const colour = await milestoneCreate(started.planPath, ["--date", "2026-12-04",
+    "--colour", "10"]);
+  assert.equal(colour.status, 1);
+  assert.match(colour.stderr, /--colour must be a slot 0\.\.9/);
+
+  const date = await milestoneCreate(started.planPath, ["--date", "4 December"]);
+  assert.equal(date.status, 1);
+  assert.match(date.stderr, /--date must be a date like 2026-11-02/);
+
+  const subject = await milestoneEdit(started.planPath, "Nope", ["--colour", "3"]);
+  assert.equal(subject.status, 1);
+  assert.match(subject.stderr, /unknown milestone "Nope"/);
+
+  const editProject = await milestoneEdit(started.planPath, "Review", ["--project", "Atls"]);
+  assert.equal(editProject.status, 1);
+  assert.match(editProject.stderr, /unknown project "Atls"/);
+
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("an edit that would change nothing is refused", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+
+  const same = await milestoneEdit(started.planPath, "Review",
+    ["--date", "2026-11-25", "--colour", "0"]);
+  assert.equal(same.status, 1);
+  assert.match(same.stderr, /"Review" already holds every value this edit names/);
+
+  // A value the Milestone already holds is no change either.
+  const reordered = await milestoneEdit(started.planPath, "Review", ["--note", "plan-wide"]);
+  assert.equal(reordered.status, 1);
+  assert.match(reordered.stderr, /nothing to change/);
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("the app's Undo steps a creation and an edit back, and Redo puts them forward again", async () => {
+  const started = await app(milestoneFixture());
+  const original = started.file();
+
+  const created = await milestoneCreate(started.planPath, ["--date", "2026-12-04", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(created.status, 0, created.stderr);
+  assert.equal(started.file().milestones.length, 3);
+
+  const undone = await json(started.base, "/api/undo", "POST");
+  assert.equal(undone.status, 200);
+  assert.deepEqual(started.file(), original, "Undo removes the created Milestone");
+
+  const redone = await json(started.base, "/api/redo", "POST");
+  assert.equal(redone.status, 200);
+  assert.equal(started.file().milestones.length, 3, "Redo puts the Milestone back");
+
+  const edited = await milestoneEdit(started.planPath, "Review", ["--colour", "4", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(edited.status, 0, edited.stderr);
+  assert.equal(milestoneOf(started.file(), "m-review").colour, 4);
+
+  const undoneEdit = await json(started.base, "/api/undo", "POST");
+  assert.equal(undoneEdit.status, 200);
+  assert.equal(milestoneOf(started.file(), "m-review").colour, 0, "Undo returns the old colour");
+  assert.equal(started.file().milestones.length, 3, "and leaves the record in the plan");
+
+  // One Undo per write, and the creation is the step behind this one.
+  const undoAgain = await json(started.base, "/api/undo", "POST");
+  assert.equal(undoAgain.status, 200);
+  assert.deepEqual(started.file(), original, "the plan is the one the write started from");
+});
+
+test("a Milestone write on a plan the app is not holding is refused, and nothing is written", async () => {
+  const started = await app(milestoneFixture());
+  const elsewhere = path.join(started.dir, "elsewhere.pact.json");
+  fs.writeFileSync(elsewhere, JSON.stringify(milestoneFixture(), null, 2) + "\n");
+  const before = fs.readFileSync(elsewhere);
+
+  for (const result of [
+    await cli(["milestone", "add", "API launch", "--date", "2026-12-04", "--plan", elsewhere,
+      "--apply"], { env: { PACT_URL: started.base } }),
+    await cli(["milestone", "edit", "Review", "--colour", "4", "--plan", elsewhere,
+      "--apply"], { env: { PACT_URL: started.base } })
+  ]) {
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /refusing to write: the app at .* has a different plan open/);
+  }
+  assert.deepEqual(fs.readFileSync(elsewhere), before, "the file it read must not be written");
+  assert.equal(started.file().milestones.length, 2);
+  assert.equal(milestoneOf(started.file(), "m-review").colour, 0);
+});
+
+test("with no app answering, a Milestone write says how to start one", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+
+  // Port 1 is never served by this user, so the connection is refused at once.
+  for (const result of [
+    await milestoneCreate(started.planPath, ["--date", "2026-12-04", "--apply"],
+      { PACT_URL: "http://127.0.0.1:1" }),
+    await milestoneEdit(started.planPath, "Review", ["--colour", "4", "--apply"],
+      { PACT_URL: "http://127.0.0.1:1" })
+  ]) {
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /no PACT server at http:\/\/127\.0\.0\.1:1/);
+    assert.match(result.stderr, /start it with node server\.mjs/);
+    assert.equal(/\n\s+at /.test(result.stderr), false, "no stack trace");
+    assert.equal(result.stdout, "", "a write that never left says nothing it did");
+  }
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("no action, option or code path in the tool removes a Milestone", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+
+  // A removal is not an action, and archiving is not one either: a Milestone
+  // has no archived state, so both are refused before the plan is read.
+  for (const action of ["destroy", "delete", "remove", "archive", "restore"]) {
+    const result = await cli(["milestone", action, "Review", "--plan", started.planPath, "--apply"],
+      { env: { PACT_URL: started.base } });
+    assert.equal(result.status, 2, action);
+    assert.match(result.stderr, /unknown milestone action "/, action);
+    assert.match(result.stderr, /A Milestone is never removed from this tool/, action);
+  }
+  for (const flag of ["--force", "--destroy", "--delete", "--archive", "--remove"]) {
+    const result = await milestoneCreate(started.planPath, ["--date", "2026-12-04", flag]);
+    assert.equal(result.status, 2, flag);
+    assert.match(result.stderr, /unknown option "/, flag);
+  }
+
+  // The help keeps the boundary true and now names the two writes it does have.
+  const help = await cli(["--help"]);
+  assert.match(help.stdout, /milestone add <name>/);
+  assert.match(help.stdout, /milestone edit <name>/);
+  assert.match(help.stdout, /It never removes a Milestone/);
+  assert.match(help.stdout, /this tool cannot take one out of a plan at all/);
+
+  // And the routes: the app's own POST and PATCH, and the destruction route
+  // named nowhere, so no code path here can reach it.
+  const source = fs.readFileSync(BIN, "utf8");
+  assert.match(source, /readBackCreate\(base, "\/api\/milestones"/);
+  assert.match(source, /"PATCH", "\/api\/milestones\/" \+ encodeURIComponent\(id\)/);
+  assert.doesNotMatch(source, /destroyMilestone|\/destroy/);
+  // The one DELETE in the file is the archive route, and no DELETE names the
+  // milestones collection at all.
+  assert.equal((source.match(/"DELETE"/g) || []).length, 1);
+  assert.doesNotMatch(source, /"DELETE", "\/api\/milestones/);
+
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("milestone add and milestone edit state what they need, and refuse what is not theirs", async () => {
+  const started = await app(milestoneFixture());
+  const before = started.bytes();
+
+  const noAction = await cli(["milestone", "--plan", started.planPath]);
+  assert.equal(noAction.status, 2);
+  assert.match(noAction.stderr, /milestone needs an action/);
+
+  const noName = await cli(["milestone", "add", "--date", "2026-12-04", "--plan", started.planPath]);
+  assert.equal(noName.status, 2);
+  assert.match(noName.stderr, /milestone add needs a name/);
+
+  const noDate = await milestoneCreate(started.planPath, []);
+  assert.equal(noDate.status, 2);
+  assert.match(noDate.stderr, /milestone add needs --date/);
+
+  const editNothing = await milestoneEdit(started.planPath, "Review", []);
+  assert.equal(editNothing.status, 2);
+  assert.match(editNothing.stderr,
+    /needs at least one of --date, --colour, --tag, --project or --note/);
+
+  const both = await milestoneCreate(started.planPath,
+    ["--date", "2026-12-04", "--apply", "--dry-run"]);
+  assert.equal(both.status, 2);
+  assert.match(both.stderr, /--apply and --dry-run contradict each other/);
+
+  // A period counts work, and a Milestone is not work.
+  const period = await milestoneCreate(started.planPath, ["--date", "2026-12-04",
+    "--period", "2026-11"]);
+  assert.equal(period.status, 2);
+  assert.match(period.stderr, /milestone add does not take a period/);
+
+  // Nor do the other commands' own options belong on a Milestone.
+  for (const flag of ["--person", "--share", "--location", "--availability", "--kind"]) {
+    const result = await milestoneCreate(started.planPath, ["--date", "2026-12-04", flag, "x"]);
+    assert.equal(result.status, 2, flag);
+    assert.match(result.stderr, /milestone does not take /, flag);
+  }
+
+  // And a read has no business with a Milestone write's options.
+  const read = await cli(["milestones", "--date", "2026-12-04", "--plan", started.planPath]);
+  assert.equal(read.status, 2);
+  assert.match(read.stderr, /milestones does not take --date/);
+
+  assert.deepEqual(started.bytes(), before);
 });
