@@ -270,8 +270,8 @@ test("importing lib/query.mjs is silent and side-effect free", () => {
   assert.equal(result.stderr, "");
   assert.equal(result.stdout, "before" + [
     "QueryError", "archive", "assignmentAdd", "assignmentMove", "capacity", "holidayChange",
-    "holidays", "milestones", "people", "person", "personAdd", "planSummary", "project",
-    "projectAdd", "projects", "resolvePeriod", "restore", "tag", "tags"
+    "holidays", "milestoneAdd", "milestoneEdit", "milestones", "people", "person", "personAdd",
+    "planSummary", "project", "projectAdd", "projects", "resolvePeriod", "restore", "tag", "tags"
   ].join(","));
 });
 
@@ -293,6 +293,10 @@ test("every query result survives JSON round-tripping", () => {
     query.assignmentAdd(FIXTURE, { project: "Borealis", person: "Ben Falk", from: "2026-11-02", to: "2026-11-06", share: 50, period: period }),
     query.personAdd(FIXTURE, { name: "Clara Nowak", location: "Berlin", availability: 80, tags: ["skill:frontend"], period: period }),
     query.projectAdd(FIXTURE, { name: "Northwind", tags: ["api:Northwind"] }),
+    query.milestoneAdd(FIXTURE, { name: "Ship", date: "2026-11-27", colour: "7",
+      tags: ["delivery"], note: "signed", projects: ["Solar"] }),
+    query.milestoneEdit(FIXTURE, { subject: "Launch", date: "2026-11-21",
+      tags: ["delivery", "review"], projects: ["Solar", "Borealis"] }),
     query.archive(FIXTURE, { kind: "person", subject: "Anna Meier", period: period }),
     query.archive(FIXTURE, { kind: "project", subject: "Solar", period: period }),
     query.archive(FIXTURE, { kind: "assignment", project: "Solar", person: "Anna Meier", period: period }),
@@ -605,7 +609,7 @@ test("--help lists the commands and one worked example for each", () => {
   assert.equal(help.status, 0);
   assert.equal(help.stderr, "");
   ["plan", "people", "person", "projects", "project", "tags", "tag",
-    "capacity", "holidays", "milestones"].forEach((command) => {
+    "capacity", "holidays", "milestones", "milestone add", "milestone edit"].forEach((command) => {
     assert.ok(help.stdout.includes(command), command);
   });
   assert.match(help.stdout, /node bin\/pact\.mjs plan --period 2026-11/);
