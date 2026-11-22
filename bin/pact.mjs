@@ -7,14 +7,14 @@
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. Reads never touch the network. The two writes,
- * `assignment move --apply` and `assignment add --apply`, send the query
- * module's patch to the app's own PATCH /api/assignments/<id> and its create
- * body to POST /api/assignments - the routes and bodies the interface itself
- * uses - so the validation, the atomic write and the changed-underneath guard
- * are the app's, and the change is one step back with its Undo control. Nothing
- * here deletes anything: there is no such command, and no flag that reaches
- * one.
+ * is the report's own. Reads never touch the network. The four writes -
+ * `person add --apply`, `project add --apply`, `assignment move --apply` and
+ * `assignment add --apply` - send the query module's create body or patch to the
+ * app's own POST /api/people, POST /api/projects, PATCH /api/assignments/<id>
+ * and POST /api/assignments - the routes and bodies the interface itself uses -
+ * so the validation, the atomic write and the changed-underneath guard are the
+ * app's, and the change is one step back with its Undo control. Nothing here
+ * deletes anything: there is no such command, and no flag that reaches one.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -82,11 +82,12 @@ const COMMANDS = {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-Two commands change a plan: assignment add creates an Assignment, and
-assignment move reschedules or resizes one. Both write through the running app,
-so the change is one step back with its Undo control. The figures are computed
-by the report's own modules over the period you ask for, so they are the report
-page's numbers. The tool never deletes anything; see Deleting below.
+Four commands change a plan: person add creates a Person, project add creates a
+Project, assignment add creates an Assignment, and assignment move reschedules
+or resizes one. All four write through the running app, so the change is one
+step back with its Undo control. The figures are computed by the report's own
+modules over the period you ask for, so they are the report page's numbers. The
+tool never deletes anything; see Deleting below.
 
 Usage
   node bin/pact.mjs --help
@@ -113,6 +114,11 @@ Commands
       node bin/pact.mjs holidays
   milestones                       the Milestones as stored
       node bin/pact.mjs milestones
+  person add <name>                create one Person, through the app
+      node bin/pact.mjs person add "Clara Nowak" --location Berlin \\
+          --availability 80 --tag "skill:frontend" --tag "team:atlas"
+  project add <name>               create one Project, through the app
+      node bin/pact.mjs project add Northwind --tag "api:Northwind"
   assignment add <project>         create one Assignment, through the app
       node bin/pact.mjs assignment add Atlas --person "Anna Meier" \\
           --from 2026-11-23 --to 2026-12-04 --share 60
@@ -142,6 +148,46 @@ assignment add and assignment move take these as well
                        move: the new Allocation, kept when left out
   --apply              write it; without this, and with --dry-run, nothing is written
   --dry-run            the preview, and nothing written: the same as the default
+
+person add and project add take these as well
+  --tag <tag>          a tag, repeated once per tag: --tag a --tag b. Tags are the
+                       record's own vocabulary, so a Person's tags and a
+                       Project's are separate lists, and a typed tag such as
+                       skill:frontend is stored exactly as typed
+  --note <text>        free text; it lands in the Person's note, or the
+                       Project's notes
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
+
+person add takes these as well
+  --location <name>    the Person's Location; its holidays are the ones taken out
+                       of the Capacity the preview states
+  --availability <pct> the Availability, a whole percentage; 100 when left out.
+                       The app validates the range and its refusal is printed as
+                       the app wrote it
+
+project add takes these as well
+  --colour <slot>      the Project's colour slot, 0 to 9; without it the app takes
+                       the least-used slot, and the preview names the one it
+                       expects to be taken
+
+Creating a Person or a Project
+  person add creates one Person and prints what it would create: their name,
+  Location and Availability, their tags, and what that Availability is worth
+  over the period - the report's own working days at that Availability, after
+  their Location's holidays, with the days those holidays take out named when
+  they take any. project add creates one Project and prints the colour slot it
+  would take, that it starts with no Assignments, and its tags.
+
+  A name the live plan already answers to is refused before anything is written,
+  naming the record that holds it. Reads find a Person or a Project by name, so
+  two live records of one name would make every later command ambiguous.
+
+  --apply sends the create body through the app's own POST /api/people or
+  POST /api/projects, so the server mints the id - and, for a Project with no
+  --colour, takes its least-used colour slot. The tool then reads the plan back
+  and confirms the record the app holds has the values it asked for; a creation
+  the plan does not show exits non-zero and says it did not land.
 
 Creating an Assignment
   assignment add creates one Assignment on a Project and a Person, over --from
@@ -184,18 +230,20 @@ Rescheduling or resizing an Assignment
 Deleting
   The tool never deletes anything. There is no command and no flag that removes
   a Person, a Project, an Assignment or a Milestone, and no --force to reach
-  one: what this tool can do to a plan is add an Assignment and move one. That
-  boundary is deliberate, and it is not a gap waiting to be filled. Removing
-  work from a plan is done in the app, where it can be seen, and Undo takes it
-  back.
+  one: what this tool can do to a plan is add a Person, add a Project or add an
+  Assignment, and move an Assignment. That boundary is deliberate, and it is not
+  a gap waiting to be filled. Removing work from a plan is done in the app,
+  where it can be seen, and Undo takes it back. Archiving is not a command here
+  either: it is done in the app.
 
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
-  Reads never write it. Its writes, assignment add --apply and assignment move
-  --apply, go through the running app's API, so validation, the atomic write and
-  the guard against a file changed underneath are the app's, not a second copy
-  here. It reads the live plan, so archived People, Projects and Assignments are
-  left out, as on the default grid.
+  Reads never write it. Its writes - person add --apply, project add --apply,
+  assignment add --apply and assignment move --apply - go through the running
+  app's API, so validation, the atomic write and the guard against a file
+  changed underneath are the app's, not a second copy here. It reads the live
+  plan, so archived People, Projects and Assignments are left out, as on the
+  default grid.
 
 Subjects
   A name or an id, case-insensitive: person anna and person "Anna Meier" find
@@ -225,6 +273,17 @@ JSON
      "units":{...},"people":[{"id":"...","name":"...","capacity":16,
      "allocated":19.2,"remaining":-3.2,"ofOffer":1.2,"overAllocated":true,
      "buckets":[...]}],"totals":{...}}
+
+  person add adds "action" and "applied" (false until it is written), and once
+  written "server" and "readBack" (the id and values the app's plan holds
+  afterwards). Its "create" is the body POST /api/people takes - no id, since
+  the server mints one - and its "offered" is { availability, location,
+  workingDays, holidayDays, fteDays, holidays } over the resolved period.
+
+  project add is the same shape. Its "create" is the body POST /api/projects
+  takes, with no "colour" at all when none was named, and its "colour" is
+  { slot, named }: the slot the app is expected to take, and whether the tool
+  named it or the server chooses.
 
   assignment add adds "action" and "applied" (false until it is written), and
   once written "server" and "readBack" (the id and the dates, Project, Person
@@ -265,8 +324,16 @@ const VALUE_OPTIONS = {
   "--person": "person",
   "--from": "from",
   "--to": "to",
-  "--share": "share"
+  "--share": "share",
+  "--location": "location",
+  "--availability": "availability",
+  "--colour": "colour",
+  "--note": "note"
 };
+
+// The options that repeat, each value added to a list: one --tag per tag, since
+// a tag is free text and cannot be split on a comma without being rewritten.
+const REPEATABLE_OPTIONS = { "--tag": "tags" };
 
 // The options that are a flag alone.
 const FLAG_OPTIONS = {
@@ -278,7 +345,8 @@ const FLAG_OPTIONS = {
 function parseArgs(argv) {
   const out = {
     command: null, subject: [], plan: undefined, period: undefined, person: undefined,
-    from: undefined, to: undefined, share: undefined,
+    from: undefined, to: undefined, share: undefined, location: undefined,
+    availability: undefined, colour: undefined, note: undefined, tags: [],
     json: false, apply: false, dryRun: false, help: false
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -293,7 +361,8 @@ function parseArgs(argv) {
     }
     const equals = arg.indexOf("=");
     const name = equals === -1 ? arg : arg.slice(0, equals);
-    if (Object.prototype.hasOwnProperty.call(VALUE_OPTIONS, name)) {
+    const repeatable = Object.prototype.hasOwnProperty.call(REPEATABLE_OPTIONS, name);
+    if (repeatable || Object.prototype.hasOwnProperty.call(VALUE_OPTIONS, name)) {
       let value;
       if (equals === -1) {
         value = argv[i + 1];
@@ -305,7 +374,8 @@ function parseArgs(argv) {
         value = arg.slice(equals + 1);
         if (value.trim() === "") throw usage(name + " needs a value");
       }
-      out[VALUE_OPTIONS[name]] = value;
+      if (repeatable) out[REPEATABLE_OPTIONS[name]].push(value);
+      else out[VALUE_OPTIONS[name]] = value;
       continue;
     }
     if (arg.startsWith("-")) {
@@ -839,17 +909,96 @@ function renderAssignmentAdd(data) {
   return lines.join("\n") + "\n";
 }
 
-function rejectForeignOptions(args) {
-  [
-    ["person", "--person"], ["from", "--from"], ["to", "--to"], ["share", "--share"],
-    ["apply", "--apply"], ["dryRun", "--dry-run"]
-  ].forEach(function (entry) {
-    const key = entry[0];
-    const flag = entry[1];
-    const taken = key === "apply" || key === "dryRun" ? args[key] : args[key] !== undefined;
-    if (taken) throw usage(args.command + " does not take " + flag +
-      "; the assignment commands do");
+function renderPersonAdd(data) {
+  const create = data.create;
+  const offered = data.offered;
+  const lines = header(data);
+  lines.push("");
+  lines.push("New Person");
+  lines.push("  " + create.name + (create.location ? ", " + create.location : "") +
+    ", available " + create.availability + "%");
+  lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "-"));
+  if (create.note !== "") lines.push("  Note: " + create.note);
+  // What the Availability is worth, which is the figure nobody can read off a
+  // percentage: the report's own working days at that Availability, with the
+  // days the Location's holidays take out of them named when there are any.
+  lines.push("  " + data.period.label + ": " + figure(offered.fteDays) + " FTE-days offered (" +
+    dayCount(offered.workingDays) + " working days at " + create.availability + "%)");
+  if (offered.holidayDays > 0) {
+    lines.push("  " + offered.location + " holidays take " + dayCount(offered.holidayDays) +
+      (offered.holidayDays === 1 ? " working day" : " working days") + " out of it: " +
+      offered.holidays.map(function (day) {
+        return day.date + (day.kind === "half" ? " (half)" : "");
+      }).join(", "));
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const readBack = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + readBack.id + ",");
+  lines.push("  " + readBack.name + (readBack.location ? ", " + readBack.location : "") +
+    ", available " + readBack.availability + "%.");
+  lines.push("Undo: the creation is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
+function renderProjectAdd(data) {
+  const create = data.create;
+  const lines = header(data);
+  lines.push("");
+  lines.push("New Project");
+  lines.push("  " + create.name + ", colour slot " + data.colour.slot +
+    (data.colour.named ? " (as named)" : " (the least used)"));
+  lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "-"));
+  if (create.notes !== "") lines.push("  Notes: " + create.notes);
+  lines.push("  No Assignments yet.");
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const readBack = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + readBack.id + ",");
+  lines.push("  " + readBack.name + ", colour slot " + readBack.colour + ", no Assignments.");
+  lines.push("Undo: the creation is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
+// A count of working days: whole days read as whole, a half day as 0.5.
+function dayCount(value) {
+  const n = Math.round(Number(value) * 100) / 100;
+  return Number.isFinite(n) ? String(n) : "-";
+}
+
+// The options one command does not take, refused before the plan is read: a
+// read has no business with any of the write's options, and neither create
+// takes the other's.
+function taken(args, key) {
+  if (key === "apply" || key === "dryRun") return args[key] === true;
+  if (key === "tags") return args.tags.length > 0;
+  return args[key] !== undefined;
+}
+
+function refuseOptions(args, keys, where) {
+  keys.forEach(function (key) {
+    if (!taken(args, key)) return;
+    const flag = key === "tags" ? "--tag" : "--" + key;
+    throw usage(args.command + " does not take " + flag + "; " + where);
   });
+}
+
+const READ_REFUSALS = ["person", "from", "to", "share", "location", "availability",
+  "colour", "note", "tags", "apply", "dryRun"];
+const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "tags"];
+const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour"];
+const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "location", "availability"];
+
+function rejectForeignOptions(args) {
+  refuseOptions(args, READ_REFUSALS, "the commands that change a plan do");
 }
 
 async function runAssignment(args) {
@@ -869,6 +1018,7 @@ async function runAssignmentMove(args) {
   if (project === "") throw usage("assignment move needs a Project name");
   if (args.person === undefined) throw usage("assignment move needs --person <name>");
   if (args.apply && args.dryRun) throw usage("--apply and --dry-run contradict each other");
+  refuseOptions(args, ASSIGNMENT_REFUSALS, "the commands that create a Person or a Project do");
   if (args.from === undefined && args.to === undefined && args.share === undefined) {
     throw usage("assignment move needs at least one of --from, --to or --share");
   }
@@ -909,6 +1059,7 @@ async function runAssignmentAdd(args) {
   if (args.from === undefined) throw usage("assignment add needs --from <date>");
   if (args.to === undefined) throw usage("assignment add needs --to <date>");
   if (args.apply && args.dryRun) throw usage("--apply and --dry-run contradict each other");
+  refuseOptions(args, ASSIGNMENT_REFUSALS, "the commands that create a Person or a Project do");
 
   const resolved = resolvePlanFile(args.plan);
   const plan = loadPlan(resolved);
@@ -937,6 +1088,83 @@ async function runAssignmentAdd(args) {
 
   if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
   else process.stdout.write(renderAssignmentAdd(data));
+}
+
+/* --- one new Person and one new Project ---------------------------------- */
+
+function rejectWriteFlags(args) {
+  if (args.apply && args.dryRun) throw usage("--apply and --dry-run contradict each other");
+}
+
+async function runPersonAdd(args) {
+  const name = args.subject.slice(1).join(" ").trim();
+  if (name === "") throw usage("person add needs a name");
+  rejectWriteFlags(args);
+  refuseOptions(args, PERSON_ADD_REFUSALS, "the commands that create a Person or a Project do");
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const created = query.personAdd(plan, {
+    name: name,
+    location: args.location,
+    availability: args.availability,
+    tags: args.tags,
+    note: args.note,
+    period: args.period
+  });
+  const data = Object.assign({
+    command: "person",
+    action: "add",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, created);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = await applyPersonAdd(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderPersonAdd(data));
+}
+
+async function runProjectAdd(args) {
+  const name = args.subject.slice(1).join(" ").trim();
+  if (name === "") throw usage("project add needs a name");
+  rejectWriteFlags(args);
+  if (args.period !== undefined) {
+    throw usage("project add does not take a period; a new Project starts with no Assignments");
+  }
+  refuseOptions(args, PROJECT_ADD_REFUSALS, "the commands that create a Person or a Project do");
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const created = query.projectAdd(plan, {
+    name: name,
+    colour: args.colour,
+    tags: args.tags,
+    note: args.note
+  });
+  const data = Object.assign({
+    command: "project",
+    action: "add",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, created);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = await applyProjectAdd(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderProjectAdd(data));
 }
 
 /* --- the running app, for the one write ---------------------------------- */
@@ -1056,31 +1284,54 @@ async function applyMove(base, diff, planPath) {
   return { start: landed.start, end: landed.end, share: landed.share };
 }
 
-// The creation: the app's own POST /api/assignments, then a read back of its
-// plan. The reply names the Assignment the server minted; the write is done
-// when that Assignment is in the plan the tool reads, holding what was asked
-// for, never when the request returned 201.
-async function applyAdd(base, add, planPath) {
-  await requireSamePlan(base, planPath);
-  const reply = await ask(base, "POST", "/api/assignments", add.create);
+// The creation: the app's own POST, then a read back of its plan. The reply
+// names the record the server minted; the write is done when that record is in
+// the plan the tool reads, holding what was asked for, never when the request
+// returned 201. One read back serves every creation, so a Person, a Project and
+// an Assignment are all verified by the same rule.
+async function readBackCreate(base, route, collection, create, cleanName, holds, describe) {
+  const reply = await ask(base, "POST", route, create);
   const plan = await ask(base, "GET", "/api/plan");
-  const landed = ((plan && plan.assignments) || []).find(function (assignment) {
-    return assignment.id === reply.id;
+  const landed = ((plan && plan[collection]) || []).find(function (record) {
+    return record.id === reply.id;
   });
   if (!landed) {
-    throw new CliError("the creation did not land: the app's plan holds no Assignment " +
+    throw new CliError("the creation did not land: the app's plan holds no " + cleanName + " " +
       reply.id, "write-lost", 1,
       "the app is the authority here: read the plan there before trying again");
   }
-  const asked = add.create;
-  if (landed.projectId !== asked.projectId || landed.personId !== asked.personId ||
-      landed.start !== asked.start || landed.end !== asked.end || landed.share !== asked.share) {
-    throw new CliError("the creation did not land: the app's plan holds " + landed.projectId +
-      " / " + landed.personId + " from " + landed.start + " to " + landed.end + " at " +
-      landed.share + "%, not " + asked.projectId + " / " + asked.personId + " from " +
-      asked.start + " to " + asked.end + " at " + asked.share + "%", "write-lost", 1,
+  if (!holds(landed)) {
+    throw new CliError("the creation did not land: the app's plan holds " + describe(landed) +
+      ", not " + describe(create), "write-lost", 1,
       "the app is the authority here: read the plan there before trying again");
   }
+  return landed;
+}
+
+// A creation's tags are a set: the store sorts them by its own rule, so what a
+// read back compares is the tags asked for, not the order they came back in.
+function sameTags(a, b) {
+  const left = (Array.isArray(a) ? a : []).slice().sort();
+  const right = (Array.isArray(b) ? b : []).slice().sort();
+  return left.length === right.length && left.every(function (tag, i) { return tag === right[i]; });
+}
+
+function tagsText(tags) {
+  return Array.isArray(tags) && tags.length > 0 ? tags.join(", ") : "no tags";
+}
+
+async function applyAdd(base, add, planPath) {
+  await requireSamePlan(base, planPath);
+  const asked = add.create;
+  const landed = await readBackCreate(base, "/api/assignments", "assignments", asked, "Assignment",
+    function (record) {
+      return record.projectId === asked.projectId && record.personId === asked.personId &&
+        record.start === asked.start && record.end === asked.end && record.share === asked.share;
+    },
+    function (record) {
+      return record.projectId + " / " + record.personId + " from " + record.start +
+        " to " + record.end + " at " + record.share + "%";
+    });
   return {
     id: landed.id,
     project: add.assignment.project,
@@ -1088,6 +1339,53 @@ async function applyAdd(base, add, planPath) {
     start: landed.start,
     end: landed.end,
     share: landed.share
+  };
+}
+
+async function applyPersonAdd(base, add, planPath) {
+  await requireSamePlan(base, planPath);
+  const asked = add.create;
+  const landed = await readBackCreate(base, "/api/people", "people", asked, "Person",
+    function (record) {
+      return record.name === asked.name && record.location === asked.location &&
+        record.availability === asked.availability && record.note === asked.note &&
+        sameTags(record.tags, asked.tags);
+    },
+    function (record) {
+      return '"' + record.name + '" in ' + (record.location || "no Location") + " at " +
+        record.availability + "% with " + tagsText(record.tags);
+    });
+  return {
+    id: landed.id,
+    name: landed.name,
+    location: landed.location,
+    availability: landed.availability,
+    tags: landed.tags.slice(),
+    note: landed.note
+  };
+}
+
+async function applyProjectAdd(base, add, planPath) {
+  await requireSamePlan(base, planPath);
+  const asked = add.create;
+  const landed = await readBackCreate(base, "/api/projects", "projects", asked, "Project",
+    function (record) {
+      // A colour the tool named must come back as named; one the server chose is
+      // not the tool's to pin, so only its presence is checked.
+      return record.name === asked.name && record.notes === asked.notes &&
+        (asked.colour === undefined || record.colour === asked.colour) &&
+        sameTags(record.tags, asked.tags);
+    },
+    function (record) {
+      return '"' + record.name + '" in colour slot ' +
+        (record.colour === undefined ? "unset" : record.colour) + " with " + tagsText(record.tags);
+    });
+  return {
+    id: landed.id,
+    name: landed.name,
+    colour: landed.colour,
+    notes: landed.notes,
+    tags: landed.tags.slice()
   };
 }
 
@@ -1123,6 +1421,16 @@ async function run() {
   }
   if (args.command === "assignment") {
     await runAssignment(args);
+    return;
+  }
+  // `person add` and `project add` create a record; `person <name>` and
+  // `project <name>` read one. The action is the first word, as in `assignment`.
+  if (args.command === "person" && args.subject[0] === "add") {
+    await runPersonAdd(args);
+    return;
+  }
+  if (args.command === "project" && args.subject[0] === "add") {
+    await runProjectAdd(args);
     return;
   }
   const spec = COMMANDS[args.command];

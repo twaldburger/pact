@@ -86,11 +86,12 @@ PACT is meant to be read by a colleague's agent as well as by the colleague.
 - **The numbers are computable.** `bin/pact.mjs` reads the plan file and prints
   the same figures the report draws - FTE-days by project, person or tag, and
   allocation against capacity - so an agent can answer *who is over capacity in
-  March* without a browser, and without adding anything up itself. Its two
-  writes create an Assignment, or reschedule and resize one, and only through
-  the running app: the preview comes first, nothing is written without
-  `--apply`, and the change is one the person at the screen can step back with
-  Undo. It never deletes anything.
+  March* without a browser, and without adding anything up itself. Its four
+  writes create a Person, create a Project, create an Assignment, or reschedule
+  and resize one, and only through the running app: the preview comes first,
+  nothing is written without `--apply`, and each change is one the person at the
+  screen can step back with Undo. It never deletes anything, and it does not
+  archive either.
 - **Nothing is hidden behind the interface.** A question the documents do not
   answer is a documentation bug, and the repository is written to be read: the
   plan is one file, the rules behind it are plain modules, and the tests that
