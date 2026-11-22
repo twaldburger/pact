@@ -18,9 +18,9 @@ behave while finding it, and answers nothing itself.
 | Can it do X, and where is the control? | [docs/features.md](docs/features.md) |
 | What documentation is there at all? | [docs/index.md](docs/index.md) |
 | What did the first version promise, and what was left out? | [docs/scope.md](docs/scope.md) |
-| What are the plan's numbers, and who is over capacity? | `node bin/pact.mjs --help`, the read-only tool over a plan file |
+| What are the plan's numbers, and who is over capacity? | `node bin/pact.mjs --help`, the tool over a plan file |
 | Why is it built this way? | [docs/adr/](docs/adr/) |
-| Where is that in the code? | `server.mjs`, `bin/` (the read-only tool), `lib/` (the plan store, its validation and its atomic write, and the queries the tool asks), `public/` (the app, and the pure rules it shares with the tests), `test/` (one file per set of rules) |
+| Where is that in the code? | `server.mjs`, `bin/` (the tool), `lib/` (the plan store, its validation and its atomic write, and the queries the tool asks), `public/` (the app, and the pure rules it shares with the tests), `test/` (one file per set of rules) |
 | Do the documents still match the code? | `test/docs.test.mjs` |
 
 The glossary is the language: look the term up and quote the entry, and treat
@@ -35,7 +35,9 @@ live. Both are more current than any summary of them, including this one.
 2. **Never edit the plan JSON directly.** A hand edit skips the validation, the
    atomic write and the guard that refuses a write when the file changed
    underneath, so it can leave a plan the app will not load. Change the plan
-   through the app or its HTTP API, where every write goes through the store.
+   through the app or its HTTP API, where every write goes through the store -
+   or through `bin/pact.mjs`'s `assignment move`, which writes through that API
+   so the change is one Undo step back for the person at the screen.
 3. **Never turn "I wrote a value" into "it looks right".** A visual outcome is
    verified only if it was measured or somebody looked at it. If neither
    happened, say what changed and ask.
