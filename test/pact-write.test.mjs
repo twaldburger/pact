@@ -1,6 +1,6 @@
 /*
- * PACT's writes: create an Assignment, and reschedule or resize one, through
- * the running app.
+ * PACT's writes: create a Person, create a Project, create an Assignment, and
+ * reschedule or resize one, through the running app.
  *
  * The rules here are the ones that make a write safe rather than the ones that
  * make it work: the preview is the default and touches nothing, the write
@@ -608,6 +608,421 @@ test("a write the app accepts but does not hold is not reported as done", async 
   assert.doesNotMatch(result.stdout, /Applied through/);
 });
 
+/* --- creating a Person and a Project ------------------------------------- */
+
+// Clara in Berlin over November: 21 weekdays, the 11th a holiday, so 20 working
+// days, and 80% of them is 16.0 FTE-days. In Lisbon, where no holiday is
+// configured, the same Availability is 21 days and 16.8 FTE-days: the
+// difference is the Location's holidays and nothing else.
+function personCreate(planPath, extra, env) {
+  return cli(["person", "add", "Clara Nowak", "--period", "2026-11",
+    "--plan", planPath].concat(extra || []), { env: env });
+}
+
+function projectCreate(planPath, extra, env) {
+  return cli(["project", "add", "Northwind", "--plan", planPath].concat(extra || []), { env: env });
+}
+
+test("the person add preview is the default and the plan file is not touched", async () => {
+  const started = await app(fixture());
+  const before = started.bytes();
+  const mtime = fs.statSync(started.planPath).mtimeMs;
+
+  const result = await personCreate(started.planPath, [
+    "--location", "Berlin", "--availability", "80",
+    "--tag", "skill:frontend", "--tag", "team:atlas"
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+
+  // The shape the issue asked for: who it is, their Availability, their tags,
+  // and what that Availability is worth over the period.
+  assert.match(result.stdout, /New Person/);
+  assert.match(result.stdout, /Clara Nowak, Berlin, available 80%/);
+  assert.match(result.stdout, /Tags: skill:frontend, team:atlas/);
+  assert.match(result.stdout, /Nov 2026: 16\.0 FTE-days offered \(20 working days at 80%\)/);
+  assert.match(result.stdout, /Berlin holidays take 1 working day out of it: 2026-11-11/);
+  assert.match(result.stdout, /Nothing written\. Re-run with --apply\./);
+
+  assert.deepEqual(started.bytes(), before, "the default must not write");
+  assert.equal(fs.statSync(started.planPath).mtimeMs, mtime);
+});
+
+test("--dry-run on a Person or a Project is the same thing said on purpose", async () => {
+  const started = await app(fixture());
+  const personQuiet = await personCreate(started.planPath, ["--location", "Berlin", "--tag", "team:atlas"]);
+  const personStated = await personCreate(started.planPath,
+    ["--location", "Berlin", "--tag", "team:atlas", "--dry-run"]);
+  assert.equal(personStated.status, 0, personStated.stderr);
+  assert.equal(personStated.stdout, personQuiet.stdout);
+
+  const projectQuiet = await projectCreate(started.planPath, ["--tag", "api:Northwind"]);
+  const projectStated = await projectCreate(started.planPath, ["--tag", "api:Northwind", "--dry-run"]);
+  assert.equal(projectStated.status, 0, projectStated.stderr);
+  assert.equal(projectStated.stdout, projectQuiet.stdout);
+
+  assert.equal(started.file().people.length, 2);
+  assert.equal(started.file().projects.length, 3);
+});
+
+test("--apply creates exactly one Person with the name, Location, Availability and tags asked for", async () => {
+  const started = await app(fixture());
+  const original = started.file();
+
+  const result = await personCreate(started.planPath, [
+    "--location", "Berlin", "--availability", "80", "--tag", "skill:frontend",
+    "--tag", "team:atlas", "--note", "starts in November", "--apply"
+  ], { PACT_URL: started.base });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Applied through http:\/\/127\.0\.0\.1:\d+/);
+  assert.match(result.stdout, /read back from its plan: person-[a-z0-9-]+,/);
+  assert.match(result.stdout, /Clara Nowak, Berlin, available 80%\./);
+  assert.match(result.stdout, /Undo: the creation is one step back with the app's Undo control\./);
+
+  const after = started.file();
+  const added = after.people.filter((person) =>
+    !original.people.some((existing) => existing.id === person.id));
+  assert.equal(added.length, 1, "exactly one Person is created");
+  const created = added[0];
+  assert.equal(created.name, "Clara Nowak");
+  assert.equal(created.location, "Berlin");
+  assert.equal(created.availability, 80);
+  assert.deepEqual(created.tags, ["skill:frontend", "team:atlas"]);
+  assert.equal(created.note, "starts in November");
+  // The id is the app's, minted on the write: the tool sent none.
+  assert.match(created.id, /^person-/);
+
+  // Nothing else in the plan changed: the plan it started from plus the one
+  // record, field for field.
+  const expected = structuredClone(original);
+  expected.people.push(created);
+  assert.deepEqual(after, expected);
+
+  // The Capacity the preview promised is the Capacity the plan now holds.
+  const read = await cli(["person", "Clara Nowak", "--period", "2026-11", "--plan", started.planPath]);
+  assert.equal(read.status, 0, read.stderr);
+  assert.match(read.stdout, /Capacity\s+16\.0 FTE-days/);
+});
+
+test("the Availability defaults to 100%, and the write carries it", async () => {
+  const started = await app(fixture());
+  const preview = await personCreate(started.planPath, ["--location", "Berlin"]);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /Clara Nowak, Berlin, available 100%/);
+  assert.match(preview.stdout, /Nov 2026: 20\.0 FTE-days offered \(20 working days at 100%\)/);
+  assert.equal(started.file().people.length, 2, "the preview must not write");
+
+  const applied = await personCreate(started.planPath, ["--location", "Berlin", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(started.file().people.find((person) => person.name === "Clara Nowak").availability, 100);
+});
+
+test("a Person's offer is counted after their Location's holidays, and nowhere else", async () => {
+  const berlin = await app(fixture());
+  const lisbon = await app(fixture());
+
+  const berlinPreview = await personCreate(berlin.planPath, ["--location", "Berlin", "--availability", "80"]);
+  const lisbonPreview = await personCreate(lisbon.planPath, ["--location", "Lisbon", "--availability", "80"]);
+  assert.equal(berlinPreview.status, 0, berlinPreview.stderr);
+  assert.equal(lisbonPreview.status, 0, lisbonPreview.stderr);
+
+  // One working day apart, because Berlin takes the 11th off and Lisbon does not.
+  assert.match(berlinPreview.stdout, /16\.0 FTE-days offered \(20 working days at 80%\)/);
+  assert.match(berlinPreview.stdout, /Berlin holidays take 1 working day out of it: 2026-11-11/);
+  assert.match(lisbonPreview.stdout, /16\.8 FTE-days offered \(21 working days at 80%\)/);
+  assert.doesNotMatch(lisbonPreview.stdout, /holidays take/);
+
+  const applied = await personCreate(berlin.planPath, ["--location", "Berlin", "--availability", "80", "--apply"],
+    { PACT_URL: berlin.base });
+  assert.equal(applied.status, 0, applied.stderr);
+  const read = await cli(["person", "Clara Nowak", "--period", "2026-11", "--plan", berlin.planPath]);
+  assert.match(read.stdout, /Capacity\s+16\.0 FTE-days/);
+});
+
+test("a name the live plan already answers to is refused, and the record that holds it is named", async () => {
+  const started = await app(fixture());
+  const before = started.bytes();
+
+  // By name, in another case, and by id: reads find a Person by either, so both
+  // spellings would make every later command ambiguous.
+  for (const name of ["Anna Meier", "anna meier", "anna"]) {
+    const result = await cli(["person", "add", name, "--period", "2026-11",
+      "--plan", started.planPath, "--apply"], { env: { PACT_URL: started.base } });
+    assert.equal(result.status, 1, name);
+    assert.match(result.stderr, /already holds a person called "Anna Meier" \(anna\)/, name);
+    assert.equal(result.stdout, "", name);
+  }
+
+  const project = await cli(["project", "add", "atlas", "--plan", started.planPath, "--apply"],
+    { env: { PACT_URL: started.base } });
+  assert.equal(project.status, 1);
+  assert.match(project.stderr, /already holds a project called "Atlas" \(atlas\)/);
+
+  assert.deepEqual(started.bytes(), before, "a refusal writes nothing");
+});
+
+test("a Person's tags and a Project's are separate lists, and a typed tag is kept as typed", async () => {
+  const started = await app(fixture());
+  // The by-tag read pivots Project tags only, so it is the measure of whether a
+  // Person's tag leaked into the Project vocabulary.
+  const tagsBefore = await cli(["tags", "--period", "2026-11", "--plan", started.planPath]);
+
+  const person = await personCreate(started.planPath,
+    ["--location", "Berlin", "--tag", "skill:Frontend", "--apply"], { PACT_URL: started.base });
+  assert.equal(person.status, 0, person.stderr);
+  assert.deepEqual(started.file().people.find((entry) => entry.name === "Clara Nowak").tags,
+    ["skill:Frontend"], "the tag is stored exactly as typed");
+
+  const tagsAfterPerson = await cli(["tags", "--period", "2026-11", "--plan", started.planPath]);
+  assert.equal(tagsAfterPerson.stdout.replace(/^Plan file.*\n/m, ""),
+    tagsBefore.stdout.replace(/^Plan file.*\n/m, ""),
+    "a Person's tags are not the Project vocabulary");
+
+  const project = await projectCreate(started.planPath,
+    ["--tag", "api:Northwind", "--tag", "skill:Frontend", "--apply"], { PACT_URL: started.base });
+  assert.equal(project.status, 0, project.stderr);
+  assert.deepEqual(started.file().projects.find((entry) => entry.name === "Northwind").tags,
+    ["api:Northwind", "skill:Frontend"],
+    "the same spelling is a Project's own tag, kept exactly as typed");
+});
+
+test("the project add preview names the colour slot it would take and that it starts empty", async () => {
+  const started = await app(fixture());
+  const before = started.bytes();
+  const mtime = fs.statSync(started.planPath).mtimeMs;
+
+  // The plan's Projects sit in slots 0, 3 and 4, so the least used is 1.
+  const result = await projectCreate(started.planPath, ["--tag", "api:Northwind"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /New Project/);
+  assert.match(result.stdout, /Northwind, colour slot 1 \(the least used\)/);
+  assert.match(result.stdout, /Tags: api:Northwind/);
+  assert.match(result.stdout, /No Assignments yet\./);
+  assert.match(result.stdout, /Nothing written\. Re-run with --apply\./);
+
+  assert.deepEqual(started.bytes(), before, "the default must not write");
+  assert.equal(fs.statSync(started.planPath).mtimeMs, mtime);
+});
+
+test("--apply creates exactly one Project in the colour slot the preview named", async () => {
+  const started = await app(fixture());
+  const original = started.file();
+
+  const result = await projectCreate(started.planPath,
+    ["--tag", "api:Northwind", "--note", "phase three", "--apply"], { PACT_URL: started.base });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /read back from its plan: project-[a-z0-9-]+,/);
+  assert.match(result.stdout, /Northwind, colour slot 1, no Assignments\./);
+
+  const after = started.file();
+  const added = after.projects.filter((project) =>
+    !original.projects.some((existing) => existing.id === project.id));
+  assert.equal(added.length, 1, "exactly one Project is created");
+  const created = added[0];
+  assert.equal(created.name, "Northwind");
+  assert.equal(created.colour, 1, "the least-used slot, chosen by the app");
+  assert.equal(created.notes, "phase three");
+  assert.deepEqual(created.tags, ["api:Northwind"]);
+  assert.match(created.id, /^project-/);
+
+  const expected = structuredClone(original);
+  expected.projects.push(created);
+  assert.deepEqual(after, expected);
+
+  // A Project that starts empty has no Assignment hanging off it, in the app's
+  // plan as well as in the file.
+  const plan = await json(started.base, "/api/plan");
+  assert.equal(plan.body.assignments.filter((entry) => entry.projectId === created.id).length, 0);
+});
+
+test("a colour named is the colour taken, and the preview says it was named", async () => {
+  const started = await app(fixture());
+  const preview = await projectCreate(started.planPath, ["--colour", "7"]);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /Northwind, colour slot 7 \(as named\)/);
+
+  const applied = await projectCreate(started.planPath, ["--colour", "7", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(started.file().projects.find((project) => project.name === "Northwind").colour, 7);
+});
+
+test("the app's Undo takes the created Person and Project back, one step each", async () => {
+  const started = await app(fixture());
+  const original = started.file();
+
+  const person = await personCreate(started.planPath,
+    ["--location", "Berlin", "--availability", "80", "--tag", "skill:frontend", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(person.status, 0, person.stderr);
+  const project = await projectCreate(started.planPath, ["--tag", "api:Northwind", "--apply"],
+    { PACT_URL: started.base });
+  assert.equal(project.status, 0, project.stderr);
+  assert.equal(started.file().people.length, 3);
+  assert.equal(started.file().projects.length, 4);
+
+  const first = await json(started.base, "/api/undo", "POST");
+  assert.equal(first.status, 200);
+  assert.equal(started.file().projects.length, 3, "Undo removes the created Project");
+  assert.equal(started.file().people.length, 3, "and leaves the Person alone");
+
+  const second = await json(started.base, "/api/undo", "POST");
+  assert.equal(second.status, 200);
+  assert.deepEqual(started.file(), original, "Undo removes the created Person too");
+});
+
+test("the --json preview carries the create body and what the Availability is worth", async () => {
+  const started = await app(fixture());
+  const person = await personCreate(started.planPath,
+    ["--location", "Berlin", "--availability", "80", "--tag", "skill:frontend", "--json"]);
+  assert.equal(person.status, 0, person.stderr);
+  const data = JSON.parse(person.stdout);
+  assert.equal(data.command, "person");
+  assert.equal(data.action, "add");
+  assert.equal(data.applied, false);
+  assert.deepEqual(data.create, {
+    name: "Clara Nowak", location: "Berlin", availability: 80,
+    tags: ["skill:frontend"], note: ""
+  });
+  assert.equal(data.offered.workingDays, 20);
+  assert.equal(data.offered.holidayDays, 1);
+  assert.equal(data.offered.fteDays, 16);
+
+  const project = await projectCreate(started.planPath, ["--tag", "api:Northwind", "--json"]);
+  assert.equal(project.status, 0, project.stderr);
+  const projectData = JSON.parse(project.stdout);
+  assert.deepEqual(projectData.create, { name: "Northwind", notes: "", tags: ["api:Northwind"] });
+  assert.deepEqual(projectData.colour, { slot: 1, named: false });
+});
+
+test("creating a Person or a Project on a plan the app is not holding is refused", async () => {
+  const started = await app(fixture());
+  const elsewhere = path.join(started.dir, "elsewhere.pact.json");
+  fs.writeFileSync(elsewhere, JSON.stringify(fixture(), null, 2) + "\n");
+  const before = fs.readFileSync(elsewhere);
+
+  const person = await cli(["person", "add", "Clara Nowak", "--period", "2026-11",
+    "--plan", elsewhere, "--apply"], { env: { PACT_URL: started.base } });
+  assert.notEqual(person.status, 0);
+  assert.match(person.stderr, /refusing to write: the app at .* has a different plan open/);
+
+  const project = await cli(["project", "add", "Northwind", "--plan", elsewhere, "--apply"],
+    { env: { PACT_URL: started.base } });
+  assert.notEqual(project.status, 0);
+  assert.match(project.stderr, /refusing to write: the app at .* has a different plan open/);
+
+  assert.deepEqual(fs.readFileSync(elsewhere), before, "the file it read must not be written");
+  assert.equal(started.file().people.length, 2);
+  assert.equal(started.file().projects.length, 3);
+});
+
+test("with no app answering, creating a Person or a Project says how to start one", async () => {
+  const started = await app(fixture());
+  const before = started.bytes();
+
+  for (const result of [
+    await personCreate(started.planPath, ["--location", "Berlin", "--apply"],
+      { PACT_URL: "http://127.0.0.1:1" }),
+    await projectCreate(started.planPath, ["--apply"], { PACT_URL: "http://127.0.0.1:1" })
+  ]) {
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /no PACT server at http:\/\/127\.0\.0\.1:1/);
+    assert.match(result.stderr, /start it with node server\.mjs/);
+    assert.equal(/\n\s+at /.test(result.stderr), false, "no stack trace");
+    assert.equal(result.stdout, "");
+  }
+  assert.deepEqual(started.bytes(), before);
+});
+
+test("a Person the app accepts but does not hold is not reported as done", async () => {
+  // An app that answers 201 to the POST and then serves a plan without the new
+  // Person: the tool has to say the creation did not land rather than trust the
+  // reply, exactly as the Assignment create does.
+  const dir = scratchDir();
+  const planPath = path.join(dir, "stub-person.pact.json");
+  fs.writeFileSync(planPath, JSON.stringify(fixture(), null, 2) + "\n");
+  const server = http.createServer((req, res) => {
+    const send = (status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.url === "/api/plan-file") {
+      return send(200, { path: planPath, source: "default", locked: false, notice: "" });
+    }
+    if (req.method === "GET" && req.url === "/api/plan") return send(200, fixture());
+    req.on("data", () => {});
+    req.on("end", () => send(201, { id: "person-stub" }));
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const base = "http://127.0.0.1:" + server.address().port;
+
+  let result;
+  try {
+    result = await cli(["person", "add", "Clara Nowak", "--location", "Berlin",
+      "--period", "2026-11", "--plan", planPath, "--apply"],
+    { env: { PACT_URL: base } });
+  } finally {
+    await new Promise((done) => server.close(done));
+  }
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /the creation did not land/);
+  assert.match(result.stderr, /person-stub/);
+  assert.doesNotMatch(result.stdout, /Applied through/);
+});
+
+test("person add and project add state what they need, and refuse what is not theirs", async () => {
+  const started = await app(fixture());
+  const before = started.bytes();
+
+  const noName = await cli(["person", "add", "--plan", started.planPath]);
+  assert.equal(noName.status, 2);
+  assert.match(noName.stderr, /person add needs a name/);
+
+  const noProjectName = await cli(["project", "add", "--plan", started.planPath]);
+  assert.equal(noProjectName.status, 2);
+  assert.match(noProjectName.stderr, /project add needs a name/);
+
+  const both = await personCreate(started.planPath, ["--apply", "--dry-run"]);
+  assert.equal(both.status, 2);
+  assert.match(both.stderr, /--apply and --dry-run contradict each other/);
+
+  // A percentage the app would refuse is the app's to say, but a value that is
+  // not a whole percentage at all is not a figure the preview could compute.
+  const notANumber = await personCreate(started.planPath, ["--availability", "eighty"]);
+  assert.equal(notANumber.status, 1);
+  assert.match(notANumber.stderr, /--availability must be a whole percentage/);
+
+  const badColour = await projectCreate(started.planPath, ["--colour", "12"]);
+  assert.equal(badColour.status, 1);
+  assert.match(badColour.stderr, /--colour must be a slot 0\.\.9/);
+
+  // The options that belong to the other create, and to the reads.
+  const share = await personCreate(started.planPath, ["--share", "50"]);
+  assert.equal(share.status, 2);
+  assert.match(share.stderr, /person does not take --share/);
+
+  const location = await projectCreate(started.planPath, ["--location", "Berlin"]);
+  assert.equal(location.status, 2);
+  assert.match(location.stderr, /project does not take --location/);
+
+  const period = await projectCreate(started.planPath, ["--period", "2026-11"]);
+  assert.equal(period.status, 2);
+  assert.match(period.stderr, /project add does not take a period/);
+
+  const readTag = await cli(["people", "--tag", "api", "--plan", started.planPath]);
+  assert.equal(readTag.status, 2);
+  assert.match(readTag.stderr, /people does not take --tag/);
+
+  const assignmentTag = await cli(["assignment", "add", "Atlas", "--person", "Anna Meier",
+    "--from", "2026-11-16", "--to", "2026-11-19", "--tag", "api", "--plan", started.planPath]);
+  assert.equal(assignmentTag.status, 2);
+  assert.match(assignmentTag.stderr, /assignment does not take --tag/);
+
+  assert.deepEqual(started.bytes(), before);
+});
+
 /* --- the tool never deletes anything ------------------------------------- */
 
 test("no action, option or code path in the tool deletes anything", async () => {
@@ -622,16 +1037,35 @@ test("no action, option or code path in the tool deletes anything", async () => 
     assert.equal(result.status, 2, action);
     assert.match(result.stderr, /unknown assignment action "/);
   }
-  for (const flag of ["--force", "--destroy", "--delete"]) {
+  // Nor through the two creates: an action that would remove is read as a name,
+  // and finds nothing, because there is no such record and no such write.
+  for (const action of ["destroy", "delete", "remove", "archive"]) {
+    for (const command of ["person", "project"]) {
+      const result = await cli([command, action, "Atlas", "--plan", started.planPath]);
+      assert.notEqual(result.status, 0, command + " " + action);
+      assert.match(result.stderr, /unknown (person|project) "/);
+    }
+  }
+  for (const flag of ["--force", "--destroy", "--delete", "--archive"]) {
     const result = await add(started.planPath, ["--from", "2026-11-16", "--to", "2026-11-19", flag]);
     assert.equal(result.status, 2, flag);
     assert.match(result.stderr, /unknown option "/);
+
+    const person = await personCreate(started.planPath, [flag]);
+    assert.equal(person.status, 2, flag);
+    assert.match(person.stderr, /unknown option "/);
+
+    const project = await projectCreate(started.planPath, [flag]);
+    assert.equal(project.status, 2, flag);
+    assert.match(project.stderr, /unknown option "/);
   }
 
-  // The boundary is in the help, in plain words, where the write is described.
+  // The boundary is in the help, in plain words, where the writes are described.
   const help = await cli(["--help"]);
   assert.match(help.stdout, /The tool never deletes anything\./);
+  assert.match(help.stdout, /person add creates a Person/);
   assert.match(help.stdout, /assignment add creates an Assignment/);
+  assert.match(help.stdout, /Archiving is not a command here/);
   assert.match(help.stdout, /and no --force to reach\s+one/);
 
   // And in the code: the tool sends GET, PATCH and POST, and never DELETE.
