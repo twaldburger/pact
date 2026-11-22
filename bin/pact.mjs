@@ -9,13 +9,15 @@
  * and no plan traversal of its own; every figure is the query module's, which
  * is the report's own. Reads never touch the network - except `view`, which
  * reads the app's View settings and the plan it is showing, because neither
- * exists anywhere else. The fourteen writes -
- * `person add --apply`, `project add --apply`, `assignment move --apply`,
- * `assignment add --apply`, archive and restore for each of the three
- * collections, `holiday add --apply` and `holiday remove --apply`, and
+ * exists anywhere else. The sixteen writes -
+ * `person add --apply`, `project add --apply`, `person edit --apply`,
+ * `project edit --apply`, `assignment move --apply`, `assignment add --apply`,
+ * archive and restore for each of the three collections,
+ * `holiday add --apply` and `holiday remove --apply`, and
  * `milestone add --apply` and `milestone edit --apply` - send the query
  * module's body, patch or archive to the app's own
- * POST /api/people, POST /api/projects, PATCH /api/assignments/<id>,
+ * POST /api/people, POST /api/projects, PATCH /api/people/<id>,
+ * PATCH /api/projects/<id>, PATCH /api/assignments/<id>,
  * POST /api/assignments, DELETE /api/<collection>/<id> (the archive, as it has
  * always been), PATCH /api/<collection>/<id> with `archived: false` (the
  * restore), PATCH /api/plan with the whole rebuilt holiday list (the app's
@@ -23,6 +25,8 @@
  * (the app's two Milestone writes) - the routes and bodies the interface
  * itself uses - so the validation, the atomic write and the changed-underneath
  * guard are the app's, and the change is one step back with its Undo control.
+ * An edit sends only the fields its diff named, so a field nobody asked about is
+ * never written back from a stale read.
  * Nothing here deletes a record: the tool has no route to the app's
  * destruction, no such command, and no flag that reaches one. `holiday remove`
  * takes a holiday date out of one plan setting, which is not a record and is
@@ -33,7 +37,7 @@
  * is displaying the plan, and `view set` changes one View setting, both
  * through the running app's own GET and POST /api/view. It writes the display
  * store only - never the plan, never the plan's period, Step, cadence or tag
- * selections - so it is not one of the fourteen above and it reaches nothing
+ * selections - so it is not one of the sixteen above and it reaches nothing
  * that deletes.
  */
 import fs from "node:fs";
@@ -145,6 +149,8 @@ const COMMANDS = {
 const WRITE_ROWS = [
   ["person add <name>", "create one Person"],
   ["project add <name>", "create one Project"],
+  ["person edit <name>", "change one Person's fields"],
+  ["project edit <name>", "change one Project's fields"],
   ["assignment add <project>", "create one Assignment"],
   ["assignment move <project>", "reschedule or resize one Assignment"],
   ["person archive <name>", "archive one Person"],
@@ -205,8 +211,9 @@ function commandTable() {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-Fourteen commands change a plan: person add, project add, assignment add and
-assignment move create and change work, person, project and assignment each
+Sixteen commands change a plan: person add, project add, assignment add and
+assignment move create and change work, person edit and project edit change a
+record that already exists, person, project and assignment each
 take archive and restore, holiday add and holiday remove each write one
 holiday date for one Location, and milestone add and milestone edit create a
 Milestone and change one. All of them write through the running app, so
@@ -256,6 +263,12 @@ Commands
           --availability 80 --tag "skill:frontend" --tag "team:atlas"
   project add <name>               create one Project, through the app
       node bin/pact.mjs project add Northwind --tag "api:Northwind"
+  person edit <name>               change one Person's fields, through the app
+      node bin/pact.mjs person edit "Anna Meier" --availability 80
+      node bin/pact.mjs person edit "Anna Meier" --tag team:atlas --note "leads design"
+  project edit <name>              change one Project's fields, through the app
+      node bin/pact.mjs project edit Atlas --absence on
+      node bin/pact.mjs project edit Atlas --untag "api:Solar" --colour 3
   assignment add <project>         create one Assignment, through the app
       node bin/pact.mjs assignment add Atlas --person "Anna Meier" \\
           --from 2026-11-23 --to 2026-12-04 --share 60
@@ -349,6 +362,41 @@ project add takes these as well
                        the least-used slot, and the preview names the one it
                        expects to be taken
 
+person edit and project edit take these as well
+  --name <name>        the record's new name. Reads find a Person or a Project by
+                       name, so a name another live record already answers to is
+                       refused, naming that record; renaming a record to its own
+                       name is not a rename, and changes nothing
+  --tag <tag>          add one tag, repeated once per tag. Tags are added and
+                       removed, never replaced: --tag names one more tag, and a
+                       tag the record already carries is a refusal. The preview
+                       prints the resulting tag list in full, so a lost tag is
+                       visible before the write
+  --untag <tag>        remove one tag, repeated once per tag; a tag the record
+                       does not carry is a refusal rather than a silent no-op
+  --note <text>        free text; it lands in the Person's note, or the
+                       Project's notes
+  --period <period>    the stretch the figure is counted over; without it, the
+                       plan's own period
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
+
+person edit takes these as well
+  --location <name>    the Person's new Location; its holidays are the ones taken
+                       out of the Capacity the preview states, before and after
+  --availability <pct> the new Availability, a whole percentage. The preview
+                       states the FTE-days it offers before and after, after the
+                       Location's holidays; the app validates the range and its
+                       refusal is printed as the app wrote it
+
+project edit takes these as well
+  --colour <slot>      the new colour slot, 0 to 9; an unknown slot is refused
+  --absence on|off     whether the Project is an Absence Project. On, its
+                       Assignments take their time out of Capacity; off, they add
+                       that work to Allocated. Either way the preview states the
+                       FTE-days that move and the plan's Capacity and Allocated
+                       before and after
+
 person archive, person restore, project archive, project restore,
 assignment archive and assignment restore take these as well
   --person <name>      the two assignment ones: the Person the Assignment is on;
@@ -431,6 +479,42 @@ Creating a Person or a Project
   --colour, takes its least-used colour slot. The tool then reads the plan back
   and confirms the record the app holds has the values it asked for; a creation
   the plan does not show exits non-zero and says it did not land.
+
+Editing a Person or a Project
+  person edit and project edit change a record that already exists, and print a
+  diff of exactly the fields that change: the old and new name, Location,
+  Availability, colour, absence flag, note or tags. A field left out keeps what
+  the record holds, and everything else in the record is left exactly as the
+  plan stores it. Nothing is written without --apply, and --apply sends only the
+  fields the diff shows, through the app's own PATCH /api/people/<id> or
+  PATCH /api/projects/<id>, then reads the plan back and confirms the record
+  holds them; a write the plan does not show exits non-zero and says it did not
+  land.
+
+  The preview states what the change costs, which is why the command exists. An
+  Availability or a Location change prints the FTE-days the Person offers over
+  the period before and after, after their Location's holidays and their own
+  absences: the report's own Capacity, so the preview and the report cannot
+  disagree. Switching a Project's --absence prints the FTE-days its Assignments
+  are worth, whether they now take that time out of Capacity or add that work to
+  Allocated, and the plan's Capacity and Allocated either side of the switch. A
+  rename and a note move no figure, so neither prints one.
+
+  Tags are added and removed, never replaced: --tag adds one and --untag removes
+  one, and the preview prints the resulting tag list in full, so a tag lost by a
+  write would be visible before it happened. Adding a tag the record already
+  carries, or removing one it does not, is a refusal with the record and the tag
+  named, rather than a no-op that reads as a change made. There is deliberately
+  no --tags to replace the list: that is how an agent silently drops a tag
+  somebody else added.
+
+  A rename refuses a name another live record already answers to, by the rule a
+  creation uses: reads resolve by name, so two live records of one name would
+  make every later command ambiguous. Renaming a record to its own name is not a
+  rename. The other refusals are an unknown colour, an --absence that is neither
+  on nor off, an Availability the app will not take (its own words, printed as
+  it wrote them), and an edit that would change nothing at all - refused rather
+  than printed as a diff of no lines.
 
 Creating an Assignment
   assignment add creates one Assignment on a Project and a Person, over --from
@@ -566,17 +650,18 @@ The view, and how it looks
   control. The colour-by-key and by-tag selections are not here either: they
   travel with the plan, under Options > Tags.
 
-  Nothing here is one of the fourteen commands above that change a plan: a view
+  Nothing here is one of the sixteen commands above that change a plan: a view
   write touches no plan record, no figure, and nothing that deletes.
 
 Deleting
   The tool never deletes anything. There is no command and no flag that
   destroys a Person, a Project, an Assignment or a Milestone, and no --force to
   reach one: what this tool can do to a plan is add a Person, add a Project or
-  add an Assignment, move an Assignment, archive or restore a Person, a Project
-  or an Assignment, add or remove one holiday date for one Location, and create
-  or edit a Milestone, and nothing more. That boundary is deliberate, and it is
-  not a gap waiting to be filled.
+  add an Assignment, edit a Person or a Project, move an Assignment, archive or
+  restore a Person, a Project or an Assignment, add or remove one holiday date
+  for one Location, and create or edit a Milestone, and nothing more. An edit
+  changes fields and never removes the record it changes. That boundary is
+  deliberate, and it is not a gap waiting to be filled.
 
   Archiving is how work leaves a plan reversibly: archive takes a record out of
   the plan and restore puts it back, and neither destroys anything. A deletion
@@ -595,8 +680,9 @@ Deleting
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
   Reads never write it. Its writes - the four that create and change work, the
-  six that archive and restore, the two that add and remove a holiday date, and
-  the two that create and edit a Milestone - go through the running app's API,
+  two that edit a Person or a Project, the six that archive and restore, the two
+  that add and remove a holiday date, and the two that create and edit a
+  Milestone - go through the running app's API,
   so validation, the atomic write and the guard against a file changed
   underneath are the app's, not a second copy here. It reads the live plan, so
   archived People, Projects and Assignments are left out, as on the default
@@ -724,6 +810,23 @@ JSON
   PATCH /api/milestones/<id> takes - and "diff" is those fields as
   [{ field, before, after }] in the order the preview prints them.
 
+  person edit and project edit are the same shape: "action" "edit" and
+  "applied" (false until it is written), "subject" the record as stored and
+  "after" the record as the edit would leave it, "change" the patch that was
+  sent - only the fields that differ, in the shape the app's
+  PATCH /api/people/<id> or PATCH /api/projects/<id> takes - and "diff" those
+  fields as [{ field, before, after }] in the order the preview prints them.
+  person edit adds "period" and "units", and "offered" - { before, after },
+  each { availability, location, workingDays, holidayDays, fteDays, holidays } -
+  when the Availability or the Location moves. project edit adds "period",
+  "units" and, when the absence flag moves, "absence": { on, assignments,
+  fteDays, plan: { before, after } }, where "assignments" are the live
+  Assignments the Project holds, "fteDays" the Capacity the plan gains or loses
+  by the switch (negative when the Assignments now take time out of Capacity,
+  positive when they go back to adding work), and "plan" the plan's "capacity"
+  and "allocated" either side. Once written both carry "server" and "readBack",
+  the record as the app's plan holds it afterwards.
+
   view has no period of its own to choose and no units, because it computes no
   figure: it carries "planPeriod", "step", "cadence" ({ start, length,
   namePrefix, nameNumber }, or null when the plan defines none), "view" - the
@@ -777,9 +880,11 @@ const VALUE_OPTIONS = {
   "--from": "from",
   "--to": "to",
   "--share": "share",
+  "--name": "name",
   "--location": "location",
   "--availability": "availability",
   "--colour": "colour",
+  "--absence": "absence",
   "--note": "note",
   "--kind": "kind",
   "--date": "date",
@@ -788,8 +893,9 @@ const VALUE_OPTIONS = {
 
 // The options that repeat, each value added to a list: one --tag per tag, since
 // a tag is free text and cannot be split on a comma without being rewritten,
-// and one --project per Project a Milestone relates to.
-const REPEATABLE_OPTIONS = { "--tag": "tags", "--project": "projects" };
+// one --untag per tag taken away, and one --project per Project a Milestone
+// relates to.
+const REPEATABLE_OPTIONS = { "--tag": "tags", "--untag": "untag", "--project": "projects" };
 
 // The options that are a flag alone.
 const FLAG_OPTIONS = {
@@ -803,10 +909,10 @@ const FLAG_OPTIONS = {
 function parseArgs(argv) {
   const out = {
     command: null, subject: [], plan: undefined, period: undefined, person: undefined,
-    from: undefined, to: undefined, share: undefined, location: undefined,
-    availability: undefined, colour: undefined, note: undefined, kind: undefined,
-    date: undefined, top: undefined, over: false, under: false,
-    tags: [], projects: [], json: false, apply: false, dryRun: false, help: false
+    from: undefined, to: undefined, share: undefined, name: undefined, location: undefined,
+    availability: undefined, colour: undefined, absence: undefined, note: undefined,
+    kind: undefined, date: undefined, top: undefined, over: false, under: false,
+    tags: [], untag: [], projects: [], json: false, apply: false, dryRun: false, help: false
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -1633,6 +1739,132 @@ function renderProjectAdd(data) {
   return lines.join("\n") + "\n";
 }
 
+/* --- one record's diff, before it is written ----------------------------- */
+
+// The fields each edit prints, in the order its options name them, and the words
+// the reads use for them: a Person holds a note and a Project notes, and only a
+// Project has a colour and an absence flag.
+const EDIT_ORDERS = {
+  person: ["name", "location", "availability", "note", "tags"],
+  project: ["name", "colour", "absence", "notes", "tags"]
+};
+
+const EDIT_LABELS = {
+  name: "Name",
+  location: "Location",
+  availability: "Availability",
+  colour: "Colour",
+  absence: "Absence",
+  note: "Note",
+  notes: "Notes",
+  tags: "Tags"
+};
+
+// One field as a diff line says it: a percentage, a colour slot, a flag's yes or
+// no, and a tag list in full - never a count of tags, because a tag that was
+// lost has to be visible before the write.
+function editFieldText(field, value) {
+  if (field === "availability") return value + "%";
+  if (field === "colour") return "slot " + value;
+  if (field === "absence") return value ? "yes" : "no";
+  if (field === "tags") return value.length === 0 ? "none" : value.join(", ");
+  if (value === "" || value === null || value === undefined) return "-";
+  return String(value);
+}
+
+// What does not change, so a reader sees the whole record rather than only the
+// line that moved: the tag list is here in full whenever the edit did not touch
+// it, which is the same promise the diff's own tag line keeps.
+function editStaysText(data) {
+  const changed = data.diff.map(function (entry) { return entry.field; });
+  const parts = EDIT_ORDERS[data.command].filter(function (field) {
+    return changed.indexOf(field) === -1;
+  }).map(function (field) {
+    return EDIT_LABELS[field] + " " + editFieldText(field, data.after[field]);
+  });
+  return "Everything else stays: " + parts.join(", ") + ".";
+}
+
+// What the change costs, in the report's own figure: an Availability or a
+// Location moves the Capacity the Person offers, so the FTE-days either side are
+// stated with the working days they are counted over. The days are named once
+// when the two sides share them, and twice when a Location's holidays differ.
+function offeredText(offered, period) {
+  const days = function (offer) { return dayCount(offer.workingDays) + " working days"; };
+  const left = figure(offered.before.fteDays) + " FTE-days offered";
+  const right = figure(offered.after.fteDays) + " FTE-days";
+  const shift = offered.before.workingDays === offered.after.workingDays
+    ? left + "  ->  " + right + "  (of " + days(offered.after) + ")"
+    : left + " of " + days(offered.before) + "  ->  " + right + " of " + days(offered.after);
+  return period.label + ": " + shift;
+}
+
+// What switching a Project's absence flag costs: its Assignments either take
+// their time out of Capacity or add their work to Allocated, and the size of
+// that figure is the plan's own Capacity moving, read either side. A Project
+// with no Assignment moves nothing, and says so rather than printing a zero.
+function absenceText(data) {
+  const held = data.absence.assignments.length;
+  if (held === 0) return "It holds no Assignment, so no figure moves either way.";
+  const days = Math.abs(data.absence.fteDays);
+  // An Assignment of it can lie wholly outside the period counted, and then the
+  // switch moves no FTE-day here even though it has work.
+  if (days < 1e-9) {
+    return "None of its " + countText(held, "Assignment") + " meets " + data.period.label +
+      ", so no FTE-day moves either way.";
+  }
+  const one = held === 1;
+  return "Its " + countText(held, "Assignment") + (one ? " is" : " are") +
+    " worth " + figure(days) + " FTE-days over " +
+    data.period.label + ", and " + (one ? "it" : "they") +
+    (data.absence.on
+      ? " now " + (one ? "takes" : "take") + " that time out of Capacity rather than adding it to Allocated."
+      : " now " + (one ? "adds" : "add") + " that work to Allocated rather than taking it out of Capacity.");
+}
+
+function absenceFiguresText(data) {
+  const before = data.absence.plan.before;
+  const after = data.absence.plan.after;
+  return data.period.label + ": Capacity " + figure(before.capacity) + "  ->  " +
+    figure(after.capacity) + " FTE-days, Allocated " + figure(before.allocated) + "  ->  " +
+    figure(after.allocated) + " FTE-days";
+}
+
+function renderRecordEdit(data) {
+  const lines = header(data);
+  lines.push("");
+  lines.push("Edit " + KIND_TITLES[data.command] + " " + data.subject.name);
+  // One column for the labels a diff line carries, so the arrows line up and
+  // the block reads as one change rather than as scattered lines.
+  const width = Math.max.apply(null, data.diff.map(function (entry) {
+    return EDIT_LABELS[entry.field].length;
+  }));
+  lines.push.apply(lines, renderPairs(data.diff.map(function (entry) {
+    return ["  " + EDIT_LABELS[entry.field].padEnd(width) + "  " +
+      editFieldText(entry.field, entry.before),
+    "->  " + editFieldText(entry.field, entry.after)];
+  })));
+  lines.push("  " + editStaysText(data));
+  if (data.offered) lines.push("  " + offeredText(data.offered, data.period));
+  if (data.absence) {
+    lines.push("  " + absenceText(data));
+    lines.push("  " + absenceFiguresText(data));
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const back = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " +
+    data.diff.map(function (entry) {
+      return EDIT_LABELS[entry.field] + " " + editFieldText(entry.field, back[entry.field]);
+    }).join(", ") + ".");
+  lines.push("Undo: the change is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
 /* --- one record archived or restored ------------------------------------- */
 
 // What each direction says: what the record does, what its Assignments do, and
@@ -1657,7 +1889,8 @@ const MOVE_WORDS = {
   }
 };
 
-const KIND_TITLES = { person: "Person", project: "Project", assignment: "Assignment" };
+const KIND_TITLES = { person: "Person", project: "Project", assignment: "Assignment",
+  milestone: "Milestone" };
 
 function countText(count, noun) {
   return count + " " + noun + (count === 1 ? "" : "s");
@@ -1804,7 +2037,7 @@ function dayCount(value) {
 function taken(args, key) {
   if (key === "apply" || key === "dryRun") return args[key] === true;
   if (key === "over" || key === "under") return args[key] === true;
-  if (key === "tags" || key === "projects") return args[key].length > 0;
+  if (key === "tags" || key === "untag" || key === "projects") return args[key].length > 0;
   return args[key] !== undefined;
 }
 
@@ -1900,23 +2133,27 @@ function topCount(value) {
   return n;
 }
 
-const READ_REFUSALS = ["person", "from", "to", "share", "availability",
-  "colour", "note", "kind", "date", "projects", "apply", "dryRun"];
-const ASSIGNMENT_REFUSALS = ["location", "availability", "colour", "note", "kind", "date",
-  "tags", "projects"];
-const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "colour", "kind", "date",
-  "projects"];
-const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "kind", "date", "projects"];
+const READ_REFUSALS = ["person", "from", "to", "share", "name", "availability",
+  "colour", "absence", "note", "kind", "date", "projects", "untag", "apply", "dryRun"];
+const ASSIGNMENT_REFUSALS = ["name", "location", "availability", "colour", "absence", "note",
+  "kind", "date", "tags", "untag", "projects"];
+const PERSON_ADD_REFUSALS = ["person", "from", "to", "share", "name", "colour", "absence",
+  "kind", "date", "untag", "projects"];
+const PROJECT_ADD_REFUSALS = ["person", "from", "to", "share", "name", "location",
+  "availability", "absence", "kind", "date", "untag", "projects"];
 // A holiday is named by its Location, its date and its kind, and by nothing a
 // Person, a Project or an Assignment is named by.
-const HOLIDAY_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "colour", "note", "tags", "projects"];
+const HOLIDAY_REFUSALS = ["person", "from", "to", "share", "name", "location", "availability",
+  "colour", "absence", "note", "tags", "untag", "projects"];
 // A Milestone is named by its own name, and takes the six fields it has: a date,
 // a colour, tags, a note and the Projects it relates to. Nothing a Person, an
 // Assignment or a holiday is named by belongs here.
-const MILESTONE_REFUSALS = ["person", "from", "to", "share", "location", "availability",
-  "kind"];
+const MILESTONE_REFUSALS = ["person", "from", "to", "share", "name", "location", "availability",
+  "kind", "absence", "untag"];
+// A Person's edit takes the fields a Person holds, and a Project's the fields a
+// Project holds: neither takes the other's, and neither renames by id.
+const PERSON_EDIT_REFUSALS = ["person", "from", "to", "share", "colour", "absence", "kind",
+  "date", "projects"];
 
 function rejectForeignOptions(args) {
   refuseOptions(args, READ_REFUSALS, "the commands that change a plan do");
@@ -2090,6 +2327,76 @@ async function runProjectAdd(args) {
   else process.stdout.write(renderProjectAdd(data));
 }
 
+/* --- one existing Person, and one existing Project, changed -------------- */
+
+// The options an edit of a Person and of a Project each do not take: neither
+// takes an Assignment's dates or Allocation, an archive's options or a
+// holiday's kind, and a Person has no colour or absence flag to set while a
+// Project has no Location and no Availability.
+const PROJECT_EDIT_REFUSALS = ["person", "from", "to", "share", "location", "availability",
+  "kind", "date", "projects"];
+
+// Neither edit takes nothing at all: a command that names no field has no diff
+// to show, and the refusal says which fields it does take.
+function refuseEmptyEdit(args, flags) {
+  const named = flags.some(function (key) { return taken(args, key); });
+  if (!named) {
+    throw usage(args.command + " edit needs at least one of " + flags.map(flagOf).join(", "));
+  }
+}
+
+async function runRecordEdit(args, kind) {
+  const name = args.subject.slice(1).join(" ").trim();
+  if (name === "") throw usage(kind + " edit needs a name");
+  rejectWriteFlags(args);
+  const person = kind === "person";
+  refuseOptions(args, person ? PERSON_EDIT_REFUSALS : PROJECT_EDIT_REFUSALS,
+    person
+      ? "a Person is a name, a Location, an Availability, tags and a note"
+      : "a Project is a name, a colour, an absence flag, tags and notes");
+  refuseEmptyEdit(args, person
+    ? ["name", "location", "availability", "note", "tags", "untag"]
+    : ["name", "colour", "absence", "note", "tags", "untag"]);
+
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const request = {
+    subject: name,
+    name: args.name,
+    location: args.location,
+    availability: args.availability,
+    colour: args.colour,
+    absence: args.absence,
+    note: args.note,
+    // A tag list that was not named is not the tool's to send: an empty list on
+    // an edit would read as "no tags", which is the replacement --tag and
+    // --untag exist to make impossible.
+    tags: args.tags.length > 0 ? args.tags : undefined,
+    untag: args.untag.length > 0 ? args.untag : undefined,
+    period: args.period
+  };
+  const edit = person ? query.personEdit(plan, request) : query.projectEdit(plan, request);
+  const data = Object.assign({
+    command: kind,
+    action: "edit",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, edit);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = person
+      ? await applyPersonEdit(base, data, resolved.path)
+      : await applyProjectEdit(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderRecordEdit(data));
+}
+
 /* --- one new Milestone, and one edited ----------------------------------- */
 
 // `milestone add` creates one and `milestone edit` moves one. There is no third
@@ -2163,8 +2470,8 @@ async function runMilestone(args) {
 // by its Project and --person, and neither direction changes a date or an
 // Allocation. --apply and --dry-run are theirs, as they are every write's.
 const ASSIGNMENT_ARCHIVE_REFUSALS = ASSIGNMENT_REFUSALS.concat(["from", "to", "share"]);
-const RECORD_ARCHIVE_REFUSALS = ["person", "from", "to", "share", "location",
-  "availability", "colour", "note", "kind", "date", "tags", "projects"];
+const RECORD_ARCHIVE_REFUSALS = ["person", "from", "to", "share", "name", "location",
+  "availability", "colour", "absence", "note", "kind", "date", "tags", "untag", "projects"];
 
 // The six commands are one command with two directions and three collections:
 // the same preview-then-apply, the same refusals and the same read back.
@@ -2380,11 +2687,48 @@ async function applyMove(base, diff, planPath) {
   return { start: landed.start, end: landed.end, share: landed.share };
 }
 
+// One record's edit: the app's own PATCH on the record with the fields the diff
+// showed and nothing else, then a read back of the plan, which must hold every
+// one of them. The record is found by id, so an edit can never write a second
+// record by mistake. A Milestone, a Person and a Project are all verified by
+// this one rule.
+async function applyRecordEdit(base, edit, planPath, kind, holds, describe) {
+  await requireSamePlan(base, planPath);
+  const id = edit.subject.id;
+  await ask(base, "PATCH", recordRoute(kind, id), edit.change);
+  const plan = await ask(base, "GET", "/api/plan");
+  const landed = findRecord(plan, kind, id);
+  if (!landed) {
+    throw new CliError("the write did not land: the app's plan holds no " + KIND_TITLES[kind] +
+      " " + id, "write-lost", 1,
+      "the app is the authority here: read the " + KIND_TITLES[kind] + " there before trying again");
+  }
+  if (!holds(landed, edit.change)) {
+    throw new CliError("the write did not land: the app's plan holds " + describe(landed) +
+      ", not " + describe(Object.assign({}, edit.subject, edit.change)), "write-lost", 1,
+      "the app is the authority here: read the " + KIND_TITLES[kind] + " there before trying again");
+  }
+  return landed;
+}
+
+// A Person's and a Project's edit: one PATCH on the record's own route, and the
+// plan read back holding every field the diff named.
+async function applyPersonEdit(base, edit, planPath) {
+  return personRecord(await applyRecordEdit(base, edit, planPath, "person", personHolds,
+    personDescription));
+}
+
+async function applyProjectEdit(base, edit, planPath) {
+  return projectRecord(await applyRecordEdit(base, edit, planPath, "project", projectHolds,
+    projectDescription));
+}
+
 // The creation: the app's own POST, then a read back of its plan. The reply
 // names the record the server minted; the write is done when that record is in
 // the plan the tool reads, holding what was asked for, never when the request
 // returned 201. One read back serves every creation, so a Person, a Project and
-// an Assignment are all verified by the same rule.
+// an Assignment are all verified by the same rule - the one an edit is verified
+// by, which is why it is handed the body the request carried.
 async function readBackCreate(base, route, collection, create, cleanName, holds, describe) {
   const reply = await ask(base, "POST", route, create);
   const plan = await ask(base, "GET", "/api/plan");
@@ -2396,7 +2740,7 @@ async function readBackCreate(base, route, collection, create, cleanName, holds,
       reply.id, "write-lost", 1,
       "the app is the authority here: read the plan there before trying again");
   }
-  if (!holds(landed)) {
+  if (!holds(landed, create)) {
     throw new CliError("the creation did not land: the app's plan holds " + describe(landed) +
       ", not " + describe(create), "write-lost", 1,
       "the app is the authority here: read the plan there before trying again");
@@ -2414,6 +2758,61 @@ function sameTags(a, b) {
 
 function tagsText(tags) {
   return Array.isArray(tags) && tags.length > 0 ? tags.join(", ") : "no tags";
+}
+
+// Whether a Person in the app's plan holds every field this command named. A
+// field left out is not the tool's to pin, which is what lets one rule verify a
+// creation - whose body carries every field - and an edit - whose patch carries
+// only the ones that differ. The tags are a set, because the store sorts them.
+function personHolds(record, asked) {
+  return (asked.name === undefined || record.name === asked.name) &&
+    (asked.location === undefined || record.location === asked.location) &&
+    (asked.availability === undefined || record.availability === asked.availability) &&
+    (asked.note === undefined || String(record.note || "") === String(asked.note)) &&
+    (asked.tags === undefined || sameTags(record.tags, asked.tags));
+}
+
+function personDescription(record) {
+  return '"' + record.name + '" in ' + (record.location || "no Location") + " at " +
+    record.availability + "% with " + tagsText(record.tags);
+}
+
+function personRecord(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    location: record.location,
+    availability: record.availability,
+    tags: Array.isArray(record.tags) ? record.tags.slice() : [],
+    note: typeof record.note === "string" ? record.note : ""
+  };
+}
+
+// The same rule for a Project, whose notes and absence flag are its own: a
+// colour the tool named must come back as named, and one the server chose is not
+// the tool's to pin.
+function projectHolds(record, asked) {
+  return (asked.name === undefined || record.name === asked.name) &&
+    (asked.notes === undefined || String(record.notes || "") === String(asked.notes)) &&
+    (asked.colour === undefined || record.colour === asked.colour) &&
+    (asked.absence === undefined || record.absence === asked.absence) &&
+    (asked.tags === undefined || sameTags(record.tags, asked.tags));
+}
+
+function projectDescription(record) {
+  return '"' + record.name + '" in colour slot ' +
+    (record.colour === undefined ? "unset" : record.colour) + " with " + tagsText(record.tags);
+}
+
+function projectRecord(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    colour: record.colour,
+    notes: typeof record.notes === "string" ? record.notes : "",
+    tags: Array.isArray(record.tags) ? record.tags.slice() : [],
+    absence: record.absence === true
+  };
 }
 
 async function applyAdd(base, add, planPath) {
@@ -2440,25 +2839,9 @@ async function applyAdd(base, add, planPath) {
 
 async function applyPersonAdd(base, add, planPath) {
   await requireSamePlan(base, planPath);
-  const asked = add.create;
-  const landed = await readBackCreate(base, "/api/people", "people", asked, "Person",
-    function (record) {
-      return record.name === asked.name && record.location === asked.location &&
-        record.availability === asked.availability && record.note === asked.note &&
-        sameTags(record.tags, asked.tags);
-    },
-    function (record) {
-      return '"' + record.name + '" in ' + (record.location || "no Location") + " at " +
-        record.availability + "% with " + tagsText(record.tags);
-    });
-  return {
-    id: landed.id,
-    name: landed.name,
-    location: landed.location,
-    availability: landed.availability,
-    tags: landed.tags.slice(),
-    note: landed.note
-  };
+  const landed = await readBackCreate(base, "/api/people", "people", add.create, "Person",
+    personHolds, personDescription);
+  return personRecord(landed);
 }
 
 // Whether a Milestone in the app's plan holds every field this command named.
@@ -2512,57 +2895,26 @@ async function applyMilestoneAdd(base, add, planPath) {
 
 // The edit: the app's own PATCH /api/milestones/<id> with the fields the diff
 // showed and nothing else, then a read back of the plan, which must hold every
-// one of them. The record is found by id, so an edit can never write a second
-// Milestone by mistake.
+// one of them.
 async function applyMilestoneEdit(base, edit, planPath) {
-  await requireSamePlan(base, planPath);
-  const id = edit.subject.id;
-  await ask(base, "PATCH", "/api/milestones/" + encodeURIComponent(id), edit.change);
-  const plan = await ask(base, "GET", "/api/plan");
-  const landed = ((plan && plan.milestones) || []).find(function (milestone) {
-    return milestone.id === id;
-  });
-  if (!landed) {
-    throw new CliError("the write did not land: the app's plan holds no Milestone " + id,
-      "write-lost", 1,
-      "the app is the authority here: read the Milestone there before trying again");
-  }
-  if (!milestoneHolds(landed, edit.change)) {
-    throw new CliError("the write did not land: the app's plan holds " + milestoneDescription(landed) +
-      ", not " + milestoneDescription(Object.assign({}, edit.subject, edit.change)),
-      "write-lost", 1,
-      "the app is the authority here: read the Milestone there before trying again");
-  }
+  const landed = await applyRecordEdit(base, edit, planPath, "milestone", milestoneHolds,
+    milestoneDescription);
   return milestoneRecord(landed);
 }
 
 async function applyProjectAdd(base, add, planPath) {
   await requireSamePlan(base, planPath);
-  const asked = add.create;
-  const landed = await readBackCreate(base, "/api/projects", "projects", asked, "Project",
-    function (record) {
-      // A colour the tool named must come back as named; one the server chose is
-      // not the tool's to pin, so only its presence is checked.
-      return record.name === asked.name && record.notes === asked.notes &&
-        (asked.colour === undefined || record.colour === asked.colour) &&
-        sameTags(record.tags, asked.tags);
-    },
-    function (record) {
-      return '"' + record.name + '" in colour slot ' +
-        (record.colour === undefined ? "unset" : record.colour) + " with " + tagsText(record.tags);
-    });
-  return {
-    id: landed.id,
-    name: landed.name,
-    colour: landed.colour,
-    notes: landed.notes,
-    tags: landed.tags.slice()
-  };
+  const landed = await readBackCreate(base, "/api/projects", "projects", add.create, "Project",
+    projectHolds, projectDescription);
+  return projectRecord(landed);
 }
 
 // The collection a kind of record lives in, in the API and in the plan alike.
 function collectionOf(kind) {
-  return kind === "person" ? "people" : kind === "project" ? "projects" : "assignments";
+  if (kind === "person") return "people";
+  if (kind === "project") return "projects";
+  if (kind === "milestone") return "milestones";
+  return "assignments";
 }
 
 // The one record's route in the API: the collection route the interface itself
@@ -3022,6 +3374,12 @@ async function run() {
   }
   if (args.command === "project" && args.subject[0] === "add") {
     await runProjectAdd(args);
+    return;
+  }
+  // `person edit` and `project edit` change the record the next word names.
+  if ((args.command === "person" || args.command === "project") &&
+      args.subject[0] === "edit") {
+    await runRecordEdit(args, args.command);
     return;
   }
   // `holiday add` and `holiday remove`: one date at a time, for one Location.

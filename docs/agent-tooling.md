@@ -126,13 +126,22 @@ list would print it: a filter can hide a number, never make one up.
 
 ## Changing a plan
 
-Fourteen commands change a plan, and every one of them goes through the running
+Sixteen commands change a plan, and every one of them goes through the running
 app. **Nothing is written without `--apply`**: each prints a preview first -
 what would be created, the old and new value, the figures before and after -
 and the preview is the default. `--dry-run` says the same thing out loud.
 
 - `person add <name>` and `project add <name>` create one record. A name the
   live plan already answers to is refused, naming the record that holds it.
+- `person edit <name>` and `project edit <name>` change a record that already
+  exists, and print a diff of exactly the fields that change. The preview also
+  states what the change costs: an Availability or a Location change prints the
+  FTE-days the Person offers before and after, and switching a Project's
+  `--absence` prints the FTE-days its Assignments are worth and the plan's
+  Capacity and Allocated either side. Tags are **added and removed, never
+  replaced** - `--tag` adds one, `--untag` removes one, and the preview prints
+  the resulting tag list in full - so no tag somebody else added is dropped
+  silently. There is no `--tags` to replace the list.
 - `assignment add <project>` creates one Assignment on a Person over `--from`
   and `--to` at `--share`; `assignment move <project>` reschedules or resizes
   one. Over-allocation is allowed and stated before it is made, never refused.
@@ -215,6 +224,8 @@ needs the app is refused when nothing is serving it.
 | `milestones`                     | the Milestones as stored                                | the plan file         |
 | `person add <name>`              | create one Person                                       | the app               |
 | `project add <name>`             | create one Project                                      | the app               |
+| `person edit <name>`             | change one Person's fields                              | the app               |
+| `project edit <name>`            | change one Project's fields                             | the app               |
 | `assignment add <project>`       | create one Assignment                                   | the app               |
 | `assignment move <project>`      | reschedule or resize one Assignment                     | the app               |
 | `person archive <name>`          | archive one Person                                      | the app               |
