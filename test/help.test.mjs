@@ -1,14 +1,15 @@
 /*
- * The in-app help: the two documents it may serve, the route that serves them,
- * the rule that ranks a search, and the proof that the renderer draws every
- * construct those two documents actually contain.
+ * The in-app help: the documents it may serve, the route that serves them, the
+ * rule that ranks a search, and the proof that the renderer draws every
+ * construct those documents actually contain.
  *
  * The documents are read here from the repository itself rather than from
  * fixtures, because the point of the help is that it shows the documentation
- * that ships. A construct added to `docs/features.md` or `GLOSSARY.md` that the
- * subset renderer does not draw turns this file red, which is the whole reason
- * the subset is a list (`MARKDOWN_CONSTRUCTS`) instead of a promise. So does a
- * link between the two documents pointing at a heading that is not there.
+ * that ships. A construct added to `docs/features.md`, `GLOSSARY.md` or
+ * `docs/agent-tooling.md` that the subset renderer does not draw turns this file
+ * red, which is the whole reason the subset is a list (`MARKDOWN_CONSTRUCTS`)
+ * instead of a promise. So does a link between the documents pointing at a
+ * heading that is not there.
  *
  * What this cannot do is read the panel: that the menu's `Help...` entry opens
  * it, that Escape closes it and focus goes back, that the grid has not moved,
@@ -60,13 +61,16 @@ function documents() {
 
 const FEATURES = read("features");
 const GLOSSARY = read("glossary");
+const AGENT_TOOLING = read("agent-tooling");
 
 /* --- the allowlist -------------------------------------------------------- */
 
-test("the help may read exactly two documents, by name", () => {
-  assert.deepEqual(HELP_DOCUMENTS.map((entry) => entry.key), ["features", "glossary"]);
-  assert.deepEqual(HELP_DOCUMENTS.map((entry) => entry.path), ["docs/features.md", "GLOSSARY.md"]);
+test("the help may read exactly three documents, by name", () => {
+  assert.deepEqual(HELP_DOCUMENTS.map((entry) => entry.key), ["features", "glossary", "agent-tooling"]);
+  assert.deepEqual(HELP_DOCUMENTS.map((entry) => entry.path),
+    ["docs/features.md", "GLOSSARY.md", "docs/agent-tooling.md"]);
   assert.equal(HELP_DOCUMENT_DEFAULT, "features", "a first visit starts on the feature reference");
+  assert.equal(helpDocument("agent-tooling").label, "Command line");
 });
 
 test("a name that is not on the allowlist resolves to nothing", () => {
@@ -78,6 +82,9 @@ test("a name that is not on the allowlist resolves to nothing", () => {
     "../GLOSSARY.md",
     "../../etc/passwd",
     "features/../../README.md",
+    "docs/agent-tooling.md",
+    "agent-tooling.md",
+    "agent tooling",
     null,
     undefined,
     42
@@ -130,6 +137,15 @@ test("the route serves each allowed document, and the file as it stands now", as
   }
 });
 
+test("the third document is served by its own name, the way the panel asks for it", async () => {
+  const base = await startServer();
+  const res = await get(base, "/api/help/agent-tooling");
+  assert.equal(res.status, 200);
+  assert.equal(res.body.key, "agent-tooling");
+  assert.equal(res.body.label, "Command line");
+  assert.equal(res.body.markdown, fs.readFileSync(path.join(ROOT, "docs", "agent-tooling.md"), "utf8"));
+});
+
 test("the route refuses every name the allowlist does not carry", async () => {
   const base = await startServer();
   const refused = [
@@ -140,7 +156,10 @@ test("the route refuses every name the allowlist does not carry", async () => {
     "/api/help/../README.md",
     "/api/help/..%2F..%2Fetc%2Fpasswd",
     "/api/help/features%2F..%2F..%2FREADME.md",
-    "/api/help/FEATURES"
+    "/api/help/FEATURES",
+    "/api/help/docs/agent-tooling.md",
+    "/api/help/agent-tooling.md",
+    "/api/help/AGENT-TOOLING"
   ];
   for (const urlPath of refused) {
     const res = await get(base, urlPath);
@@ -213,6 +232,22 @@ test("the search finds a section by its heading, and a glossary term by its own 
   assert.equal(ruler.every((hit) => hit.matched === "title"), true);
 });
 
+test("a search of the command line finds its sections by the question they answer", () => {
+  // The page is ordered by task, so its headings are what a reader searches
+  // for. `capacity` is the plan's own question, and the page names a section
+  // for it rather than mentioning it in passing.
+  const results = searchHelp(documents(), "capacity");
+  const tooling = results.filter((hit) => hit.doc === "agent-tooling");
+  assert.ok(tooling.length > 0, "the command line page is not searched at all");
+  const byTitle = tooling.filter((hit) => hit.matched === "title").map((hit) => hit.title);
+  assert.ok(byTitle.includes("Capacity, and who is over it"), byTitle.join(", "));
+  // The page's sections come back rank first - a heading match before a mention
+  // - and in the page's own reading order within each rank.
+  const page = helpSections(AGENT_TOOLING).map((section) => section.title);
+  const order = tooling.map((hit) => hit.rank * 1000 + page.indexOf(hit.title));
+  assert.deepEqual(order, order.slice().sort((a, b) => a - b));
+});
+
 test("the search is case-insensitive and reads the body, not only the headings", () => {
   const lower = searchHelp(documents(), "minimap");
   const upper = searchHelp(documents(), "TIMELINE");
@@ -269,26 +304,30 @@ test("the panel lists at most the stated number of results", () => {
   assert.ok(searchHelp(documents(), "the").length > 0);
 });
 
-/* --- links between the two documents -------------------------------------- */
+/* --- links between the documents ------------------------------------------ */
 
 function linksIn(markdown) {
   return [...markdown.matchAll(/\[[^\]\n]*\]\(([^)\s]+)\)/g)].map((match) => match[1]);
 }
 
-test("every link in the two documents resolves to a section the help can open", () => {
-  const anchors = {
-    features: helpAnchors(FEATURES),
-    glossary: helpAnchors(GLOSSARY)
-  };
+// A link the help can follow is one that names a help document; anything else is
+// drawn as plain text and checked against the file on disk by
+// test/docs.test.mjs, which is the rule a page under docs/ lives by.
+function helpLinksIn(markdown, docPath) {
+  return linksIn(markdown).filter(function (target) {
+    return resolveHelpTarget(target, { path: docPath, documents: HELP_DOCUMENTS }) !== null;
+  });
+}
+
+test("every link between the help documents resolves to a section the help can open", () => {
+  const anchors = {};
+  for (const entry of HELP_DOCUMENTS) {
+    anchors[entry.key] = helpAnchors(read(entry.key));
+  }
   const unresolved = [];
   for (const entry of HELP_DOCUMENTS) {
-    const markdown = read(entry.key);
-    for (const target of linksIn(markdown)) {
+    for (const target of helpLinksIn(read(entry.key), entry.path)) {
       const resolved = resolveHelpTarget(target, { path: entry.path, documents: HELP_DOCUMENTS });
-      if (!resolved) {
-        unresolved.push(entry.key + ": " + target + " (not a help document)");
-        continue;
-      }
       if (resolved.anchor && !anchors[resolved.doc].includes(resolved.anchor)) {
         unresolved.push(entry.key + ": " + target + " (no such heading)");
       }
@@ -298,14 +337,24 @@ test("every link in the two documents resolves to a section the help can open", 
 });
 
 test("a link between the documents is drawn as a control, and a link away as text", () => {
-  // Every link target the documents use points between the two, so every one of
-  // them must be followable inside the panel.
   for (const entry of HELP_DOCUMENTS) {
-    const html = renderHelpDocument(helpDocument(entry.key), read(entry.key), null, "help-");
-    const drawn = (html.match(/class="md-link"/g) || []).length;
-    assert.equal(drawn, linksIn(read(entry.key)).length, entry.key);
-    assert.doesNotMatch(html, /class="md-plainlink"/, entry.key);
+    const markdown = read(entry.key);
+    const html = renderHelpDocument(helpDocument(entry.key), markdown, null, "help-");
+    assert.equal((html.match(/class="md-link"/g) || []).length,
+      helpLinksIn(markdown, entry.path).length, entry.key + " drew a link away as a control");
+    assert.equal((html.match(/class="md-plainlink"/g) || []).length,
+      linksIn(markdown).length - helpLinksIn(markdown, entry.path).length,
+      entry.key + " dropped a link it cannot follow instead of drawing it as text");
   }
+  // The reference and the glossary only ever link within the help, so nothing
+  // there is plain text; the command line page points at the appearance guide,
+  // which is documentation rather than a help document, and so is plain text.
+  for (const key of ["features", "glossary"]) {
+    assert.doesNotMatch(renderHelpDocument(helpDocument(key), read(key), null, "help-"),
+      /class="md-plainlink"/, key);
+  }
+  assert.match(renderHelpDocument(helpDocument("agent-tooling"), AGENT_TOOLING, null, "help-"),
+    /class="md-plainlink">Checking how PACT looks</);
 });
 
 /* --- the renderer against the real documents ------------------------------ */
@@ -324,6 +373,7 @@ function constructsIn(markdown) {
     if (/`[^`\n]+`/.test(line)) found.add("code");
     if (/\*\*[^*\n]+\*\*/.test(line) || /(^|\s)_[^_\n]+_/.test(line)) found.add("emphasis");
     if (/\[[^\]\n]*\]\([^)\s]+\)/.test(line)) found.add("link");
+    if (/<!--/.test(line)) found.add("comment");
   }
   return [...found].sort();
 }
@@ -339,13 +389,14 @@ test("the documents use only constructs the subset names", () => {
 test("the documents really do use the constructs worth checking", () => {
   // Guards the check above from passing because the documents happen to be
   // plain prose today.
-  const used = constructsIn(FEATURES).concat(constructsIn(GLOSSARY));
-  for (const construct of ["frontmatter", "heading", "paragraph", "unordered-list", "link", "emphasis", "code"]) {
+  const used = HELP_DOCUMENTS.flatMap((entry) => constructsIn(read(entry.key)));
+  for (const construct of ["frontmatter", "heading", "paragraph", "unordered-list", "link",
+    "emphasis", "code", "table", "comment"]) {
     assert.ok(used.includes(construct), "no " + construct + " found in the documents");
   }
 });
 
-test("the renderer draws every construct both documents contain", () => {
+test("the renderer draws every construct the documents contain", () => {
   for (const entry of HELP_DOCUMENTS) {
     const markdown = read(entry.key);
     const html = renderHelpDocument(helpDocument(entry.key), markdown, null, "help-");
@@ -371,6 +422,8 @@ test("the renderer draws every construct both documents contain", () => {
     assert.doesNotMatch(html, /\]\(/, entry.key + " left a link's own syntax on screen");
     assert.doesNotMatch(html, /`/, entry.key + " left a backtick on screen");
     assert.doesNotMatch(html, /_Avoid_/, entry.key + " left the italic's underscores on screen");
+    assert.doesNotMatch(html, /<!--/, entry.key + " drew a comment's markers");
+    assert.doesNotMatch(html, /command-table:/, entry.key + " drew a command table marker");
     assert.doesNotMatch(html, /^(---|##)/m, entry.key + " drew a heading or a rule as text");
   }
 });

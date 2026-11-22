@@ -6012,33 +6012,33 @@ function openPlanFilePanel(trigger) {
 /* --- the help panel ------------------------------------------------------ */
 
 /*
- * The help: the feature reference and the glossary, searched, opened from the
- * first entry of the Options menu. It is opened and never docked - the app's
- * own panel shell over the board, so the grid does not move and nothing about
- * the plan is touched. Escape closes it and focus goes back to the row that
- * opened it, as every other panel's does.
+ * The help: the feature reference, the glossary and the command line guide,
+ * searched, opened from the first entry of the Options menu. It is opened and
+ * never docked - the app's own panel shell over the board, so the grid does not
+ * move and nothing about the plan is touched. Escape closes it and focus goes
+ * back to the row that opened it, as every other panel's does.
  *
- * The two documents are read from the server's allowlisted route every time the
+ * The documents are read from the server's allowlisted route every time the
  * panel opens, so it can never show a copy that has moved on, and nothing of
  * them outlives the panel: the documents, the anchors and the search index are
  * this function's own. The panel opens on the feature reference, and the last
  * document read is not remembered - reopening starts where a first visit does.
  *
- * The panel's subtitle row is the switch between the two: one button per
- * document, named by the allowlist's own labels, the one showing marked the way
- * the Plan/Report switch marks the current page. A search is a search of the
+ * The panel's subtitle row is the switch between them: one button per document,
+ * named by the allowlist's own labels, the one showing marked the way the
+ * Plan/Report switch marks the current page. A search is a search of the
  * document open, so a typed query survives a switch and is run again against
  * the document now showing.
  *
  * The search itself, and the rule that ranks a title match above a body match,
- * are public/lib/help.mjs'; this draws its results. A link between the two
+ * are public/lib/help.mjs'; this draws its results. A link between the
  * documents moves within the panel, and a link anywhere else is plain text.
  */
 function openHelpPanel(trigger) {
   var node = panelShell("Help");
   node.classList.add("panel--help");
 
-  // Where the subtitle was: the two documents the help may draw, as a pair of
+  // Where the subtitle was: the documents the help may draw, as a row of
   // buttons. The open one carries `aria-current`, which is the whole of the
   // marking - the stylesheet's fill follows the attribute.
   var switcher = el("div", "panel__sub help__switch");
@@ -6121,8 +6121,8 @@ function openHelpPanel(trigger) {
   }
 
   // One document in the panel, scrolled to a section of it. This is what a
-  // result and a link between the two documents both do: the search that led
-  // to either is spent, so the box is emptied.
+  // result and a link between the documents both do: the search that led to
+  // either is spent, so the box is emptied.
   function showDocument(key, anchorId) {
     if (!helpDocument(key)) return;
     openKey = key;
@@ -6210,7 +6210,7 @@ function openHelpPanel(trigger) {
     else if (e.key === "ArrowDown") { e.preventDefault(); first.focus(); }
   });
 
-  // A link between the two documents moves within the panel. Anything else was
+  // A link between the documents moves within the panel. Anything else was
   // drawn as plain text by the renderer, so it cannot arrive here.
   body.addEventListener("click", function (e) {
     var link = e.target.closest("a[data-help-doc]");

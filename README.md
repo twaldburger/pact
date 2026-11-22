@@ -84,28 +84,14 @@ PACT is meant to be read by a colleague's agent as well as by the colleague.
   term one entry with the words to avoid. A test fails when a capability in the
   app has no section, so neither document can quietly fall behind the code.
 - **The numbers are computable.** `bin/pact.mjs` reads the plan file and prints
-  the same figures the report draws - FTE-days by project, person or tag, and
-  allocation against capacity - so an agent can answer *who is over capacity in
-  March* without a browser, and without adding anything up itself. The two list
-  reads narrow as they read - `people --location Berlin --over`,
-  `projects --tag api --top 3` - and a narrowed answer prints the filter it
-  applied and "Matched 2 of 14 People", so a short list is never mistaken for
-  the plan. The options are named terms, one flag each, with no expression to
-  parse and no operator to get subtly wrong. Its writes
-  create a Person, a Project or an Assignment, reschedule and resize one,
-  archive and restore any of the three, add or remove one holiday date for
-  one Location, and create or move a Milestone, and only through the running
-  app: the preview comes first,
-  nothing is written without `--apply`, and each change is one the person at the
-  screen can step back with Undo. Archiving is how an agent takes work out of a
-  plan and puts it back, and it never deletes anything: a holiday date is one
-  plan setting rather than a record, and a permanent deletion stays in the app;
-  a Milestone can be created and moved but never removed, since it has no
-  archived state. `view` reads how the app is drawing the plan - its View
-  settings and the period, step and cadence they rest on - and `view set`
-  changes one of those settings, so an agent can see and set the screen without
-  driving it. [Checking how PACT looks](docs/checking-appearance.md) says how to
-  verify what the screen then drew: measured or looked at, never assumed.
+  the same figures the report draws, so an agent can answer *who is over
+  capacity in March* without a browser and without adding anything up itself. It
+  is also how a plan is changed from a terminal: previewing first, through the
+  running app so the change is one Undo step back, and never deleting anything.
+  [The command line](docs/agent-tooling.md) documents it once - the reads, the
+  writes, the limits, and a command table generated from the tool's own list -
+  and the app's own Help serves that page beside the feature reference and the
+  glossary.
 - **Nothing is hidden behind the interface.** A question the documents do not
   answer is a documentation bug, and the repository is written to be read: the
   plan is one file, the rules behind it are plain modules, and the tests that
@@ -126,6 +112,8 @@ grid, the filter, the panels, sorting and the view state.
 - [`GLOSSARY.md`](GLOSSARY.md) - the domain model and its language.
 - [`docs/features.md`](docs/features.md) - what each capability does, how it
   behaves and where its controls live.
+- [`docs/agent-tooling.md`](docs/agent-tooling.md) - the command line: the reads,
+  the writes, the limits, and the command table it generates for itself.
 - [`docs/index.md`](docs/index.md) - every page under `docs/`, with what it is
   for.
 - [`docs/scope.md`](docs/scope.md) - what the first version covers.

@@ -53,6 +53,7 @@ function renderGlossary(markdown, extra) {
 test("the subset names every construct it promises to draw", () => {
   assert.deepEqual([...MARKDOWN_CONSTRUCTS].sort(), [
     "code",
+    "comment",
     "emphasis",
     "frontmatter",
     "heading",
@@ -81,6 +82,27 @@ test("a page's front matter is metadata, and is stripped rather than drawn", () 
 test("a page with no front matter is returned whole", () => {
   const page = "# PACT\n\nPeople Allocation & Capacity Tracker.";
   assert.deepEqual(splitFrontMatter(page), { fields: {}, body: page });
+});
+
+test("a comment is a note to the maintainer, and is neither drawn nor searched", () => {
+  const page = [
+    "# PACT feature reference",
+    "",
+    "Opening prose.",
+    "",
+    "<!-- command-table:begin (generated) -->",
+    "| Command | What it does |",
+    "| --- | --- |",
+    "<!-- command-table:end -->"
+  ].join("\n");
+  const { body } = splitFrontMatter(page);
+  assert.doesNotMatch(body, /command-table/);
+  assert.match(body, /Opening prose\./);
+  const html = renderFeatures(page);
+  assert.doesNotMatch(html, /<!--|command-table:/);
+  // A table between the markers is still drawn, since the markers are the only
+  // thing a comment removes.
+  assert.match(html, /<table class="md-table">/);
 });
 
 /* --- headings ------------------------------------------------------------- */

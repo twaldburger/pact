@@ -294,10 +294,10 @@ export function createServer(store, options) {
           return sendJSON(res, 200, { redone: true });
         }
         // The help's documents, by name and never by path: `HELP_DOCUMENTS`
-        // names the two files the panel may read, and a name that is not on
-        // that list is refused here rather than resolved. The file is read on
-        // every request rather than cached, so the panel can never show a copy
-        // that has moved on. GET only: nothing here writes.
+        // names the files the panel may read, and a name that is not on that
+        // list is refused here rather than resolved. The file is read on every
+        // request rather than cached, so the panel can never show a copy that
+        // has moved on. GET only: nothing here writes.
         if (pathname === "/api/help" || pathname.startsWith("/api/help/")) {
           if (req.method !== "GET") return sendError(res, 405, "method not allowed");
           const doc = helpDocument(pathname.slice("/api/help/".length));

@@ -1,13 +1,13 @@
 /*
- * PACT's in-app help: the two documents it can reach, how each one sections,
- * and how a search is ranked.
+ * PACT's in-app help: the documents it can reach, how each one sections, and
+ * how a search is ranked.
  *
  * The documents stay where they are, in the repository, because the feature
- * reference and the glossary are documentation first. What lives here is the
- * allowlist - by name, never by a path a client sends - and the reading of those
- * two files into the entries a search returns. The server serves the allowlisted
- * document by name with this same list, so the thing the route will serve and
- * the thing the panel will draw cannot disagree.
+ * reference, the glossary and the command line guide are documentation first.
+ * What lives here is the allowlist - by name, never by a path a client sends -
+ * and the reading of those files into the entries a search returns. The server
+ * serves the allowlisted document by name with this same list, so the thing the
+ * route will serve and the thing the panel will draw cannot disagree.
  *
  * A section is what a search result names: an `##` heading of the feature
  * reference, or a glossary term's own line. A section's anchor is the words of
@@ -19,11 +19,11 @@
  * The ranking is one rule, stated so it can be predicted: a section whose own
  * title contains the query comes before a section whose body does, and within
  * each of those two ranks the results stay in reading order - the feature
- * reference first, then the glossary, each top to bottom. One result per
- * section, carrying the line that matched, so a section that mentions the query
- * six times is still one row. A line is searched and quoted as the words it
- * reads as rather than as its Markdown, so a result never shows a reader a code
- * span's backticks or a link's own target.
+ * reference first, then the glossary, then the command line, each top to bottom.
+ * One result per section, carrying the line that matched, so a section that
+ * mentions the query six times is still one row. A line is searched and quoted
+ * as the words it reads as rather than as its Markdown, so a result never shows
+ * a reader a code span's backticks or a link's own target.
  *
  * A plain ES module, so the browser (public/app.js), the server (server.mjs)
  * and `node --test` read exactly the same source.
@@ -31,14 +31,16 @@
 import { plainText, renderMarkdown, slugFor, splitFrontMatter, termOf } from "./markdown.mjs";
 
 /*
- * The documents the help may draw, by name. There are two, and nothing else is
- * reachable: the README, the ADRs and the scope doc are not in this list, so
- * neither the route nor the panel can reach them. `path` is repository-relative
- * and is the only path the server ever reads for a help request.
+ * The documents the help may draw, by name. There are three, and nothing else
+ * is reachable: the README, the ADRs, the scope doc and the appearance guide
+ * are not in this list, so neither the route nor the panel can reach them.
+ * `path` is repository-relative and is the only path the server ever reads for
+ * a help request.
  */
 export const HELP_DOCUMENTS = Object.freeze([
   Object.freeze({ key: "features", label: "Feature reference", path: "docs/features.md" }),
-  Object.freeze({ key: "glossary", label: "Glossary", path: "GLOSSARY.md" })
+  Object.freeze({ key: "glossary", label: "Glossary", path: "GLOSSARY.md" }),
+  Object.freeze({ key: "agent-tooling", label: "Command line", path: "docs/agent-tooling.md" })
 ]);
 
 // The document the panel opens on when nobody has chosen one.
@@ -148,10 +150,10 @@ export function searchHelp(documents, query) {
 }
 
 /*
- * One document as the panel draws it. The anchors of both documents are handed
- * in so a link to a heading that no longer exists reads as plain text instead of
- * offering a control that goes nowhere, and `idPrefix` keeps a heading's anchor
- * out of the page's own element ids.
+ * One document as the panel draws it. The anchors of all three documents are
+ * handed in so a link to a heading that no longer exists reads as plain text
+ * instead of offering a control that goes nowhere, and `idPrefix` keeps a
+ * heading's anchor out of the page's own element ids.
  */
 export function renderHelpDocument(doc, markdown, anchors, idPrefix) {
   return renderMarkdown(markdown, {
