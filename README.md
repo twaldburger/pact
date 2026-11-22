@@ -101,7 +101,11 @@ PACT is meant to be read by a colleague's agent as well as by the colleague.
   plan and puts it back, and it never deletes anything: a holiday date is one
   plan setting rather than a record, and a permanent deletion stays in the app;
   a Milestone can be created and moved but never removed, since it has no
-  archived state.
+  archived state. `view` reads how the app is drawing the plan - its View
+  settings and the period, step and cadence they rest on - and `view set`
+  changes one of those settings, so an agent can see and set the screen without
+  driving it. [Checking how PACT looks](docs/checking-appearance.md) says how to
+  verify what the screen then drew: measured or looked at, never assumed.
 - **Nothing is hidden behind the interface.** A question the documents do not
   answer is a documentation bug, and the repository is written to be read: the
   plan is one file, the rules behind it are plain modules, and the tests that
@@ -125,6 +129,8 @@ grid, the filter, the panels, sorting and the view state.
 - [`docs/index.md`](docs/index.md) - every page under `docs/`, with what it is
   for.
 - [`docs/scope.md`](docs/scope.md) - what the first version covers.
+- [`docs/checking-appearance.md`](docs/checking-appearance.md) - how to check
+  what the app draws, measured or looked at.
 - [`docs/adr/`](docs/adr) - the decisions behind it.
 - [`AGENTS.md`](AGENTS.md) - the map for an agent working in this repository.
 

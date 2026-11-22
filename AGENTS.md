@@ -19,6 +19,7 @@ behave while finding it, and answers nothing itself.
 | What documentation is there at all? | [docs/index.md](docs/index.md) |
 | What did the first version promise, and what was left out? | [docs/scope.md](docs/scope.md) |
 | What are the plan's numbers, and who is over capacity? | `node bin/pact.mjs --help`, the tool over a plan file |
+| How do I check how the app draws a plan? | [docs/checking-appearance.md](docs/checking-appearance.md) |
 | Why is it built this way? | [docs/adr/](docs/adr/) |
 | Where is that in the code? | `server.mjs`, `bin/` (the tool), `lib/` (the plan store, its validation and its atomic write, and the queries the tool asks), `public/` (the app, and the pure rules it shares with the tests), `test/` (one file per set of rules) |
 | Do the documents still match the code? | `test/docs.test.mjs` |
@@ -40,7 +41,8 @@ live. Both are more current than any summary of them, including this one.
    so the change is one Undo step back for the person at the screen.
 3. **Never turn "I wrote a value" into "it looks right".** A visual outcome is
    verified only if it was measured or somebody looked at it. If neither
-   happened, say what changed and ask.
+   happened, say what changed and ask. How to do either is
+   [docs/checking-appearance.md](docs/checking-appearance.md).
 4. **When the documents are silent, say so** and point at them. Do not fill the
    gap with a guess.
 5. **Use the tool for figures.** `bin/pact.mjs` computes the plan's numbers

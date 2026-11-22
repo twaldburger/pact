@@ -7,7 +7,9 @@
  * hands the plan and the period to `lib/query.mjs`, and renders the one object
  * that comes back as text (the default) or as JSON. It does no plan arithmetic
  * and no plan traversal of its own; every figure is the query module's, which
- * is the report's own. Reads never touch the network. The fourteen writes -
+ * is the report's own. Reads never touch the network - except `view`, which
+ * reads the app's View settings and the plan it is showing, because neither
+ * exists anywhere else. The fourteen writes -
  * `person add --apply`, `project add --apply`, `assignment move --apply`,
  * `assignment add --apply`, archive and restore for each of the three
  * collections, `holiday add --apply` and `holiday remove --apply`, and
@@ -26,13 +28,23 @@
  * takes a holiday date out of one plan setting, which is not a record and is
  * restorable by adding the date back, and a Milestone is created and edited but
  * never removed, because it has no archived state; see Deleting in the help.
+ *
+ * One command is neither a plan read nor a plan write: `view` reads how the app
+ * is displaying the plan, and `view set` changes one View setting, both
+ * through the running app's own GET and POST /api/view. It writes the display
+ * store only - never the plan, never the plan's period, Step, cadence or tag
+ * selections - so it is not one of the fourteen above and it reaches nothing
+ * that deletes.
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 import { validatePlan } from "../lib/plan.mjs";
 import * as query from "../lib/query.mjs";
+import { reportViewLabel } from "../public/lib/report-views.mjs";
+import { directionLabel, findSortKey } from "../public/lib/sort.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.dirname(HERE);
@@ -117,8 +129,10 @@ Milestone and change one. All of them write through the running app, so
 the change is one step back with its Undo control. The figures are computed
 by the report's own modules over the period you ask for, so they are the report
 page's numbers, and the two list reads can be narrowed to the rows a question is
-about: see Narrowing a list below. The tool never deletes anything; see Deleting
-below.
+about: see Narrowing a list below. Two more commands are about neither the plan
+nor its figures but how the app draws it - view reads the View settings, and
+view set changes one - and they are not plan writes: see The view, and how it
+looks below. The tool never deletes anything; see Deleting below.
 
 Usage
   node bin/pact.mjs --help
@@ -147,6 +161,11 @@ Commands
       node bin/pact.mjs holidays
   milestones                       the Milestones as stored
       node bin/pact.mjs milestones
+  view                             how the app is displaying the plan, and where it serves
+      node bin/pact.mjs view
+  view set <key> <value>           change one View setting, through the app
+      node bin/pact.mjs view set zoom week
+      node bin/pact.mjs view set zoom week --apply
   person add <name>                create one Person, through the app
       node bin/pact.mjs person add "Clara Nowak" --location Berlin \\
           --availability 80 --tag "skill:frontend" --tag "team:atlas"
@@ -421,6 +440,50 @@ Archiving and restoring
   the app's live plan and still in its file, marked archived; a restored one
   must be in the live plan again. Anything less exits non-zero.
 
+The view, and how it looks
+  view reads what decides how the app draws the plan, in the app's own words:
+  the View settings - the Zoom and each zoom's Grid spacing, the Row height, the
+  weekend band, the holiday band, the Milestone rules, the availability lines,
+  the assignment blocks, the Grid dividers, the Minimap, whether the Marker is
+  drawn, the Colour palette, whether the Stack rail is folded, the report's own
+  zoom and which of its seven views is showing, and the two sort orders - and
+  the plan-level settings a display rests on: the plan's period, its Step and
+  its sprint cadence. It also prints the URL the app serves on, so an agent that
+  is about to check appearance knows where to open, and the house rule that
+  governs that check is docs/checking-appearance.md. --json carries the same
+  facts under the store's own keys.
+
+  Both commands read the running app rather than the plan file: the display
+  settings live in the app's config, and the plan-level rows are the app's own
+  reading of the plan it has open, so what the tool prints is what the screen
+  shows. view writes nothing at all.
+
+  view set <key> <value> writes one View setting through the app's own
+  POST /api/view, which stores only the keys it is sent over the stored view:
+  the tool reads the current value, shows the change, and sends the one key. The
+  keys it writes are zoom, reportZoom, reportView, rowHeight, gridSpacing.day,
+  gridSpacing.week, gridSpacing.sprint, gridSpacing.month, weekends, holidays,
+  milestones, availabilityLines, assignments, dividers, minimap, marker,
+  palette, stackCollapsed, sort.projects and sort.people. A value is what you
+  would type there: day, week, sprint or month for a zoom, on or off for a
+  toggle, a whole number of pixels for the height and the spacing, paired or
+  set3 for the palette, a report view's key or the label it wears, and a sort
+  key by its name or label with an optional direction - or none. An unknown key,
+  or a value the app would refuse or silently store as something else, is an
+  error naming what it does take.
+
+  The preview comes first and nothing is written without --apply. The app's
+  Undo covers the plan and not its display, so a view change is not an Undo
+  step; the preview prints the command that puts the setting back.
+
+  The plan-level settings are read-only here, and the refusal says where each is
+  set: view set step 5, or the period, or the cadence, names the app's own
+  control. The colour-by-key and by-tag selections are not here either: they
+  travel with the plan, under Options > Tags.
+
+  Nothing here is one of the fourteen commands above that change a plan: a view
+  write touches no plan record, no figure, and nothing that deletes.
+
 Deleting
   The tool never deletes anything. There is no command and no flag that
   destroys a Person, a Project, an Assignment or a Milestone, and no --force to
@@ -575,6 +638,20 @@ JSON
   sent - only the fields that differ, in the shape the app's
   PATCH /api/milestones/<id> takes - and "diff" is those fields as
   [{ field, before, after }] in the order the preview prints them.
+
+  view has no period of its own to choose and no units, because it computes no
+  figure: it carries "planPeriod", "step", "cadence" ({ start, length,
+  namePrefix, nameNumber }, or null when the plan defines none), "view" - the
+  View settings with every key present, read through the app's own rules - and
+  "open", the URL the app serves on. It reads the running app, so "planFile" is
+  the app's active file and "planSource" is "default", "config" (chosen in the
+  app) or "PACT_DATA".
+
+  view set carries "key", "before", "after" and "change": the body the app's
+  POST /api/view takes, holding only that one store key - and for gridSpacing
+  and sort the whole object with the one part changed, because the store merges
+  one level deep. Once written it carries "server" and "readBack", the view the
+  app holds afterwards.
 
   If the tool is on your PATH as pact, "pact --help" and "pact help"
   print this too.
@@ -1680,10 +1757,10 @@ function narrowWhere(args, key) {
 }
 
 // --over, --under and --top cut a list, so only the two list reads take them. A
-// write, or a read of one subject, refuses them before a plan is read or
-// anything is written.
+// write, a read of one subject, or the view - which reads settings rather than
+// rows - refuses them before a plan is read or anything is written.
 const CUT_OPTIONS = ["over", "under", "top"];
-const WRITE_COMMANDS = ["assignment", "milestone", "holiday"];
+const WRITE_COMMANDS = ["assignment", "milestone", "holiday", "view"];
 
 function refuseCut(args) {
   const takes = Object.prototype.hasOwnProperty.call(COMMANDS, args.command)
@@ -2121,7 +2198,7 @@ function unreachable(base, err) {
     : code === "ECONNREFUSED" ? "nothing is listening there"
       : "the request failed: " + (err && err.message ? err.message : String(err));
   return new CliError("no PACT server at " + base + " (" + why + ")", "no-server", 1,
-    "--apply writes through the running app: start it with node server.mjs, " +
+    "the view is read there and --apply writes there: start it with node server.mjs, " +
     "or set PACT_URL to where it serves");
 }
 
@@ -2501,6 +2578,285 @@ async function applyHoliday(base, change, planPath) {
   return { location: change.location, dates: kept ? kept.dates : [] };
 }
 
+/* --- the view, and how it looks ------------------------------------------ */
+
+// Where the app's plan file came from, said the way it was chosen. The app's
+// own state names the source "env", "config" or "default"; a read that
+// resolves its own path says "--plan" or "PACT_DATA". Either way the sentence
+// is the same, so a reader is never told two words for one thing.
+function viewSourceText(source) {
+  if (source === "PACT_DATA" || source === "env") return " (PACT_DATA)";
+  if (source === "config") return " (chosen in the app)";
+  if (source === "default") return " (default)";
+  return "";
+}
+
+// The app's plan-file state as the tool's own planSource speaks it.
+function appPlanSource(source) {
+  if (source === "env") return "PACT_DATA";
+  return source === "config" ? "config" : "default";
+}
+
+function onOff(value) {
+  return value ? "on" : "off";
+}
+
+// The four Grid spacings, in the Zooms' own order, because each is its own
+// stored width and the read shows all four.
+function spacingText(spacing) {
+  return ["day", "week", "sprint", "month"].map(function (zoom) {
+    return zoom + " " + spacing[zoom];
+  }).join(" / ");
+}
+
+// The overlays, in the order the Options menu lists them, so the read and the
+// menu are read in one order.
+function overlaysText(view) {
+  return [
+    "weekends " + onOff(view.weekends),
+    "holidays " + onOff(view.holidays),
+    "milestones " + onOff(view.milestones),
+    "availability lines " + onOff(view.availabilityLines),
+    "assignments " + onOff(view.assignments),
+    "dividers " + onOff(view.dividers),
+    "minimap " + onOff(view.minimap),
+    "marker " + onOff(view.marker)
+  ].join(", ");
+}
+
+// The cadence as the three rules it is: where its first sprint starts, how long
+// the default length is, and what it names them - never the derived chain, which
+// is a drawing rather than a setting.
+function cadenceText(cadence) {
+  if (!cadence) return "none: the plan defines no sprints, so the Sprint zoom names none";
+  const firstName = cadence.namePrefix + cadence.nameNumber;
+  return "first sprint " + firstName + " starts " + cadence.start + ", " + cadence.length +
+    " days each, named \"" + firstName + "\", \"" + cadence.namePrefix +
+    (Number(cadence.nameNumber) + 1) + "\", ...";
+}
+
+// One list's sort, in the menu's own words: the key's label and the direction.
+function sortText(kind, sort) {
+  if (!sort) return "none";
+  const def = findSortKey(kind, sort.key);
+  return (def ? def.label : sort.key) + ", " + directionLabel(sort.direction).toLowerCase();
+}
+
+// A labelled row whose value is longer than one line: the value wraps at a
+// comma and the continuation lines up under the first word, so a list of
+// overlays reads as a list rather than as a paragraph.
+function wrappedPair(label, width, value, maxWidth) {
+  const indent = " ".repeat(width + 2);
+  const items = value.split(", ");
+  const lines = [];
+  let line = [];
+  items.forEach(function (item) {
+    if (line.length > 0 && indent.length + line.concat(item).join(", ").length > maxWidth) {
+      lines.push(line.join(", ") + ",");
+      line = [item];
+    } else {
+      line = line.concat(item);
+    }
+  });
+  if (line.length > 0) lines.push(line.join(", "));
+  return [label.padEnd(width) + "  " + lines[0]].concat(
+    lines.slice(1).map(function (rest) { return indent + rest; }));
+}
+
+// A setting's value as a reader says it: the store's own word for a toggle, a
+// sort in the menu's words, and the value itself for everything else.
+function settingValueText(key, value) {
+  if (key.indexOf("sort.") === 0) return sortText(key.slice(5), value);
+  if (key === "reportView") return reportViewLabel(value);
+  if (typeof value === "boolean") return onOff(value);
+  if (value === null || value === undefined) return "none";
+  return String(value);
+}
+
+// The value as the command that stores it spells it: a sort keeps its key and
+// direction, which the read's label would not give back.
+function settingToken(key, value) {
+  if (key.indexOf("sort.") === 0) {
+    return value === null ? "none" : value.key + " " + (value.direction === "desc" ? "desc" : "asc");
+  }
+  if (typeof value === "boolean") return onOff(value);
+  return String(value);
+}
+
+function viewSetCommand(key, value) {
+  return "node bin/pact.mjs view set " + key + " " + settingToken(key, value) + " --apply";
+}
+
+function renderView(data) {
+  const view = data.view;
+  const header = [
+    ["Plan file", data.planFile + viewSourceText(data.planSource)],
+    ["Open", data.open]
+  ];
+  const rows = [
+    ["Plan", data.period.label + ", step " + data.step + "%"],
+    ["Cadence", cadenceText(data.cadence)],
+    ["Grid", "zoom " + view.zoom + ", row height " + view.rowHeight + ", spacing " +
+      spacingText(view.gridSpacing)],
+    ["Overlays", overlaysText(view)],
+    ["Palette", view.palette],
+    ["Report", "zoom " + view.reportZoom + ", " + reportViewLabel(view.reportView)],
+    ["Sort", "projects: " + sortText("projects", view.sort.projects) + ", people: " +
+      sortText("people", view.sort.people)],
+    ["Rail", view.stackCollapsed ? "folded away" : "open"]
+  ];
+  // One column for the whole block, header included, so a label and its value
+  // line up whichever row a reader is on.
+  const width = header.concat(rows).reduce(function (most, row) {
+    return Math.max(most, row[0].length);
+  }, 0);
+  const lines = header.map(function (row) { return row[0].padEnd(width) + "  " + row[1]; });
+  lines.push("");
+  rows.forEach(function (row) {
+    if (row[0] === "Overlays") lines.push.apply(lines, wrappedPair(row[0], width, row[1], 76));
+    else lines.push(row[0].padEnd(width) + "  " + row[1]);
+  });
+  lines.push("");
+  lines.push("These are the app's own View settings, kept in its Config beside the plan");
+  lines.push("file. The period, the Step and the cadence are the plan's, and the only rows here");
+  lines.push("that travel with it. The Filter and the Marker's date are session-only and are");
+  lines.push("not stored at all. None of it changes a figure or a plan record.");
+  return lines.join("\n") + "\n";
+}
+
+function renderViewSet(data) {
+  // Where the app serves, spelled as the read spells it, and in its column.
+  const lines = ["Open".padEnd(9) + "  " + data.open];
+  lines.push("");
+  lines.push("View setting");
+  lines.push("  " + data.key + ": " + settingValueText(data.key, data.before) + " -> " +
+    settingValueText(data.key, data.after));
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Only this setting is written: the app stores the keys it is sent over the");
+    lines.push("stored view, so every other setting keeps exactly the value it has now.");
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  lines.push("Applied through " + data.server + "; read back from its view: " + data.key +
+    " is " + settingValueText(data.key, data.after) + ", and");
+  lines.push("every other setting is exactly as it was.");
+  lines.push("The view is not part of the plan, so this is not one of the app's Undo steps.");
+  lines.push("Put it back with: " + viewSetCommand(data.key, data.before));
+  return lines.join("\n") + "\n";
+}
+
+// The three things `view` reads, from the one app that decides them: its
+// View settings, the plan it is showing, and which file that plan is. Nothing
+// is read from a plan file here, because the display belongs to the app's plan
+// whether or not this checkout can see it.
+async function readAppView(base) {
+  const stored = await ask(base, "GET", "/api/view");
+  const plan = await ask(base, "GET", "/api/plan");
+  const file = await ask(base, "GET", "/api/plan-file");
+  return { stored: stored, plan: plan, file: file };
+}
+
+async function runView(args) {
+  // The view is not a list of rows, so it takes no narrowing: a Filter would be
+  // a query it cannot answer and a silently ignored one answers nothing.
+  refuseNarrowing(args, []);
+  const action = args.subject.length > 0 ? args.subject[0] : "";
+  if (action === "set") return runViewSet(args);
+  if (action !== "") {
+    throw usage('unknown view action "' + action + '"; view reads how the app is showing the ' +
+      "plan, and view set changes one setting: view set <key> <value>");
+  }
+  refuseOptions(args, VIEW_REFUSALS,
+    "view reads the running app's own View settings and plan, so it takes neither");
+  const base = serverBase();
+  const read = await readAppView(base);
+  const data = Object.assign({
+    command: "view",
+    planFile: typeof read.file.path === "string" ? read.file.path : "",
+    planSource: appPlanSource(read.file.source),
+    open: base + "/"
+  }, query.view(read.plan, read.stored));
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderView(data));
+}
+
+// One View setting, previewed and then written through the app's own
+// POST /api/view. The key is the store's own, so nothing here invents a schema;
+// the query module reads the value by the app's rules and returns the exact
+// body the store takes.
+async function runViewSet(args) {
+  const words = args.subject.slice(1);
+  if (words.length < 2) {
+    throw usage("view set needs a key and a value, as view set zoom week; view prints every " +
+      "setting and its stored value");
+  }
+  rejectWriteFlags(args);
+  refuseOptions(args, VIEW_SET_REFUSALS,
+    "view set changes one View setting and reads the app's own view, so it takes neither");
+  const key = words[0];
+  const typed = words.slice(1).join(" ");
+  // The key and the value are judged before the app is asked anything: an
+  // unknown key, or a value the app would refuse or store as something else, is
+  // an error whether or not the app is running, and names what it does take.
+  query.viewSet(null, key, typed);
+  const base = serverBase();
+  const stored = await ask(base, "GET", "/api/view");
+  const change = query.viewSet(stored, key, typed);
+  const data = Object.assign({
+    command: "view",
+    action: "set",
+    applied: false,
+    server: base,
+    open: base + "/"
+  }, change);
+  if (args.apply) {
+    const applied = await applyViewChange(base, key, typed);
+    data.before = applied.before;
+    data.after = applied.after;
+    data.change = applied.change;
+    data.readBack = applied.view;
+    data.applied = true;
+  }
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderViewSet(data));
+}
+
+// The write itself, and the proof of it: the app is read again and the change
+// rebuilt from that read, so a setting another hand moved between the preview
+// and this write is kept and only this key is sent. Then one POST, and a read
+// back that must be the stored view with exactly that one key changed. A write
+// is done when the app's view shows it, never when the request returned 200.
+async function applyViewChange(base, key, typed) {
+  const before = await ask(base, "GET", "/api/view");
+  const now = query.viewSet(before, key, typed);
+  await ask(base, "POST", "/api/view", now.change);
+  const after = await ask(base, "GET", "/api/view");
+  const expected = Object.assign({}, before, now.change);
+  if (!isDeepStrictEqual(after, expected)) {
+    const differing = Object.keys(expected).filter(function (name) {
+      return !isDeepStrictEqual(after[name], expected[name]);
+    });
+    throw new CliError("the write did not land: the app's view differs from what was sent in " +
+      (differing.length === 0 ? "every key" : differing.join(", ")), "write-lost", 1,
+      "the app is the authority here: run view to read its settings before trying again");
+  }
+  return {
+    before: now.before,
+    after: now.after,
+    change: now.change,
+    view: after
+  };
+}
+
+// What the view does not take: --plan and --period are the app's, not the
+// caller's, and every plan write's own option belongs to a plan write. `view`
+// takes no --apply either, being a read; `view set` does, being the write.
+const VIEW_REFUSALS = ["plan", "period"].concat(READ_REFUSALS);
+const VIEW_SET_REFUSALS = ["plan", "period"].concat(READ_REFUSALS.filter(function (key) {
+  return key !== "apply" && key !== "dryRun";
+}));
+
 /* --- the run ------------------------------------------------------------- */
 
 function reportError(err, json) {
@@ -2537,6 +2893,10 @@ async function run() {
   if (Object.prototype.hasOwnProperty.call(COMMANDS, args.command) ||
       WRITE_COMMANDS.indexOf(args.command) !== -1) {
     refuseCut(args);
+  }
+  if (args.command === "view") {
+    await runView(args);
+    return;
   }
   if (args.command === "assignment") {
     await runAssignment(args);
