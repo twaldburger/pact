@@ -2620,6 +2620,28 @@ down to the last row and no further. */
 
 .tags { display: block; }
 
+/* The tag suggestions: the Filter's own fixed dropdown and rows, with the one
+   state the Filter has no equivalent of - a row ticked for a multi-pick. The
+   tick is a mark in the row's own leading column, in the app's ink, and a
+   ticked row carries the quiet tint the chips' hover uses, so a tick reads
+   before anything lands in the chips. The column is always there so the tags
+   never shift as rows are ticked. */
+.tags__menu { overflow-y: auto; }
+.tags__list { display: block; }
+
+.tags__tick {
+  flex: 0 0 auto;
+  width: 1ch;
+  color: transparent;
+}
+
+.filter__hit.is-ticked { background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent); }
+.filter__hit.is-ticked .tags__tick { color: var(--ink); }
+
+/* The last row of a list with ticks: the same row a mouse commits through, so
+   the keyboard is not the only way to add several tags at once. */
+.tags__commit { font-weight: var(--fw-title); }
+
 /* Sized to the tag chips it sits beside, so the row is one height. */
 .form .tags__input {
   width: 7rem;
