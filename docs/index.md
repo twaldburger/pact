@@ -18,6 +18,8 @@ sits outside it is listed first.
   how it behaves and where its controls live.
 - [scope.md](scope.md) - what the first version covers, and what is deliberately
   left out of it.
+- [checking-appearance.md](checking-appearance.md) - how to check what the app
+  draws: measure it or look at it, and what to say when neither happened.
 - [adr/0001](adr/0001-no-dependency-node-server-with-a-json-file.md) - run PACT
   as a dependency-free Node server over a single JSON file.
 - [adr/0002](adr/0002-no-framework-and-no-build-step.md) - hand-write the front

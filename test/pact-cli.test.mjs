@@ -271,7 +271,8 @@ test("importing lib/query.mjs is silent and side-effect free", () => {
   assert.equal(result.stdout, "before" + [
     "QueryError", "archive", "assignmentAdd", "assignmentMove", "capacity", "holidayChange",
     "holidays", "milestoneAdd", "milestoneEdit", "milestones", "people", "person", "personAdd",
-    "planSummary", "project", "projectAdd", "projects", "resolvePeriod", "restore", "tag", "tags"
+    "planSummary", "project", "projectAdd", "projects", "resolvePeriod", "restore", "tag", "tags",
+    "view", "viewSet"
   ].join(","));
 });
 
@@ -303,7 +304,10 @@ test("every query result survives JSON round-tripping", () => {
     query.restore(ARCHIVED_PERSON, { kind: "person", subject: "Anna Meier", period: period }),
     query.restore(ARCHIVED_PROJECT, { kind: "project", subject: "Solar", period: period }),
     query.restore(ARCHIVED_ASSIGNMENT,
-      { kind: "assignment", project: "Borealis", person: "Anna Meier", period: period })
+      { kind: "assignment", project: "Borealis", person: "Anna Meier", period: period }),
+    query.view(FIXTURE, null),
+    query.viewSet(null, "zoom", "week"),
+    query.viewSet(null, "sort.people", "free desc")
   ];
   results.forEach((result) => {
     assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
