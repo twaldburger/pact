@@ -391,52 +391,63 @@ test("a tag suggestion's count uses the matcher's substring rule, not exact equa
   assert.equal(project.count, 1);
 });
 
-/* --- a fully typed tag ----------------------------------------------------- */
+/* --- a typed tag ------------------------------------------------------------ */
 
-test("a value that carries its own kind matches a tag exactly", () => {
+test("a value that carries its own kind matches a tag by prefix", () => {
   const p = typedTagPlan();
-  // The bare `DevOps` and `skill:DevOps-2` are substrings of `skill:DevOps`,
-  // so substring matching would leave three people here; the typed value asks
-  // for the one tag it names.
-  assert.deepEqual(ids(filterPlan(p, "person tag: skill:DevOps", defaultScopes()).people), ["p-skill"]);
-  assert.deepEqual(ids(filterPlan(p, "project tag: skill:DevOps", defaultScopes()).projects), ["pr-skill"]);
-  assert.deepEqual(ids(filterPlan(p, "assignment tag: skill:DevOps", defaultScopes()).assignments), ["a-skill"]);
-  assert.deepEqual(ids(filterPlan(p, "milestone tag: skill:DevOps", defaultScopes()).milestones), ["m-skill"]);
+  // A reader types a typed tag one character at a time, so the value is the
+  // tag's start and every tag carrying that start answers. All four tag fields
+  // read the one rule.
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:D", defaultScopes()).people), ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "project tag: skill:D", defaultScopes()).projects), ["pr-skill", "pr-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "assignment tag: skill:D", defaultScopes()).assignments), ["a-skill", "a-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "milestone tag: skill:D", defaultScopes()).milestones), ["m-skill", "m-skill2"]);
+  // Typing further narrows: the numbered neighbour alone once its own hyphen
+  // is typed.
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:DevOps-", defaultScopes()).people), ["p-skill2"]);
   // Another typed value picks its own tag, and only that one.
   assert.deepEqual(ids(filterPlan(p, "person tag: api:Stellar", defaultScopes()).people), ["p-api"]);
   assert.deepEqual(ids(filterPlan(p, "milestone tag: api:Stellar", defaultScopes()).milestones), ["m-api"]);
-  // A typed value that names no tag at all matches nothing rather than the
-  // tags it is a prefix of.
-  assert.deepEqual(ids(filterPlan(p, "person tag: skill:Dev", defaultScopes()).people), []);
+  // A typed value that no tag starts with matches nothing rather than every
+  // tag it shares letters with.
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:Ops", defaultScopes()).people), []);
 });
 
-test("an exact tag is read case-insensitively, both ways round", () => {
+test("a typed tag is read case-insensitively, both ways round", () => {
   const p = typedTagPlan();
   // The stored tag is `Skill:DevOps`: a lower-case term and an upper-case one
   // are the same request.
-  ["skill:devops", "SKILL:DEVOPS", "Skill:DevOps"].forEach((value) => {
-    assert.deepEqual(ids(filterPlan(p, "person tag: " + value, defaultScopes()).people), ["p-skill"], value);
-    assert.deepEqual(ids(filterPlan(p, "milestone tag: " + value, defaultScopes()).milestones), ["m-skill"], value);
+  ["skill:dev", "SKILL:DE", "Skill:Dev"].forEach((value) => {
+    assert.deepEqual(ids(filterPlan(p, "person tag: " + value, defaultScopes()).people),
+      ["p-skill", "p-skill2"], value);
+    assert.deepEqual(ids(filterPlan(p, "milestone tag: " + value, defaultScopes()).milestones),
+      ["m-skill", "m-skill2"], value);
   });
 });
 
-test("an exact tag is the trimmed value", () => {
+test("a typed tag is matched from its start, with the value trimmed", () => {
   const p = typedTagPlan();
   // The text either side of the value is the Filter's own spacing, trimmed as
-  // any typed term is; the tag itself is compared whole.
-  assert.deepEqual(ids(filterPlan(p, "person tag:    skill:DevOps   ", defaultScopes()).people), ["p-skill"]);
-  assert.deepEqual(ids(filterPlan(p, "person tags: skill:DevOps", defaultScopes()).people), ["p-skill"]);
-  // A trimmed exact value is still exact: no neighbour `skill:DevOps-2`.
-  assert.deepEqual(ids(filterPlan(p, "project tag:  skill:devops ", defaultScopes()).projects), ["pr-skill"]);
+  // any typed term is; the tag is then read from its first letter.
+  assert.deepEqual(ids(filterPlan(p, "person tag:    skill:Dev   ", defaultScopes()).people),
+    ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "person tags: skill:Dev", defaultScopes()).people),
+    ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "project tag:  skill:devops ", defaultScopes()).projects),
+    ["pr-skill", "pr-skill2"]);
 });
 
-test("an exact tag match still carries what belongs to it", () => {
-  const view = filterPlan(typedTagPlan(), "assignment tag: skill:DevOps", defaultScopes());
-  // Only the one Assignment survives, and it brings its Person's row and its
-  // Project exactly as any other match does.
-  assert.deepEqual(ids(view.assignments), ["a-skill"]);
-  assert.deepEqual(ids(view.people), ["p-skill"]);
-  assert.deepEqual(ids(view.projects), ["pr-skill"]);
+test("a typed tag match still carries what belongs to it", () => {
+  const view = filterPlan(typedTagPlan(), "assignment tag: skill:D", defaultScopes());
+  // The matching Assignments survive, and bring their People's rows and their
+  // Projects exactly as any other match does.
+  assert.deepEqual(ids(view.assignments), ["a-skill", "a-skill2"]);
+  assert.deepEqual(ids(view.people), ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(view.projects), ["pr-skill", "pr-skill2"]);
+  // The bare `DevOps` neighbour is still spared, which is what the colon asks.
+  assert.equal(ids(view.people).includes("p-dev"), false);
+  assert.equal(ids(view.projects).includes("pr-dev"), false);
+  assert.equal(ids(view.assignments).includes("a-dev"), false);
 });
 
 test("a plain tag value keeps the loose substring rule", () => {
@@ -468,38 +479,174 @@ test("the colon is the whole signal, wherever the value reaches a tag", () => {
     projects: [],
     assignments: []
   };
-  assert.deepEqual(ids(filterPlan(p, "v1:2", defaultScopes()).people), ["a"]);
+  // `v1:2` is a prefix, so it leaves the tags that start with it - a narrowing
+  // rather than an equal tag - and the numbered neighbour comes with it.
+  assert.deepEqual(ids(filterPlan(p, "v1:2", defaultScopes()).people), ["a", "b"]);
+  assert.deepEqual(ids(filterPlan(p, "v1:2-", defaultScopes()).people), ["b"]);
   // Anything without a colon is still a substring, typed or plain.
   assert.deepEqual(ids(filterPlan(typedTagPlan(), "devops", defaultScopes()).people),
     ["p-dev", "p-skill", "p-skill2"]);
 });
 
-test("a tag suggestion's count agrees with the exact rule it inserts", () => {
+test("a tag suggestion's count agrees with the prefix rule it inserts", () => {
   const p = typedTagPlan();
   // `skill` still offers both typed tags - the dropdown's own narrowing is the
-  // loose rule - but each row's count is read from the exact term it inserts,
-  // so the row promising one leaves one.
+  // loose rule - and each row's count is read from the term it inserts, so a
+  // row promising two leaves two.
   const rows = filterSuggestions(p, "person tag: skill", defaultScopes());
   const byValue = {};
   rows.forEach((item) => { byValue[item.value] = item; });
   assert.equal(byValue["Skill:DevOps"].insert, "person tag: Skill:DevOps");
-  assert.equal(byValue["Skill:DevOps"].count, 1);
-  assert.equal(byValue["Skill:DevOps"].matchLabel, "1 person");
+  // `skill:DevOps` is the start of `skill:DevOps-2` too, so the row counts the
+  // pair, exactly as selecting it leaves the pair.
+  assert.equal(byValue["Skill:DevOps"].count, 2);
+  assert.equal(byValue["Skill:DevOps"].matchLabel, "2 people");
   assert.equal(byValue["skill:DevOps-2"].count, 1);
   rows.forEach((item) => {
     assert.equal(item.count, filterPlan(p, item.insert, defaultScopes()).people.length, item.value);
   });
   // The same holds for the Milestones' own vocabulary.
   const milestones = filterSuggestions(p, "milestone tag: skill", defaultScopes());
-  assert.equal(milestones.find((item) => item.value === "Skill:DevOps").count, 1);
+  assert.equal(milestones.find((item) => item.value === "Skill:DevOps").count, 2);
   milestones.forEach((item) => {
     assert.equal(item.count, filterPlan(p, item.insert, defaultScopes()).milestones.length, item.value);
   });
-  // An exact value typed in full offers its one row, counting one.
-  const exact = filterSuggestions(p, "person tag: skill:DevOps", defaultScopes())
+  // A typed value typed in full offers its row, counting what the prefix
+  // leaves rather than the one tag the row names.
+  const typed = filterSuggestions(p, "person tag: skill:DevOps", defaultScopes())
     .find((item) => item.value === "Skill:DevOps");
-  assert.equal(exact.count, 1);
-  assert.equal(filterPlan(p, exact.insert, defaultScopes()).people.length, 1);
+  assert.equal(typed.count, 2);
+  assert.equal(filterPlan(p, typed.insert, defaultScopes()).people.length, 2);
+});
+
+/* --- a typed tag typed into the Filter (issue #278) ------------------------ */
+
+/*
+ * Two faults, both met by typing a typed tag into the Filter: a typed tag with
+ * no field in front was read as an unknown field name and matched nothing, and
+ * a colon value had to equal a tag, so `person tag: skill:D` could not narrow
+ * as it was typed. These tests are the terms the owner reported them in.
+ */
+
+test("a typed tag with no field in front finds its rows", () => {
+  const p = typedTagPlan();
+  const term = parseFilterTerm("skill:De");
+  // `skill` names no field, so the whole input is the plain term the reader
+  // meant, and the prefix is remembered only for the empty state.
+  assert.equal(term.kind, "plain");
+  assert.equal(term.text, "skill:De");
+  assert.equal(term.unknownPrefix, "skill");
+  const view = filterPlan(p, "skill:De", defaultScopes());
+  // The rows carrying `skill:DevOps` are found the way any plain term finds
+  // them, and the bare `DevOps` row is not one of them.
+  assert.deepEqual(ids(view.people), ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(view.projects), ["pr-skill", "pr-skill2"]);
+  assert.deepEqual(ids(view.assignments), ["a-skill", "a-skill2"]);
+  // Something matched, so the empty state - and the hint it carries - is never
+  // reached: a working typed-tag search shows no warning.
+  assert.equal(filterIsEmpty(view), false);
+  // A plain term does not narrow the Milestones, and this is no field term.
+  assert.equal(view.milestones.length, p.milestones.length);
+});
+
+test("a typed tag under its own field narrows by prefix", () => {
+  const p = typedTagPlan();
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:D", defaultScopes()).people),
+    ["p-skill", "p-skill2"]);
+  // One character at a time, down to the one tag once the digit is typed.
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:DevOps", defaultScopes()).people),
+    ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:DevOps-2", defaultScopes()).people),
+    ["p-skill2"]);
+  // All four tag fields read the one rule.
+  assert.deepEqual(ids(filterPlan(p, "project tag: skill:D", defaultScopes()).projects),
+    ["pr-skill", "pr-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "assignment tag: skill:D", defaultScopes()).assignments),
+    ["a-skill", "a-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "milestone tag: skill:D", defaultScopes()).milestones),
+    ["m-skill", "m-skill2"]);
+});
+
+test("#139 still holds: a typed tag spares the bare tag it shares letters with", () => {
+  const p = typedTagPlan();
+  // A bare `DevOps` does not start with `skill:DevOps`, so it stays hidden -
+  // the point of typing the kind. The numbered neighbour may come along: that
+  // is a narrowing, not a wrong row.
+  assert.deepEqual(ids(filterPlan(p, "person tag: skill:DevOps", defaultScopes()).people),
+    ["p-skill", "p-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "project tag: skill:DevOps", defaultScopes()).projects),
+    ["pr-skill", "pr-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "assignment tag: skill:DevOps", defaultScopes()).assignments),
+    ["a-skill", "a-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "milestone tag: skill:DevOps", defaultScopes()).milestones),
+    ["m-skill", "m-skill2"]);
+  assert.equal(ids(filterPlan(p, "person tag: skill:DevOps", defaultScopes()).people).includes("p-dev"), false);
+  assert.equal(ids(filterPlan(p, "project tag: skill:DevOps", defaultScopes()).projects).includes("pr-dev"), false);
+  assert.equal(ids(filterPlan(p, "assignment tag: skill:DevOps", defaultScopes()).assignments).includes("a-dev"), false);
+  assert.equal(ids(filterPlan(p, "milestone tag: skill:DevOps", defaultScopes()).milestones).includes("m-dev"), false);
+});
+
+test("a plain term keeps the substring rule in every tag field", () => {
+  const p = typedTagPlan();
+  // The bare tag, the typed one and its numbered neighbour all carry the
+  // letters, so all three answer.
+  assert.deepEqual(ids(filterPlan(p, "person tag: devops", defaultScopes()).people),
+    ["p-dev", "p-skill", "p-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "project tag: devops", defaultScopes()).projects),
+    ["pr-dev", "pr-skill", "pr-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "assignment tag: devops", defaultScopes()).assignments),
+    ["a-dev", "a-skill", "a-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "milestone tag: devops", defaultScopes()).milestones),
+    ["m-dev", "m-skill", "m-skill2"]);
+  // A bare term typed as text reads a tag with that same rule.
+  assert.deepEqual(ids(filterPlan(p, "devops", defaultScopes()).assignments),
+    ["a-dev", "a-skill", "a-skill2"]);
+  assert.deepEqual(ids(filterPlan(p, "DEVOPS", defaultScopes()).people),
+    ["p-dev", "p-skill", "p-skill2"]);
+});
+
+test("an unknown field explains itself only when its text search found nothing", () => {
+  const p = typedTagPlan();
+  // `meeting: notes` names no field and appears nowhere in the plan, so the
+  // search finds nothing and the hint names the prefix it could not read.
+  const nothing = filterPlan(plan(), "meeting: notes", defaultScopes());
+  assert.equal(filterIsEmpty(nothing), true);
+  const missed = parseFilterTerm("meeting: notes");
+  assert.equal(missed.unknownPrefix, "meeting");
+  const hint = unknownFieldHint(missed.unknownPrefix);
+  assert.equal(hint.indexOf('"meeting:"') !== -1, true);
+  assert.equal(hint.indexOf("is not a field the Filter knows") !== -1, true);
+  assert.equal(hint.indexOf("if you meant a field") !== -1, true);
+  assert.equal(hint.indexOf("person tag") !== -1, true);
+  // A typed tag that did match is a working search, not a mistyped field, so
+  // the hint is never reached for it.
+  assert.equal(parseFilterTerm("skill:De").unknownPrefix, "skill");
+  assert.equal(filterIsEmpty(filterPlan(p, "skill:De", defaultScopes())), false);
+});
+
+test("a suggestion's count agrees with the rows the new rule leaves", () => {
+  const p = typedTagPlan();
+  ["skill:De", "person tag: skill:D", "person tag: skill:DevOps", "devops"].forEach((query) => {
+    filterSuggestions(p, query, defaultScopes()).forEach((item) => {
+      assert.equal(item.count, filterPlan(p, item.insert, defaultScopes())[VIEW_BY_UNIT[item.unit]].length,
+        query + " -> " + item.source + ": " + item.value);
+    });
+    const everywhere = searchEverywhereSuggestion(p, query, defaultScopes());
+    if (everywhere) {
+      assert.equal(everywhere.count, viewResultCount(filterPlan(p, query, defaultScopes())), query);
+    }
+  });
+  // A typed tag typed as text offers its tags, each inserting the field term
+  // the reader meant, so promise and result agree.
+  const rows = filterSuggestions(p, "skill:De", defaultScopes());
+  assert.equal(rows.length > 0, true);
+  const person = rows.find((item) => item.source === "Person tag" && item.value === "Skill:DevOps");
+  assert.equal(person.insert, "person tag: Skill:DevOps");
+  assert.equal(person.count, filterPlan(p, person.insert, defaultScopes()).people.length);
+  // The broad search names the text search that was actually run.
+  const everywhere = searchEverywhereSuggestion(p, "skill:De", defaultScopes());
+  assert.equal(everywhere.insert, "skill:De");
+  assert.equal(everywhere.count, viewResultCount(filterPlan(p, "skill:De", defaultScopes())));
 });
 
 test("an alias term's count reflects the alias result in the row's unit", () => {
@@ -612,17 +759,29 @@ test("a colon that is not a field prefix stays plain text", () => {
   assert.equal(parseFilterTerm("ends with:").kind, "plain");
 });
 
-test("a plausible prefix that names no field is an unknown term", () => {
+test("a prefix that names no field is plain text, remembering the prefix", () => {
   const term = parseFilterTerm("meeting: notes");
-  assert.equal(term.kind, "unknown");
-  assert.equal(term.prefix, "meeting");
-  // It is not quietly read as plain text: it matches nothing and is named.
+  // Not a field term: the whole input is the text the reader meant, searched
+  // as any plain term is. The prefix rides along so the empty state can still
+  // explain itself when that search finds nothing.
+  assert.equal(term.kind, "plain");
+  assert.equal(term.text, "meeting: notes");
+  assert.equal(term.unknownPrefix, "meeting");
+  // A plain term with no colon has no prefix to name.
+  assert.equal(parseFilterTerm("architect").unknownPrefix, undefined);
+  // The text finds nothing in this plan, so the empty state would name it.
   const view = filterPlan(plan(), "meeting: notes", defaultScopes());
   assert.equal(filterIsEmpty(view), true);
-  assert.equal(unknownFieldHint(term.prefix).indexOf("meeting") !== -1, true);
-  assert.equal(unknownFieldHint("meeting").indexOf("not a field") !== -1, true);
-  // The hint names a Location among the fields the Filter does know.
-  assert.equal(unknownFieldHint("meeting").indexOf("person location") !== -1, true);
+  const hint = unknownFieldHint(term.unknownPrefix);
+  assert.equal(hint.indexOf("meeting:") !== -1, true);
+  assert.equal(hint.indexOf("not a field") !== -1, true);
+  // Phrased as a possibility, not a verdict: the term was still searched.
+  assert.equal(hint.indexOf("if you meant a field") !== -1, true);
+  // The hint names the fields the Filter does know.
+  assert.equal(hint.indexOf("person location") !== -1, true);
+  assert.equal(hint.indexOf("person tag") !== -1, true);
+  // And it offers no suggestion rows, because nothing contains the text.
+  assert.equal(filterSuggestions(plan(), "meeting: notes", defaultScopes()).length, 0);
 });
 
 test("a typed term matches only its own field, case-insensitively", () => {
