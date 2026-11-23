@@ -9,9 +9,11 @@
  * and no plan traversal of its own; every figure is the query module's, which
  * is the report's own. Reads never touch the network - except `view`, which
  * reads the app's View settings and the plan it is showing, because neither
- * exists anywhere else. The sixteen writes -
- * `person add --apply`, `project add --apply`, `person edit --apply`,
+ * exists anywhere else. The nineteen writes -
+ * `person add --apply`, `project add --apply`, `person copy --apply`,
+ * `project copy --apply`, `person edit --apply`,
  * `project edit --apply`, `assignment move --apply`, `assignment add --apply`,
+ * `assignment copy --apply`,
  * archive and restore for each of the three collections,
  * `holiday add --apply` and `holiday remove --apply`, and
  * `milestone add --apply` and `milestone edit --apply` - send the query
@@ -25,6 +27,7 @@
  * (the app's two Milestone writes) - the routes and bodies the interface
  * itself uses - so the validation, the atomic write and the changed-underneath
  * guard are the app's, and the change is one step back with its Undo control.
+ * A copy is a creation on its own collection's POST, so it is one Undo step too.
  * An edit sends only the fields its diff named, so a field nobody asked about is
  * never written back from a stale read.
  * Nothing here deletes a record: the tool has no route to the app's
@@ -37,7 +40,7 @@
  * is displaying the plan, and `view set` changes one View setting, both
  * through the running app's own GET and POST /api/view. It writes the display
  * store only - never the plan, never the plan's period, Step, cadence or tag
- * selections - so it is not one of the sixteen above and it reaches nothing
+ * selections - so it is not one of the nineteen above and it reaches nothing
  * that deletes.
  */
 import fs from "node:fs";
@@ -149,10 +152,13 @@ const COMMANDS = {
 const WRITE_ROWS = [
   ["person add <name>", "create one Person"],
   ["project add <name>", "create one Project"],
+  ["person copy <name>", "copy one Person, with no Assignments"],
+  ["project copy <name>", "copy one Project, with no Assignments"],
   ["person edit <name>", "change one Person's fields"],
   ["project edit <name>", "change one Project's fields"],
   ["assignment add <project>", "create one Assignment"],
   ["assignment move <project>", "reschedule or resize one Assignment"],
+  ["assignment copy <project>", "duplicate one Assignment"],
   ["person archive <name>", "archive one Person"],
   ["person restore <name>", "restore an archived Person"],
   ["project archive <name>", "archive one Project"],
@@ -211,12 +217,13 @@ function commandTable() {
 const HELP = `PACT tool
 
 Answer a question about a plan from a checkout, with no server and no browser.
-Sixteen commands change a plan: person add, project add, assignment add and
-assignment move create and change work, person edit and project edit change a
-record that already exists, person, project and assignment each
-take archive and restore, holiday add and holiday remove each write one
-holiday date for one Location, and milestone add and milestone edit create a
-Milestone and change one. All of them write through the running app, so
+Nineteen commands change a plan: person add, project add, assignment add and
+assignment move create and change work, person copy, project copy and
+assignment copy create a second record from one that already exists, person edit
+and project edit change a record that already exists, person, project and
+assignment each take archive and restore, holiday add and holiday remove each
+write one holiday date for one Location, and milestone add and milestone edit
+create a Milestone and change one. All of them write through the running app, so
 the change is one step back with its Undo control. The figures are computed
 by the report's own modules over the period you ask for, so they are the report
 page's numbers, and the two list reads can be narrowed to the rows a question is
@@ -269,12 +276,18 @@ Commands
   project edit <name>              change one Project's fields, through the app
       node bin/pact.mjs project edit Atlas --absence on
       node bin/pact.mjs project edit Atlas --untag "api:Solar" --colour 3
+  person copy <name>               copy one Person, with no Assignments, through the app
+      node bin/pact.mjs person copy "Anna Meier"
+  project copy <name>              copy one Project, with no Assignments, through the app
+      node bin/pact.mjs project copy Atlas
   assignment add <project>         create one Assignment, through the app
       node bin/pact.mjs assignment add Atlas --person "Anna Meier" \\
           --from 2026-11-23 --to 2026-12-04 --share 60
   assignment move <project>        reschedule or resize one Assignment, through the app
       node bin/pact.mjs assignment move Atlas --person "Anna Meier" \\
           --from 2026-11-02 --to 2026-11-20
+  assignment copy <project>        duplicate one Assignment, through the app
+      node bin/pact.mjs assignment copy Atlas --person "Anna Meier"
   person archive <name>            archive one Person, through the app
       node bin/pact.mjs person archive "Anna Meier"
   person restore <name>            restore an archived Person, through the app
@@ -349,6 +362,16 @@ person add and project add take these as well
                        Project's notes
   --apply              write it; without this, and with --dry-run, nothing is written
   --dry-run            the preview, and nothing written: the same as the default
+
+person copy, project copy and assignment copy take these as well
+  --apply              write it; without this, and with --dry-run, nothing is written
+  --dry-run            the preview, and nothing written: the same as the default
+  --person <name>      assignment copy only: the Person the Assignment is on;
+                       required, as it is for assignment move and archive
+                       A copy takes nothing else: it carries the record's own
+                       fields, and the name it takes is the copy rule's, not
+                       yours to set. There is no --period either, because a copy
+                       counts no figure.
 
 person add takes these as well
   --location <name>    the Person's Location; its holidays are the ones taken out
@@ -554,6 +577,44 @@ Rescheduling or resizing an Assignment
   The change is one step back with the app's Undo control, because the app made
   it: nothing about the write bypasses the plan store.
 
+Copying a Person, a Project or an Assignment
+  person copy, project copy and assignment copy create one more record from one
+  that already exists, and print what it would carry and the name it would take.
+  What a copy carries is the app's own list, because a copy made here and a copy
+  made from a panel have to be the same copy: a Project's colour, tags, notes
+  and absence flag; a Person's Location, Availability, Person tags and note; an
+  Assignment's Person, start and end dates, Share, tags and note.
+
+  No work follows a copy. A copied Project has no Assignments and no Milestone
+  relation, a copied Person has no Assignments, and an Assignment's copy is a
+  second band on the same Person over the same dates - one more Assignment,
+  which the grid stacks by cumulative Share. The preview names the Assignments
+  that stay on the source, so "no work copied" is a stated fact rather than an
+  assumption, and the source itself is untouched: a copy writes a new record
+  and changes nothing of the one it came from.
+
+  A copy is named by the app's own rule, so the two roads cannot drift: the
+  first copy is "X (copy)", and while a live record holds that name it numbers
+  on - "X (copy 2)", "X (copy 3)" - compared case-insensitively and trimmed.
+  Copying a copy numbers on from its base rather than stacking one suffix
+  inside the next, so a copy of "X (copy 2)" is "X (copy 3)". An Assignment
+  needs none of this, its name being its Project's and its Person's.
+
+  The write is the app's own POST /api/people, POST /api/projects or
+  POST /api/assignments - the route the Copy control itself sends - so the
+  server mints the id, the validation and the atomic write apply, and the copy
+  is one step back with the app's Undo control. The tool then reads the plan
+  back and confirms the copy the app holds carries every field it claimed; a
+  copy the plan does not show exits non-zero and says it did not land.
+
+  Its subject is found the way the reads find one - case-insensitive, with an
+  unknown or ambiguous name an error naming the nearest matches and an
+  ambiguous Assignment refused with every candidate named. An archived record
+  is not one of them, so copying one is refused and the refusal names the
+  restore that brings it back; so is copying an Assignment whose Assignments
+  between that Person and that Project are all archived, which is the grid's own
+  rule for an archived block.
+
 Creating a Milestone, and moving one
   milestone add creates one Milestone and prints what it would create: its name
   and date, the weekday that date falls on, the colour slot it would take, its
@@ -650,18 +711,19 @@ The view, and how it looks
   control. The colour-by-key and by-tag selections are not here either: they
   travel with the plan, under Options > Tags.
 
-  Nothing here is one of the sixteen commands above that change a plan: a view
+  Nothing here is one of the nineteen commands above that change a plan: a view
   write touches no plan record, no figure, and nothing that deletes.
 
 Deleting
   The tool never deletes anything. There is no command and no flag that
   destroys a Person, a Project, an Assignment or a Milestone, and no --force to
   reach one: what this tool can do to a plan is add a Person, add a Project or
-  add an Assignment, edit a Person or a Project, move an Assignment, archive or
-  restore a Person, a Project or an Assignment, add or remove one holiday date
-  for one Location, and create or edit a Milestone, and nothing more. An edit
-  changes fields and never removes the record it changes. That boundary is
-  deliberate, and it is not a gap waiting to be filled.
+  add an Assignment, copy a Person, a Project or an Assignment, edit a Person or
+  a Project, move an Assignment, archive or restore a Person, a Project or an
+  Assignment, add or remove one holiday date for one Location, and create or
+  edit a Milestone, and nothing more. An edit changes fields and never removes
+  the record it changes, and a copy adds a record rather than taking one away.
+  That boundary is deliberate, and it is not a gap waiting to be filled.
 
   Archiving is how work leaves a plan reversibly: archive takes a record out of
   the plan and restore puts it back, and neither destroys anything. A deletion
@@ -680,9 +742,10 @@ Deleting
 The plan file
   --plan, else PACT_DATA, else data/default.pact.json beside this repository.
   Reads never write it. Its writes - the four that create and change work, the
-  two that edit a Person or a Project, the six that archive and restore, the two
-  that add and remove a holiday date, and the two that create and edit a
-  Milestone - go through the running app's API,
+  two that edit a Person or a Project, the three that copy a Person, a Project
+  or an Assignment, the six that archive and restore, the two that add and
+  remove a holiday date, and the two that create and edit a Milestone - go
+  through the running app's API,
   so validation, the atomic write and the guard against a file changed
   underneath are the app's, not a second copy here. It reads the live plan, so
   archived People, Projects and Assignments are left out, as on the default
@@ -754,6 +817,16 @@ JSON
   afterwards). Its "create" is the body POST /api/people takes - no id, since
   the server mints one - and its "offered" is { availability, location,
   workingDays, holidayDays, fteDays, holidays } over the resolved period.
+
+  person copy, project copy and assignment copy are one shape: "kind", "action"
+  "copy" and "applied" (false until it is written), "subject" (the record the
+  copy is made from, as stored) and "create" - the body POST /api/people, POST
+  /api/projects or POST /api/assignments takes, with no id, since the server
+  mints one. A Person's and a Project's answer carries "name" ({ from, to }: the
+  source's name and the one the copy rule gave it) and "assignments", the
+  source's own live Assignments, which are not copied. Once written it carries
+  "server" and "readBack", the copy as the app's plan holds it afterwards. A
+  copy has no "period" and no "units": it counts nothing.
 
   project add is the same shape. Its "create" is the body POST /api/projects
   takes, with no "colour" at all when none was named, and its "colour" is
@@ -1739,6 +1812,89 @@ function renderProjectAdd(data) {
   return lines.join("\n") + "\n";
 }
 
+/* --- one copy, before it is written -------------------------------------- */
+
+// What a read back holds, in one line: the fields the store keeps, in the order
+// a reader meets them.
+function copyReadBack(copy, record) {
+  if (copy.kind === "person") {
+    return record.name + (record.location === "" ? "" : ", " + record.location) +
+      ", available " + record.availability + "%";
+  }
+  if (copy.kind === "project") {
+    return record.name + ", colour slot " + record.colour + ", " +
+      (record.absence ? "an Absence Project" : "not an Absence Project");
+  }
+  return copy.subject.project + " / " + copy.subject.person + "  " + record.start +
+    " to " + record.end + " at " + record.share + "%";
+}
+
+// Where a copy's source keeps its work: a Person's or a Project's own
+// Assignments stay on it, so what a copy does not carry is stated rather than
+// left to be guessed at.
+function workStaysText(count, sourceName) {
+  if (count === 0) return "the source holds none to copy.";
+  return (count === 1 ? "1 Assignment stays" : count + " Assignments stay") +
+    " on \"" + sourceName + "\".";
+}
+
+// What a copy carries and what it does not: the fields it takes as the panel
+// lists them, the name the rule gave it, the work that stays on the source, and
+// that the source itself is untouched. A copy counts no figure, so no line here
+// is one.
+function renderCopy(data) {
+  const create = data.create;
+  const lines = header(data);
+  lines.push("");
+  if (data.kind === "person") {
+    lines.push("Copy of Person \"" + data.name.from + "\"");
+    lines.push("  Name: " + create.name);
+    lines.push("  Location: " + (create.location === "" ? "-" : create.location) +
+      ", available " + create.availability + "%");
+    lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "-"));
+    if (create.note !== "") lines.push("  Note: " + create.note);
+  } else if (data.kind === "project") {
+    lines.push("Copy of Project \"" + data.name.from + "\"");
+    lines.push("  Name: " + create.name);
+    lines.push("  Colour slot " + create.colour);
+    lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "-"));
+    lines.push("  Notes: " + (create.notes === "" ? "-" : create.notes));
+    lines.push("  Absence: " + (create.absence ? "yes" : "no"));
+    lines.push("  No Milestone relation: a relation records what happened to one Project.");
+  } else {
+    lines.push("Copy of the Assignment");
+    lines.push("  " + data.subject.project + " / " + data.subject.person);
+    lines.push("  " + create.start + " to " + create.end + ", " + create.share + "%");
+    lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "-"));
+    if (create.note !== "") lines.push("  Note: " + create.note);
+    // The band the copy draws as, which is the thing the grid shows and a
+    // reader of the preview cannot see.
+    lines.push("  The same Person over the same dates, so it draws as a second band");
+    lines.push("  above the original.");
+  }
+  if (data.kind !== "assignment") {
+    lines.push("  No Assignments copied: " + workStaysText(data.assignments.length, data.name.from));
+  }
+  lines.push("  The source is untouched: a copy is a creation, not a change.");
+
+  if (data.kind === "assignment" && data.subject.absence) {
+    lines.push("");
+    lines.push("Note: " + data.subject.project + " is an Absence Project, so this");
+    lines.push("Assignment is the Person's time away: it changes Capacity, not Allocated.");
+  }
+
+  lines.push("");
+  if (!data.applied) {
+    lines.push("Nothing written. Re-run with --apply.");
+    return lines.join("\n") + "\n";
+  }
+  const back = data.readBack;
+  lines.push("Applied through " + data.server + "; read back from its plan: " + back.id + ",");
+  lines.push("  " + copyReadBack(data, back) + ".");
+  lines.push("Undo: the creation is one step back with the app's Undo control.");
+  return lines.join("\n") + "\n";
+}
+
 /* --- one record's diff, before it is written ----------------------------- */
 
 // The fields each edit prints, in the order its options name them, and the words
@@ -2073,7 +2229,7 @@ function commandName(args) {
 
 // The read of one subject is already one thing, so it takes none of them, and
 // says that rather than naming a command that would have taken the option.
-const SUBJECT_ACTIONS = ["add", "archive", "restore"];
+const SUBJECT_ACTIONS = ["add", "copy", "archive", "restore"];
 
 function narrowWhere(args, key) {
   const action = args.subject.length > 0 ? args.subject[0] : "";
@@ -2162,15 +2318,16 @@ function rejectForeignOptions(args) {
 async function runAssignment(args) {
   const action = args.subject.length > 0 ? args.subject[0] : "";
   if (action === "") {
-    throw usage("assignment needs an action; the actions are move, add, archive and " +
-      "restore: assignment move <project> --person <name>, or assignment add <project> " +
-      "--person <name> --from <date> --to <date>");
+    throw usage("assignment needs an action; the actions are move, add, copy, " +
+      "archive and restore: assignment move <project> --person <name>, or assignment add " +
+      "<project> --person <name> --from <date> --to <date>");
   }
   if (action === "move") return runAssignmentMove(args);
   if (action === "add") return runAssignmentAdd(args);
+  if (action === "copy") return runAssignmentCopy(args);
   if (action === "archive" || action === "restore") return runSubjectMove(args, action);
   throw usage('unknown assignment action "' + action + '"; the actions are move, add, ' +
-    "archive and restore");
+    "copy, archive and restore");
 }
 
 async function runAssignmentMove(args) {
@@ -2325,6 +2482,62 @@ async function runProjectAdd(args) {
 
   if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
   else process.stdout.write(renderProjectAdd(data));
+}
+
+/* --- a copy of one Person, one Project or one Assignment ------------------ */
+
+// What a copy does not take: every option that would set a field of the new
+// record, and the period. A copy carries the record's own fields under the name
+// the copy rule gives it, so there is nothing here to set differently, and
+// nothing it counts.
+const COPY_REFUSALS = ["period", "name", "location", "availability", "colour", "absence",
+  "note", "kind", "date", "tags", "untag", "from", "to", "share", "projects"];
+const RECORD_COPY_REFUSALS = ["person"].concat(COPY_REFUSALS);
+
+const COPY_WHERE = "a copy carries the record's own fields and counts no figure";
+
+// The preview and the write, for all three kinds: a copy is one shape, so a
+// Person, a Project and an Assignment take the same road - the query module
+// computes what would be created, and --apply sends that body to the app's own
+// collection route and reads the plan back.
+async function runCopy(args, request) {
+  const resolved = resolvePlanFile(args.plan);
+  const plan = loadPlan(resolved);
+  const copied = query.copy(plan, request);
+  const data = Object.assign({
+    command: request.kind,
+    action: "copy",
+    planFile: resolved.path,
+    planSource: resolved.source,
+    applied: false
+  }, copied);
+
+  if (args.apply) {
+    const base = serverBase();
+    data.server = base;
+    data.readBack = await applyCopy(base, data, resolved.path);
+    data.applied = true;
+  }
+
+  if (args.json) process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+  else process.stdout.write(renderCopy(data));
+}
+
+async function runRecordCopy(args, kind) {
+  const name = args.subject.slice(1).join(" ").trim();
+  if (name === "") throw usage(kind + " copy needs a name");
+  rejectWriteFlags(args);
+  refuseOptions(args, RECORD_COPY_REFUSALS, COPY_WHERE);
+  return runCopy(args, { kind: kind, subject: name });
+}
+
+async function runAssignmentCopy(args) {
+  const project = args.subject.slice(1).join(" ").trim();
+  if (project === "") throw usage("assignment copy needs a Project name");
+  if (args.person === undefined) throw usage("assignment copy needs --person <name>");
+  rejectWriteFlags(args);
+  refuseOptions(args, COPY_REFUSALS, COPY_WHERE);
+  return runCopy(args, { kind: "assignment", project: project, person: args.person });
 }
 
 /* --- one existing Person, and one existing Project, changed -------------- */
@@ -2819,14 +3032,7 @@ async function applyAdd(base, add, planPath) {
   await requireSamePlan(base, planPath);
   const asked = add.create;
   const landed = await readBackCreate(base, "/api/assignments", "assignments", asked, "Assignment",
-    function (record) {
-      return record.projectId === asked.projectId && record.personId === asked.personId &&
-        record.start === asked.start && record.end === asked.end && record.share === asked.share;
-    },
-    function (record) {
-      return record.projectId + " / " + record.personId + " from " + record.start +
-        " to " + record.end + " at " + record.share + "%";
-    });
+    assignmentHolds, assignmentDescription);
   return {
     id: landed.id,
     project: add.assignment.project,
@@ -2834,6 +3040,37 @@ async function applyAdd(base, add, planPath) {
     start: landed.start,
     end: landed.end,
     share: landed.share
+  };
+}
+
+// Whether an Assignment in the app's plan holds every field a creation named. A
+// field left out is not the tool's to pin, which is what lets one rule verify a
+// creation and a copy whose body carries tags and a note as well as the dates.
+function assignmentHolds(record, asked) {
+  return (asked.projectId === undefined || record.projectId === asked.projectId) &&
+    (asked.personId === undefined || record.personId === asked.personId) &&
+    (asked.start === undefined || record.start === asked.start) &&
+    (asked.end === undefined || record.end === asked.end) &&
+    (asked.share === undefined || record.share === asked.share) &&
+    (asked.note === undefined || String(record.note || "") === String(asked.note)) &&
+    (asked.tags === undefined || sameTags(record.tags, asked.tags));
+}
+
+function assignmentDescription(record) {
+  return record.projectId + " / " + record.personId + " from " + record.start +
+    " to " + record.end + " at " + record.share + "%";
+}
+
+function assignmentRecord(record) {
+  return {
+    id: record.id,
+    projectId: record.projectId,
+    personId: record.personId,
+    start: record.start,
+    end: record.end,
+    share: record.share,
+    tags: Array.isArray(record.tags) ? record.tags.slice() : [],
+    note: typeof record.note === "string" ? record.note : ""
   };
 }
 
@@ -2907,6 +3144,25 @@ async function applyProjectAdd(base, add, planPath) {
   const landed = await readBackCreate(base, "/api/projects", "projects", add.create, "Project",
     projectHolds, projectDescription);
   return projectRecord(landed);
+}
+
+// A copy's write: the app's own POST on the copy's collection with the body the
+// preview showed, then the plan read back and the new record found by the id the
+// server minted, holding every field the preview claimed. The copy is a
+// creation, so the record it came from is beside it in the plan, untouched - the
+// proof of that is the plan's own, and nothing here writes to it.
+async function applyCopy(base, copy, planPath) {
+  await requireSamePlan(base, planPath);
+  const kind = copy.kind;
+  const collection = collectionOf(kind);
+  const landed = await readBackCreate(base, "/api/" + collection, collection, copy.create,
+    KIND_TITLES[kind],
+    kind === "person" ? personHolds : kind === "project" ? projectHolds : assignmentHolds,
+    kind === "person" ? personDescription
+      : kind === "project" ? projectDescription : assignmentDescription);
+  if (kind === "person") return personRecord(landed);
+  if (kind === "project") return projectRecord(landed);
+  return assignmentRecord(landed);
 }
 
 // The collection a kind of record lives in, in the API and in the plan alike.
@@ -3380,6 +3636,13 @@ async function run() {
   if ((args.command === "person" || args.command === "project") &&
       args.subject[0] === "edit") {
     await runRecordEdit(args, args.command);
+    return;
+  }
+  // `person copy` and `project copy` create one more record from one that
+  // already exists; `assignment copy` is its own action, dispatched above.
+  if ((args.command === "person" || args.command === "project") &&
+      args.subject[0] === "copy") {
+    await runRecordCopy(args, args.command);
     return;
   }
   // `holiday add` and `holiday remove`: one date at a time, for one Location.

@@ -415,11 +415,11 @@ test("view set has no --force and nothing here deletes", async () => {
   }
   assert.deepEqual(started.configBytes(), before);
 
-  // The help keeps the boundary true: the sixteen plan writes are still
-  // sixteen, and a view write is said to be a different thing.
+  // The help keeps the boundary true: the nineteen plan writes are still
+  // nineteen, and a view write is said to be a different thing.
   const help = await cli(["--help"]);
-  assert.match(help.stdout, /Sixteen commands change a plan/);
-  assert.match(help.stdout, /Nothing here is one of the sixteen commands above that change a plan/);
+  assert.match(help.stdout, /Nineteen commands change a plan/);
+  assert.match(help.stdout, /Nothing here is one of the nineteen commands above that change a plan/);
   assert.match(help.stdout, /view set <key> <value>/);
   // `view` is not a plan write, so it has no --force and no delete to suggest.
   assert.match(help.stdout, /The tool never deletes anything\./);

@@ -126,13 +126,21 @@ list would print it: a filter can hide a number, never make one up.
 
 ## Changing a plan
 
-Sixteen commands change a plan, and every one of them goes through the running
+Nineteen commands change a plan, and every one of them goes through the running
 app. **Nothing is written without `--apply`**: each prints a preview first -
 what would be created, the old and new value, the figures before and after -
 and the preview is the default. `--dry-run` says the same thing out loud.
 
 - `person add <name>` and `project add <name>` create one record. A name the
   live plan already answers to is refused, naming the record that holds it.
+- `person copy <name>`, `project copy <name>` and
+  `assignment copy <project> --person <name>` create a second record from one
+  that exists, carrying what the app's own Copy carries: a Project's colour,
+  tags, notes and absence flag; a Person's Location, Availability, tags and
+  note; an Assignment's Person, dates, Share, tags and note. **No work follows
+  a copy** - a copied Person or Project has no Assignments - and the source is
+  untouched. The name is the app's own rule, `<source> (copy)` and then
+  `(copy 2)`, `(copy 3)` while a live record holds it.
 - `person edit <name>` and `project edit <name>` change a record that already
   exists, and print a diff of exactly the fields that change. The preview also
   states what the change costs: an Availability or a Location change prints the
@@ -224,10 +232,13 @@ needs the app is refused when nothing is serving it.
 | `milestones`                     | the Milestones as stored                                | the plan file         |
 | `person add <name>`              | create one Person                                       | the app               |
 | `project add <name>`             | create one Project                                      | the app               |
+| `person copy <name>`             | copy one Person, with no Assignments                    | the app               |
+| `project copy <name>`            | copy one Project, with no Assignments                   | the app               |
 | `person edit <name>`             | change one Person's fields                              | the app               |
 | `project edit <name>`            | change one Project's fields                             | the app               |
 | `assignment add <project>`       | create one Assignment                                   | the app               |
 | `assignment move <project>`      | reschedule or resize one Assignment                     | the app               |
+| `assignment copy <project>`      | duplicate one Assignment                                | the app               |
 | `person archive <name>`          | archive one Person                                      | the app               |
 | `person restore <name>`          | restore an archived Person                              | the app               |
 | `project archive <name>`         | archive one Project                                     | the app               |

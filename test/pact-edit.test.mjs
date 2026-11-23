@@ -651,7 +651,7 @@ test("an edit changes fields, and nothing here deletes", async () => {
 test("the help says what an edit does, and keeps the boundary true", async () => {
   const help = await cli(["--help"]);
   assert.equal(help.status, 0, help.stderr);
-  assert.match(help.stdout, /Sixteen commands change a plan/);
+  assert.match(help.stdout, /Nineteen commands change a plan/);
   assert.match(help.stdout, /person edit <name>/);
   assert.match(help.stdout, /project edit <name>/);
   assert.match(help.stdout, /Editing a Person or a Project/);

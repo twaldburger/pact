@@ -269,7 +269,7 @@ test("importing lib/query.mjs is silent and side-effect free", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
   assert.equal(result.stdout, "before" + [
-    "QueryError", "archive", "assignmentAdd", "assignmentMove", "capacity", "holidayChange",
+    "QueryError", "archive", "assignmentAdd", "assignmentMove", "capacity", "copy", "holidayChange",
     "holidays", "milestoneAdd", "milestoneEdit", "milestones", "people", "person", "personAdd",
     "personEdit", "planSummary", "project", "projectAdd", "projectEdit", "projects",
     "resolvePeriod", "restore", "tag", "tags", "view", "viewSet"
