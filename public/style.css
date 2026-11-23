@@ -2756,21 +2756,36 @@ down to the last row and no further. */
    panel while the body scrolls under it instead of scrolling away with the
    content. Its own bottom padding replaces the panel's, so the panel's
    background reaches its border and the body cannot show below the actions.
-   A panel can hold more actions than its width takes - the Assignment's Copy,
-   Archive and Delete above their Save - so the footer wraps onto a second line
-   rather than clipping the first action out of its left edge. */
+
+   A panel can hold more actions than its width takes, so the footer wraps
+   rather than clipping the first action out of its left edge. The ordinary
+   actions share one group, `.panel__actions`, that moves as a unit; the
+   primary action is a separate item after it, and both are held to the right
+   edge. A wrap therefore falls between the group and the primary, never
+   inside the group, so Save is never left sitting beside Delete. One gap for
+   both axes keeps a wrapped line the same distance from the one above as two
+   buttons are from each other, and every item takes the line's height so one
+   button class cannot draw shorter than another in the same footer. */
 .panel__foot {
   position: sticky;
   bottom: 0;
   z-index: 1;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-end;
-  gap: var(--sp-2) var(--sp-3);
+  gap: var(--sp-3);
   margin-top: var(--sp-4);
   padding-bottom: var(--sp-5);
   background: var(--canvas);
+}
+
+.panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: var(--sp-3);
 }
 
 .btn-ghost {
