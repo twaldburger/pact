@@ -526,6 +526,11 @@ aside: `person tag: architect`, `project notes: delayed`, `people: tim`,
 `project tag: platform`, `milestone: api`. Both singular and plural work, a bare
 `tag:` searches the rows' three tag kinds and never the Milestones', `name:`
 searches People and Projects, and `note:` searches Person and Assignment notes.
+A tag value that carries its own kind - a colon inside it, as in
+`person tag: skill:DevOps` - matches that tag exactly and case-insensitively
+rather than as a substring, while a value without a colon keeps the loose rule,
+so `person tag: devops` still finds `DevOps`, `skill:DevOps` and
+`skill:DevOps-2`.
 An unrecognised prefix matches nothing and the empty state names it with a list
 of the fields the Filter knows, rather than quietly treating it as text.
 

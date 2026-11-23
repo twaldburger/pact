@@ -250,8 +250,21 @@ function won(text, q) {
   return lower(text).indexOf(lower(q)) !== -1;
 }
 
+/*
+ * A tag is matched exactly when the value carries its own kind - a colon
+ * inside it, as in `person tag: skill:DevOps` - and as a substring otherwise.
+ * A plain value keeps finding every tag that contains its letters, so `devops`
+ * still reaches `DevOps`, `skill:DevOps` and `skill:DevOps-2`; a value with a
+ * colon asks for that one tag and nothing beside it. The signal is the colon
+ * alone: the Filter cannot know a plan's tag kinds at match time, so it never
+ * asks whether the text before the colon names one.
+ */
 function someTag(tags, q) {
-  return (tags || []).some(function (tag) { return won(tag, q); });
+  const wanted = lower(q).trim();
+  if (wanted.indexOf(":") === -1) {
+    return (tags || []).some(function (tag) { return won(tag, wanted); });
+  }
+  return (tags || []).some(function (tag) { return lower(tag).trim() === wanted; });
 }
 
 // One place each field is read from, so matching and suggesting cannot drift
