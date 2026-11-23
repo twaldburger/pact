@@ -102,6 +102,7 @@ import {
   SUGGESTION_LIMIT
 } from "./lib/filter.mjs";
 import { blockLabel, hoverText, labelText, rangeLabel } from "./lib/label.mjs";
+import { copyName } from "./lib/copy.mjs";
 import {
   STACK_COLLAPSED_DEFAULT,
   stackToggleLabel,
@@ -2067,7 +2068,9 @@ function focusAssignment(id) {
 }
 
 var toastTimer = null;
-function showError(err) {
+// The app's one toast: a refusal after a failed save, or a word about what a
+// click just did. It sits where it is and is taken away after a few seconds.
+function showToast(message) {
   var toast = document.getElementById("pact-toast");
   if (!toast) {
     toast = el("div", "toast");
@@ -2075,10 +2078,14 @@ function showError(err) {
     toast.setAttribute("role", "alert");
     document.body.appendChild(toast);
   }
-  toast.textContent = err && err.message ? err.message : "Could not save the change.";
+  toast.textContent = message;
   toast.classList.add("is-on");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function () { toast.classList.remove("is-on"); }, 6000);
+}
+
+function showError(err) {
+  showToast(err && err.message ? err.message : "Could not save the change.");
 }
 
 /* --- panels -------------------------------------------------------------- */
@@ -2749,6 +2756,15 @@ function openProjectPanel(project, trigger) {
   var error = errorLine(node);
 
   var foot = el("div", "panel__foot");
+  if (editing) {
+    // Copying destroys nothing, so it carries the ordinary style, not the two
+    // danger buttons' - and it is offered on an archived Project too, where
+    // copying one as a new Project is the most useful case of all.
+    foot.appendChild(button("btn-ghost", "Copy project", function () {
+      closePanel(false);
+      copyProject(project);
+    }));
+  }
   if (editing && !project.archived) {
     var archive = button("btn-danger", "Archive project", function () {
       closePanel(false);
@@ -2779,6 +2795,33 @@ function openProjectPanel(project, trigger) {
 
   openPanel(node, trigger);
   if (!editing) nameInput.focus();
+}
+
+/*
+ * Copy a Project at once, with no form in between: the new Project carries the
+ * source's colour, tags, notes and absence mark, takes the name the rule offers
+ * so it is never one a live Project already holds, and starts with no
+ * Assignments of its own. The absence flag is carried rather than inherited
+ * from the copy's name, because a copy of an absence is an absence. Milestone
+ * relations are not copied either: they record what happened to one Project.
+ * The write is the ordinary create, so it is one Undo step back like any other.
+ *
+ * One function, taking the Project, so a keyboard shortcut can drive the same
+ * road the button does.
+ */
+function copyProject(project) {
+  var live = data.projects.filter(function (p) { return !p.archived; })
+    .map(function (p) { return p.name; });
+  var name = copyName(project.name, live);
+  return api("POST", "/api/projects", {
+    name: name,
+    colour: project.colour,
+    tags: project.tags,
+    notes: project.notes,
+    absence: !!project.absence
+  }).then(refresh).then(function () {
+    showToast("Copied \"" + project.name + "\" as \"" + name + "\"");
+  }).catch(showError);
 }
 
 function openAssignmentPanel(a, trigger) {
