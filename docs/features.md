@@ -110,7 +110,12 @@ clicking a row header opens it. Copy, Archive and Delete sit at the foot of the
 Person panel, in that order and with Copy in the ordinary style rather than the
 danger one; Archive and Delete are hidden on an archived Person and Copy is not
 - and `Ctrl+C` over a row header then `Ctrl+V` over the People column is the same
-copy with no panel in the way (see [Assignments](#assignments)).
+copy with no panel in the way (see [Assignments](#assignments)). `Delete` over a
+row header is the panel's own Delete with no dialog and no panel to open: the
+Person and every Assignment of theirs go in one write, and the notice names the
+cascade - `Deleted "Anna Meier" and their 3 Assignments` - where a Person with
+no work is named alone. Anywhere else in the column deletes nothing, and
+[Undo](../GLOSSARY.md#undo) steps the whole removal back.
 
 ## Projects
 
@@ -148,7 +153,11 @@ clicking a rail row opens it. Copy, Archive and Delete sit at the foot of the
 Project panel, in that order and with Copy in the ordinary style rather than the
 danger one; Archive and Delete are hidden on an archived Project and Copy is
 not - and `Ctrl+C` over a rail row then `Ctrl+V` over the rail is the same copy
-with no panel in the way (see [Assignments](#assignments)). Absence is a
+with no panel in the way (see [Assignments](#assignments)). `Delete` over a rail
+row is the panel's own Delete with no dialog and no panel to open: the Project
+and every Assignment of it go in one write, and the notice names the cascade -
+`Deleted "Atlas" and its 3 Assignments` - where a Project with no work is named
+alone. [Undo](../GLOSSARY.md#undo) steps the whole removal back. Absence is a
 checkbox in the same panel.
 
 ## Assignments
@@ -240,11 +249,16 @@ says; a day that is not a working day for that Person carries no load at all.
 across empty row space, to create. Drag a block's body or ends to change it;
 click it, or focus it and press Enter, to open it. Copy, Archive and Delete sit
 at the foot of the Assignment dialog, in that order, with Copy in the ordinary
-style and Archive and Delete in the danger one. The Delete, `Ctrl+C` and
-`Ctrl+V` keys need only the pointer over a block; over a rail row, `Ctrl+C`
-copies that Project and `Ctrl+V` over the rail makes the copy, and over a row
-header, `Ctrl+C` copies that Person and `Ctrl+V` over the People column makes
-that one.
+style and Archive and Delete in the danger one. The `Delete` key needs only the
+pointer over a block, a row header or a rail row, and it deletes with no
+dialog: over a block that Assignment alone, over a row header the Person and
+over a rail row the Project - the same record `Ctrl+C` picks up, from the same
+lookup. A Person's or a Project's Assignments go with them in one write, the
+notice names the count, and [Undo](../GLOSSARY.md#undo) is one step back for all
+of it. `Ctrl+C` and `Ctrl+V` need only the pointer over a block; over a rail
+row, `Ctrl+C` copies that Project and `Ctrl+V` over the rail makes the copy, and
+over a row header, `Ctrl+C` copies that Person and `Ctrl+V` over the People
+column makes that one.
 
 ## Absences
 
@@ -557,7 +571,10 @@ follow it, and an Assignment is only drawn while both its Person and its Project
 are drawn, so archiving a Person takes their work off the grid with them.
 
 Archived records refuse new work by name; archived Assignments are drawn but
-cannot be dragged or copied; archived rows carry `Restore` and `Delete`.
+cannot be dragged or copied; archived rows carry `Restore` and `Delete`, both on
+the row itself. The `Delete` key over an archived row deletes it as it deletes a
+live one, since the row is the record either way - `Restore` stays the route
+that keeps it.
 
 **Where the controls are.** `Options` then `Show archived`, alone in the menu's
 second group.
