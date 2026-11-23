@@ -688,17 +688,25 @@ whole vocabulary. A tag the edited record already carries is not offered, and
 neither is one added as a chip earlier in the same edit, because the chips
 beside the field already say what is applied.
 
-A tick chooses a row before anything lands. The arrow keys move the highlight,
-`Space` ticks the highlighted row, and `Enter` adds every ticked tag in one
-step and closes the list. While a row is ticked the last row reads `Add N tags`
-and commits the same set, so a pointer ticks rows by clicking them and commits
-from there. The typed text stays in the field while the list is open - one
-narrowing serves several picks - and clears when the list closes, whether by
-`Enter`, `Escape` or a click away. `Enter` with nothing ticked still makes the
-typed text a new tag, stored exactly as typed, so free text is never lost to
-the list; `Escape` closes the list and adds nothing, and a second `Escape` then
-closes the panel. A comma commits the typed text as it always did, and
-Backspace on an empty field removes the last chip.
+A tick chooses a row before anything lands. The list opens with its first row
+already highlighted, and every narrowing that still has rows highlights the
+first of them, so one `Space` ticks the obvious choice without an arrow press.
+The arrow keys move the highlight, `Space` ticks the highlighted row, and
+`Enter` takes the highlighted row - the first match of what has been typed,
+which is what a datalist taught everyone to expect. While a row is ticked the
+last row reads `Add N tags` and commits the whole set, so a pointer ticks rows
+by clicking them and commits from there, and `Enter` with rows ticked adds them
+all rather than the highlight. The typed text stays in the field while the
+list is open - one narrowing serves several picks - and clears when the list
+closes, whether by `Enter`, `Escape` or a click away. `Enter` makes a new tag
+only of a term the list holds no row for, stored exactly as typed, so free text
+for a genuinely new tag is never lost to the list and a half-typed `skill:back`
+chooses the existing `skill:backend` instead of polluting the vocabulary; text
+differing from a row only by case or surrounding space is that row. `Escape`
+closes the list and adds nothing, and a second `Escape` then closes the panel.
+A comma commits the typed text as it always did, and Backspace on an empty
+field removes the last chip. A space ticks nothing while no row is highlighted,
+so multi-word free text still reads.
 
 A Location is single-valued, so its suggestion stays a plain browser list: one
 value at a time, with nothing to tick.

@@ -61,3 +61,34 @@ export function committedTags(current, typed, ticks) {
     return withTag(list, tag);
   }, started);
 }
+
+// A tag as the picker compares texts: a capital letter and a stray space are
+// what a keyboard adds by accident, so two tags differing only in those are one
+// tag to the person choosing.
+function folded(text) {
+  return String(text == null ? "" : text).trim().toLowerCase();
+}
+
+/*
+ * The tags Enter adds, in the order the list ranks them: every ticked row, so
+ * the keyboard's multi-select lands whole; else the highlighted row, so a
+ * half-typed `skill:back` chooses the `skill:backend` it was narrowing to
+ * instead of making a new tag of itself; else the typed text, which is how a
+ * genuinely new tag is made. A word that names a row - equal to it but for case
+ * and surrounding space - is that row, never a second tag differing by a
+ * capital letter.
+ *
+ * An empty answer is Enter with nothing to add: an empty field with no ticked
+ * and no highlighted row.
+ */
+export function enterTags(typed, ticks, shown, rowIndex) {
+  const ticked = ticks || [];
+  if (ticked.length) return ticked.slice();
+  const rows = shown || [];
+  const row = rows[rowIndex];
+  if (typeof row === "string") return [row];
+  const text = folded(typed);
+  if (text === "") return [];
+  const named = rows.filter(function (tag) { return folded(tag) === text; })[0];
+  return [named === undefined ? String(typed) : named];
+}
