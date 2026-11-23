@@ -118,9 +118,23 @@ Assignments and takes it out of the rail; deleting it takes the Assignments with
 it. Both behave as they do for People: archived Projects cannot take new work,
 and a drop on the grid with one is refused by name.
 
+Copying a Project makes a copy at once, with no form in between: the new
+Project carries the source's colour, [tags](../GLOSSARY.md#project-tag), notes
+and Absence mark, so a Project that repeats does not have to be retyped. It
+takes the name `X (copy)` - `X (copy 2)`, `X (copy 3)` and on while a live
+Project already holds the one before - and its colour is the source's own
+rather than the least-used slot a new Project would take. It starts with no
+Assignments and no Milestone relations of its own, and the source is untouched.
+The new name is announced in the app's toast, as `Copied "Atlas" as "Atlas
+(copy)"`, and the copy is one step of [Undo](../GLOSSARY.md#undo) away. A copy
+is offered on an archived Project too, since copying an old one as a new one is
+what an archived Project is most often wanted for.
+
 **Where the controls are.** The `+` in the Projects rail header adds a Project;
-clicking a rail row opens it. Archive and Delete sit at the foot of the Project
-panel, and Absence is a checkbox in the same panel.
+clicking a rail row opens it. Copy, Archive and Delete sit at the foot of the
+Project panel, in that order and with Copy in the ordinary style rather than the
+danger one; Archive and Delete are hidden on an archived Project and Copy is
+not. Absence is a checkbox in the same panel.
 
 ## Assignments
 
