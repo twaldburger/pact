@@ -95,9 +95,22 @@ An archived row remains visible with Show archived on, marked, with `Restore`
 and `Delete` beside it; an archived Person cannot take a new Assignment, and a
 drop on their row is refused by name.
 
+Copying a Person makes a copy at once, with no form in between: the new Person
+carries the source's Location, Availability,
+[Person tags](../GLOSSARY.md#person-tag) and note, under the name `X (copy)` -
+`X (copy 2)`, `X (copy 3)` and on while a live Person already holds the one
+before. It starts with no Assignments, because their work is their own, so a
+copy arrives as a row with nothing drawn in it. The source is untouched, the new
+name is announced in the app's toast, as `Copied "Anna Meier" as "Anna Meier
+(copy)"`, and the copy is one step of [Undo](../GLOSSARY.md#undo) away. A copy
+is offered on an archived Person too, since copying creates rather than restores.
+
 **Where the controls are.** The `+` in the People column header adds a Person;
-clicking a row header opens it. Archive and Delete sit at the foot of the
-Person panel.
+clicking a row header opens it. Copy, Archive and Delete sit at the foot of the
+Person panel, in that order and with Copy in the ordinary style rather than the
+danger one; Archive and Delete are hidden on an archived Person and Copy is not
+- and `Ctrl+C` over a row header then `Ctrl+V` over the People column is the same
+copy with no panel in the way (see [Assignments](#assignments)).
 
 ## Projects
 
@@ -184,11 +197,22 @@ carries nothing to `Ctrl+C` - only a rail row does - and over the grid `Ctrl+V`
 on a held Project does nothing at all, since there is no position for it to
 land at.
 
-One slot holds both kinds, so what is held decides what a paste can be: a held
-Project never pastes as an Assignment, and a held Assignment never pastes as a
-Project. `Escape` clears the slot whichever kind it holds, and the tint and the
-ghost go with it. It keeps its other meanings first: a panel, a list inside one
-and a drag in progress each take the key before the clipboard does.
+A Person is copied by both routes as well, from their own column. `Ctrl+C` over
+a row header holds that Person and says `Copied "Anna Meier"`; `Ctrl+V` over the
+People column makes the copy at once. A name has no position to place either, so
+it sorts itself into the column, and the paste is the Copy person button's own
+path: the copy carries Location, Availability, Person tags and note and no
+Assignments. A held Person tints the row header under the pointer. The rail
+carries nothing to `Ctrl+C` about a Person - only a row header does - and
+`Ctrl+V` on a held Person over the grid does nothing at all.
+
+One slot holds all three kinds, so what is held decides what a paste can be: a
+held Project never pastes as an Assignment or a Person, and neither of those
+pastes as a Project. A held Assignment lands on the grid and nowhere else, and
+a held Person in the People column and nowhere else.
+`Escape` clears the slot whichever kind it holds, and the tint and the ghost go
+with it. It keeps its other meanings first: a panel, a list inside one and a
+drag in progress each take the key before the clipboard does.
 
 Over-allocation is allowed and drawn, never refused. The part of a block above
 the Person's Availability line is hatched, and the row header's figure turns to
@@ -200,7 +224,9 @@ says; a day that is not a working day for that Person carries no load at all.
 across empty row space, to create. Drag a block's body or ends to change it;
 click it, or focus it and press Enter, to open it. The Delete, `Ctrl+C` and
 `Ctrl+V` keys need only the pointer over a block; over a rail row, `Ctrl+C`
-copies that Project and `Ctrl+V` over the rail makes the copy.
+copies that Project and `Ctrl+V` over the rail makes the copy, and over a row
+header, `Ctrl+C` copies that Person and `Ctrl+V` over the People column makes
+that one.
 
 ## Absences
 
