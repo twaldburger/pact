@@ -1,0 +1,90 @@
+/*
+ * PACT's Session clipboard: what Ctrl+C holds, and what Ctrl+V makes of it.
+ *
+ * One slot serves both things a pointer can pick up - a Project from the rail
+ * and an Assignment from a block - so the slot carries a kind beside what it
+ * holds. That kind is what keeps Ctrl+V honest: a held Project never pastes as
+ * an Assignment, and a held Assignment never pastes as a Project, whichever
+ * surface the pointer happens to be over.
+ *
+ * The clipboard lives in memory only. The system clipboard is never read or
+ * written, so copying text elsewhere keeps working and a held copy dies with a
+ * page reload.
+ *
+ * A plain ES module with no imports, so the browser (public/app.js) and
+ * `node --test` load exactly the same source.
+ */
+
+// The two surfaces a pointer can be over, as the clipboard reads them: the
+// Projects rail and the grid of Person rows. Anything else is neither.
+export const RAIL = "rail";
+export const GRID = "grid";
+
+export const PROJECT = "project";
+export const ASSIGNMENT = "assignment";
+
+// A held Project is its id and nothing else. The Project itself is read from
+// the plan at paste time, so a copy is never a snapshot that can go stale
+// while it waits.
+export function projectCopy(projectId) {
+  return { kind: PROJECT, projectId: String(projectId) };
+}
+
+// A held Assignment keeps what a paste needs: the Project, the Share, the tags,
+// the note and the length in whole days. The id is the Project's, never the
+// Assignment's - a paste creates a new one.
+export function assignmentCopy(copy) {
+  const source = copy || {};
+  return {
+    kind: ASSIGNMENT,
+    projectId: String(source.projectId),
+    share: source.share,
+    tags: (source.tags || []).slice(),
+    note: source.note || "",
+    days: source.days
+  };
+}
+
+// What the slot holds: one of the two kinds, or null when it is empty or holds
+// something it cannot name. A clipboard that knows its kind can never be pasted
+// as the other one.
+export function clipboardKind(clipboard) {
+  const kind = clipboard && clipboard.kind;
+  return kind === PROJECT || kind === ASSIGNMENT ? kind : null;
+}
+
+/*
+ * What Ctrl+C picks up on a surface. A rail row carries its Project, because a
+ * Project is what the rail lists. A block in the grid carries nothing: it names
+ * a Project the reader happens to hover, and picking one up there would copy
+ * something nobody pointed at.
+ */
+export function pickUpIntent(surface) {
+  return surface === RAIL ? PROJECT : null;
+}
+
+/*
+ * What Ctrl+V means for this clipboard over this surface, as one of the two
+ * kinds or null for "nothing happens".
+ *
+ * A Project needs no target: it lives in the rail and sorts itself, so a paste
+ * anywhere over the rail makes the copy, and over the grid there is nothing for
+ * it to land on. An Assignment is the reverse - it needs a Person's row to land
+ * in, and the rail has no dates.
+ */
+export function pasteIntent(clipboard, surface) {
+  const kind = clipboardKind(clipboard);
+  if (kind === PROJECT) return surface === RAIL ? PROJECT : null;
+  if (kind === ASSIGNMENT) return surface === GRID ? ASSIGNMENT : null;
+  return null;
+}
+
+/*
+ * Whether the rail row under the pointer carries the paste tint. It does while
+ * the clipboard holds a Project, whichever row that is: a paste over the rail
+ * makes the copy wherever the pointer sits, so the tint marks the surface the
+ * paste will land on rather than one particular row.
+ */
+export function railRowTinted(clipboard) {
+  return clipboardKind(clipboard) === PROJECT;
+}
