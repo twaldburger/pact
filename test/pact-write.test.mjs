@@ -1498,7 +1498,7 @@ test("no action, option or code path in the tool deletes anything", async () => 
   // Milestone has no archived state for it to reach.
   const help = await cli(["--help"]);
   assert.match(help.stdout, /The tool never deletes anything\./);
-  assert.match(help.stdout, /Sixteen commands change a plan/);
+  assert.match(help.stdout, /Nineteen commands change a plan/);
   assert.match(help.stdout, /Archiving is how work leaves a plan reversibly/);
   assert.match(help.stdout, /and no --force to\s+reach one/);
   assert.match(help.stdout, /person archive <name>/);
@@ -1565,7 +1565,7 @@ test("assignment add states what it needs", async () => {
 
   const action = await cli(["assignment", "--plan", started.planPath]);
   assert.equal(action.status, 2);
-  assert.match(action.stderr, /the actions are move, add, archive and restore/);
+  assert.match(action.stderr, /the actions are move, add, copy, archive and restore/);
 });
 
 test("assignment move states what it needs", async () => {

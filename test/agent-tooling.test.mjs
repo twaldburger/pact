@@ -84,7 +84,7 @@ test("the table is one row per command, in a stated order", () => {
   assert.deepEqual(rows[0].split("|").map((cell) => cell.trim()).filter(Boolean),
     ["Command", "What it does", "Needs"]);
   const body = rows.slice(2);
-  assert.equal(body.length, 28, "one row per command the tool has");
+  assert.equal(body.length, 31, "one row per command the tool has");
   assert.equal(new Set(body.map((row) => row.split("|")[1].trim())).size, body.length,
     "two rows name the same command");
   // The order is stated in the page and in the tool: the reads first, then the
