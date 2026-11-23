@@ -171,12 +171,12 @@ test("Ctrl+V makes the copy through the one function the Copy button calls", () 
   assert.ok(pastePerson, "pastePerson is the keyboard's Person paste");
   assert.match(pastePerson[0], /copyPerson\(source\)/);
   // The Person panel's Copy button calls the same function the paste does.
-  const copyButton = APP.match(/button\("btn-ghost", "Copy person", function \(\) \{[\s\S]*?\n {4}\}\)\)/);
+  const copyButton = APP.match(/namedButton\("btn-ghost", "Copy", "Copy person", function \(\) \{[\s\S]*?\n {4}\}\)\);/);
   assert.ok(copyButton, "the Person panel has a Copy button");
   assert.match(copyButton[0], /copyPerson\(person\)/);
   // Copy is the ordinary style, and the two danger buttons keep theirs.
-  assert.equal(APP.match(/button\("btn-danger", "Archive person"/g).length, 1);
-  assert.equal(APP.match(/button\("btn-danger", "Delete person"/g).length, 1);
+  assert.equal(APP.match(/namedButton\("btn-danger", "Archive", "Archive person"/g).length, 1);
+  assert.equal(APP.match(/namedButton\("btn-danger", "Delete", "Delete person"/g).length, 1);
   // It is offered on an archived Person too: the button sits outside the guard
   // that hides Archive and Delete.
   assert.ok(APP.indexOf('"Copy person"') < APP.indexOf("if (editing && !person.archived) {"),
@@ -272,13 +272,13 @@ test("the feature reference describes the Person copy and paste", () => {
 /* --- copying an Assignment from its dialog ------------------------------- */
 
 test("the Assignment dialog's Copy duplicates it in place, through the one create", () => {
-  const copyButton = APP.match(/button\("btn-ghost", "Copy assignment", function \(\) \{[\s\S]*?\n {4}\}\)\)/);
+  const copyButton = APP.match(/namedButton\("btn-ghost", "Copy", "Copy assignment", function \(\) \{[\s\S]*?\n {4}\}\)\);/);
   assert.ok(copyButton, "the Assignment dialog has a Copy button");
   assert.match(copyButton[0], /copyAssignment\(a\)/);
   // Copy is the ordinary style, and the two danger buttons keep theirs and
   // their order: nothing is destroyed, so Copy comes first.
-  assert.equal(APP.match(/button\("btn-danger", "Archive assignment"/g).length, 1);
-  assert.equal(APP.match(/button\("btn-danger", "Delete assignment"/g).length, 1);
+  assert.equal(APP.match(/namedButton\("btn-danger", "Archive", "Archive assignment"/g).length, 1);
+  assert.equal(APP.match(/namedButton\("btn-danger", "Delete", "Delete assignment"/g).length, 1);
   const copyAt = APP.indexOf('"Copy assignment"');
   const archiveAt = APP.indexOf('"Archive assignment"');
   const deleteAt = APP.indexOf('"Delete assignment"');
@@ -328,8 +328,8 @@ test("copyAssignment carries every field of the source and destroys nothing", ()
 
 test("the feature reference describes Copy assignment", () => {
   const prose = DOCS.replace(/\s+/g, " ");
-  assert.match(prose, /Clicking a block opens it: Share, tags and a note, plus Copy assignment, Archive assignment and Delete assignment\./);
-  assert.match(prose, /Copy assignment duplicates the Assignment where it already is/);
+  assert.match(prose, /Clicking a block opens it: Share, tags and a note, plus Copy, Archive and Delete\./);
+  assert.match(prose, /Copy duplicates the Assignment where it already is/);
   assert.match(prose, /the copy lands on the same Person over the same start and end dates/);
   assert.match(prose, /`Copied the Assignment of "Atlas" on "Anna Meier"`/);
   assert.match(prose, /Copy, Archive and Delete sit at the foot of the Assignment dialog/);

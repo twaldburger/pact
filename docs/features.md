@@ -185,8 +185,8 @@ so the two can never store different numbers. The grid keeps every drag inside
 the Plan period, and a change that would leave it is refused with a message
 naming the period.
 
-Clicking a block opens it: Share, tags and a note, plus Copy assignment,
-Archive assignment and Delete assignment. Assignment tags are their own
+Clicking a block opens it: Share, tags and a note, plus Copy, Archive and
+Delete. Assignment tags are their own
 vocabulary, suggested from that Project's other Assignments. The Delete key
 deletes the Assignment under the pointer with no confirmation -
 [Undo](../GLOSSARY.md#undo) is the recovery - and `Ctrl+C` then `Ctrl+V` over a
@@ -196,12 +196,12 @@ and a copy is used up by the paste it makes.
 An archived Assignment is history: it is drawn, marked, and can be restored,
 but it cannot be dragged or copied until it is.
 
-Copy assignment duplicates the Assignment where it already is, with no form and
+Copy duplicates the Assignment where it already is, with no form and
 no clipboard in between: the copy lands on the same Person over the same start
 and end dates and carries the same [Allocation](../GLOSSARY.md#allocation),
 tags and note, with the tags copied into their own list rather than shared with
-the source. Nothing is destroyed, so Copy sits before Archive assignment and
-Delete assignment and wears the ordinary style rather than the danger one. It
+the source. Nothing is destroyed, so Copy sits before Archive and Delete and
+wears the ordinary style rather than the danger one. It
 is the one create the grid makes anyway, so the grid's own rules hold: an
 archived Person or Project refuses by name and nothing is created, and an
 archived Assignment offers no copy at all. The source is untouched, the new
@@ -214,7 +214,7 @@ hatching then read the duplication.
 A Project is copied the same way, but from the rail. With the pointer over a
 rail row, `Ctrl+C` holds that Project and says `Copied Atlas`; `Ctrl+V` over
 the rail makes the copy at once. It needs no target position - a Project lives
-in the rail and sorts itself - and it is the Copy project button's own path, so
+in the rail and sorts itself - and it is the Copy button's own path, so
 the copy carries the source's colour, tags, notes and Absence mark, takes the
 next free `X (copy)` name, and is one press of [Undo](../GLOSSARY.md#undo)
 away. A held Project tints the rail row under the pointer. A block in the grid
@@ -225,8 +225,8 @@ land at.
 A Person is copied by both routes as well, from their own column. `Ctrl+C` over
 a row header holds that Person and says `Copied "Anna Meier"`; `Ctrl+V` over the
 People column makes the copy at once. A name has no position to place either, so
-it sorts itself into the column, and the paste is the Copy person button's own
-path: the copy carries Location, Availability, Person tags and note and no
+it sorts itself into the column, and the paste is the Copy button's own path:
+the copy carries Location, Availability, Person tags and note and no
 Assignments. A held Person tints the row header under the pointer. The rail
 carries nothing to `Ctrl+C` about a Person - only a row header does - and
 `Ctrl+V` on a held Person over the grid does nothing at all.

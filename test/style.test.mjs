@@ -374,9 +374,11 @@ test("a panel's footer sticks to its bottom so its actions stay reachable", () =
   assert.equal(declaration(PANEL_FOOT[1], "padding-bottom"), "var(--sp-5)");
   assert.equal(declaration(PANEL[1], "padding"), "var(--sp-5) var(--sp-5) 0");
   // A panel can carry more actions than its width takes - the Assignment's
-  // Copy, Archive and Delete sit above their Save - so the footer wraps onto a
+  // Copy, Archive and Delete beside their Save - so the footer wraps onto a
   // second line. Without it the first action is clipped out of the panel's
-  // left edge, which is a control the reader cannot press.
+  // left edge, which is a control the reader cannot press. The ordinary
+  // actions are grouped so the break falls between them and the primary; that
+  // group and its one alignment are pinned in panel-footer.test.mjs.
   assert.equal(declaration(PANEL_FOOT[1], "flex-wrap"), "wrap");
 });
 

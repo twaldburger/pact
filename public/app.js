@@ -2465,6 +2465,17 @@ function button(cls, label, handler) {
   return b;
 }
 
+// A footer action whose visible word is short so a footer's group fits one row.
+// The full wording travels in the accessible name and the tooltip, because the
+// word alone loses which record the button acts on once the dialog's title is
+// out of earshot.
+function namedButton(cls, label, full, handler) {
+  var b = button(cls, label, handler);
+  b.setAttribute("aria-label", full);
+  b.setAttribute("title", full);
+  return b;
+}
+
 // The message a panel shows when a save is refused. It sits in the panel, so
 // the panel keeps working and the value being saved is not lost.
 function errorLine(node) {
@@ -2921,27 +2932,33 @@ function openPersonPanel(person, trigger) {
   var error = errorLine(node);
 
   var foot = el("div", "panel__foot");
+  // The ordinary actions move as one group, so a footer too narrow for the
+  // whole line wraps them clear of Save rather than splitting them around it.
+  var actions = el("div", "panel__actions");
   if (editing) {
     // Copying destroys nothing, so it carries the ordinary style, not the two
     // danger buttons' - and it is offered on an archived Person too, where
     // copying one as a new Person is still a create rather than a restore.
-    foot.appendChild(button("btn-ghost", "Copy person", function () {
+    actions.appendChild(namedButton("btn-ghost", "Copy", "Copy person", function () {
       closePanel(false);
       copyPerson(person);
     }));
   }
   if (editing && !person.archived) {
-    var archive = button("btn-danger", "Archive person", function () {
+    var archive = namedButton("btn-danger", "Archive", "Archive person", function () {
       closePanel(false);
       archivePerson(person.id);
     });
-    foot.appendChild(archive);
-    var remove = button("btn-danger", "Delete person", function () {
+    actions.appendChild(archive);
+    var remove = namedButton("btn-danger", "Delete", "Delete person", function () {
       closePanel(false);
       destroyPerson(person.id);
     });
-    foot.appendChild(remove);
+    actions.appendChild(remove);
   }
+  // A new Person has nothing to copy, archive or delete, so no empty group is
+  // left in the footer: its one button is the whole of it.
+  if (actions.childElementCount) foot.appendChild(actions);
   var spacer = el("span", "panel__spacer");
   foot.appendChild(spacer);
   var save = saveButton(editing ? "Save" : "Add person", function () {
@@ -3026,27 +3043,33 @@ function openProjectPanel(project, trigger) {
   var error = errorLine(node);
 
   var foot = el("div", "panel__foot");
+  // The ordinary actions move as one group, so a footer too narrow for the
+  // whole line wraps them clear of Save rather than splitting them around it.
+  var actions = el("div", "panel__actions");
   if (editing) {
     // Copying destroys nothing, so it carries the ordinary style, not the two
     // danger buttons' - and it is offered on an archived Project too, where
     // copying one as a new Project is the most useful case of all.
-    foot.appendChild(button("btn-ghost", "Copy project", function () {
+    actions.appendChild(namedButton("btn-ghost", "Copy", "Copy project", function () {
       closePanel(false);
       copyProject(project);
     }));
   }
   if (editing && !project.archived) {
-    var archive = button("btn-danger", "Archive project", function () {
+    var archive = namedButton("btn-danger", "Archive", "Archive project", function () {
       closePanel(false);
       archiveProject(project.id);
     });
-    foot.appendChild(archive);
-    var remove = button("btn-danger", "Delete project", function () {
+    actions.appendChild(archive);
+    var remove = namedButton("btn-danger", "Delete", "Delete project", function () {
       closePanel(false);
       destroyProject(project.id);
     });
-    foot.appendChild(remove);
+    actions.appendChild(remove);
   }
+  // A new Project has nothing to copy, archive or delete, so no empty group is
+  // left in the footer: its one button is the whole of it.
+  if (actions.childElementCount) foot.appendChild(actions);
   foot.appendChild(el("span", "panel__spacer"));
   var save = saveButton(editing ? "Save" : "Add project", function () {
     var name = nameInput.value.trim();
@@ -3136,19 +3159,21 @@ function openAssignmentPanel(a, trigger) {
     // danger buttons' - and it sits before them for the same reason. An archived
     // Assignment is history and offers no copy, as Ctrl+C over its block does
     // not: there is nothing to duplicate while it is out of the plan.
-    foot.appendChild(button("btn-ghost", "Copy assignment", function () {
+    var actions = el("div", "panel__actions");
+    actions.appendChild(namedButton("btn-ghost", "Copy", "Copy assignment", function () {
       closePanel(false);
       copyAssignment(a);
     }));
-    var archive = button("btn-danger", "Archive assignment", function () {
+    var archive = namedButton("btn-danger", "Archive", "Archive assignment", function () {
       closePanel(false);
       archiveAssignment(a.id);
     });
-    foot.appendChild(archive);
-    foot.appendChild(button("btn-danger", "Delete assignment", function () {
+    actions.appendChild(archive);
+    actions.appendChild(namedButton("btn-danger", "Delete", "Delete assignment", function () {
       closePanel(false);
       destroyAssignment(a.id);
     }));
+    foot.appendChild(actions);
   }
   foot.appendChild(el("span", "panel__spacer"));
   var save = saveButton("Save", function () {
@@ -4019,8 +4044,9 @@ function openMilestonePanel(milestone, trigger) {
   var error = errorLine(node);
 
   var foot = el("div", "panel__foot");
+  var actions = el("div", "panel__actions");
   if (editing) {
-    foot.appendChild(button("btn-danger", "Delete milestone", function () {
+    actions.appendChild(button("btn-danger", "Delete milestone", function () {
       error.clear();
       api("DELETE", "/api/milestones/" + encodeURIComponent(milestone.id) + "/destroy")
         .then(refresh)
@@ -4031,7 +4057,8 @@ function openMilestonePanel(milestone, trigger) {
         .catch(showError);
     }));
   }
-  foot.appendChild(button("btn-ghost", "Cancel", function () { openMilestonesPanel(trigger); }));
+  actions.appendChild(button("btn-ghost", "Cancel", function () { openMilestonesPanel(trigger); }));
+  foot.appendChild(actions);
   foot.appendChild(el("span", "panel__spacer"));
   var save = saveButton(editing ? "Save milestone" : "Add milestone", function () {
     var name = nameInput.value.trim();
