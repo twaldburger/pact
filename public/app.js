@@ -103,6 +103,7 @@ import {
 } from "./lib/filter.mjs";
 import { blockLabel, hoverText, labelText, rangeLabel } from "./lib/label.mjs";
 import { copyName } from "./lib/copy.mjs";
+import { deletionNotice } from "./lib/delete.mjs";
 import {
   RAIL,
   GRID,
@@ -1618,6 +1619,23 @@ function clipboardSurfaceAt(x, y) {
   return null;
 }
 
+// The record the pointer is over, from the lookup Ctrl+C and Delete share: the
+// Project of the rail row it is on, or the Person of the row header. Anything
+// else in either surface answers nothing, so neither key can reach a record the
+// pointer is merely near - a stretch of the column below a header is no record.
+function pickupAt(x, y) {
+  var intent = pickUpIntent(clipboardSurfaceAt(x, y));
+  if (intent === PROJECT) {
+    var rail = railRowAt(x, y);
+    return rail ? { kind: PROJECT, record: rail.project } : null;
+  }
+  if (intent === PERSON) {
+    var head = personRowAt(x, y);
+    return head ? { kind: PERSON, record: head.person } : null;
+  }
+  return null;
+}
+
 // Remember the Assignment the pointer is over: its Project, Share, tags, note
 // and its length in whole days. An archived Assignment is history and cannot
 // be copied, so it is left alone.
@@ -1771,29 +1789,23 @@ function onClipboardKey(e) {
     // Person up. A block in the grid carries nothing: it names a Project the
     // reader is hovering, and copying that Project from there would copy
     // something nobody pointed at.
-    var pickUp = pickUpIntent(clipboardSurfaceAt(x, y));
-    if (pickUp === PROJECT) {
-      var rail = railRowAt(x, y);
-      if (!rail) return;
-      e.preventDefault();
-      clipboard = projectCopy(rail.project.id);
-      showToast("Copied " + rail.project.name);
-      updatePastePreview();
+    var pick = pickupAt(x, y);
+    if (!pick) {
+      if (copyAssignmentAt(x, y)) {
+        e.preventDefault();
+        updatePastePreview();
+      }
       return;
     }
-    if (pickUp === PERSON) {
-      var head = personRowAt(x, y);
-      if (!head) return;
-      e.preventDefault();
-      clipboard = personCopy(head.person.id);
-      showToast("Copied \"" + head.person.name + "\"");
-      updatePastePreview();
-      return;
+    e.preventDefault();
+    if (pick.kind === PROJECT) {
+      clipboard = projectCopy(pick.record.id);
+      showToast("Copied " + pick.record.name);
+    } else {
+      clipboard = personCopy(pick.record.id);
+      showToast("Copied \"" + pick.record.name + "\"");
     }
-    if (copyAssignmentAt(x, y)) {
-      e.preventDefault();
-      updatePastePreview();
-    }
+    updatePastePreview();
     return;
   }
 
@@ -1816,18 +1828,36 @@ function onClipboardKey(e) {
   pasteAssignment(row, indexFromClientX(x));
 }
 
-// The Delete key deletes the Assignment under the pointer: the block is found
-// the same way a copy is, and it takes the same delete path the block's own
-// panel does. A text field keeps the key for itself, so editing is untouched,
-// and a keyboard-only path already exists through the block's panel.
+// The Delete key deletes the record under the pointer, with no dialog: the
+// Assignment whose block it is on, else the Person of the row header or the
+// Project of the rail row - the record Ctrl+C picks up, from the same lookup.
+// Destroying a Person or a Project takes every Assignment of theirs in the same
+// write, so the notice names the cascade the store itself counted, and Undo
+// steps the whole removal back. A text field keeps the key for itself, so
+// editing is untouched, and a pointer that is not on a record leaves it alone.
 function onDeleteKey(e) {
   if (e.key !== "Delete" || isTextEditing() || !clipboardPointer) return;
-  var node = document.elementFromPoint(clipboardPointer.x, clipboardPointer.y);
+  var x = clipboardPointer.x, y = clipboardPointer.y;
+  var node = document.elementFromPoint(x, y);
   var block = node && node.closest ? node.closest("[data-assignment]") : null;
-  if (!block) return;
+  if (block) {
+    e.preventDefault();
+    closePanel(false);
+    destroyAssignment(block.getAttribute("data-assignment"));
+    return;
+  }
+  var pick = pickupAt(x, y);
+  if (!pick) return;
   e.preventDefault();
   closePanel(false);
-  destroyAssignment(block.getAttribute("data-assignment"));
+  var name = pick.record.name;
+  var destroy = pick.kind === PERSON ? destroyPerson : destroyProject;
+  destroy(pick.record.id).then(function (result) {
+    // A failed write is reported in place of this, and the store's answer is
+    // the only count spoken: nothing is worked out on this side.
+    if (!result) return;
+    showToast(deletionNotice(pick.kind, name, result.assignments));
+  });
 }
 
 /* --- interaction: drag an assignment's edges ----------------------------- */
@@ -2219,12 +2249,20 @@ function archivePerson(id) {
   api("DELETE", "/api/people/" + encodeURIComponent(id)).then(refresh).catch(showError);
 }
 
+// Refresh from what the server wrote, then hand the store's own answer on: the
+// caller needs the count to say what went with the record.
+function afterDestroy(result) {
+  return refresh().then(function () { return result; });
+}
+
 function destroyPerson(id) {
-  api("DELETE", "/api/people/" + encodeURIComponent(id) + "/destroy").then(refresh).catch(showError);
+  return api("DELETE", "/api/people/" + encodeURIComponent(id) + "/destroy")
+    .then(afterDestroy).catch(showError);
 }
 
 function destroyProject(id) {
-  api("DELETE", "/api/projects/" + encodeURIComponent(id) + "/destroy").then(refresh).catch(showError);
+  return api("DELETE", "/api/projects/" + encodeURIComponent(id) + "/destroy")
+    .then(afterDestroy).catch(showError);
 }
 
 function destroyAssignment(id) {

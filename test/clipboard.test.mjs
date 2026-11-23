@@ -206,6 +206,42 @@ test("the wiring asks the clipboard module what each key means", () => {
   assert.match(APP, /closest\("\.rowhead\[data-person\]"\)/);
 });
 
+test("Ctrl+C and Delete resolve the record under the pointer through one lookup", () => {
+  // The pointer-to-record question is the same one for both keys, so it is
+  // asked in one place: a surface that copies one kind deletes that kind too,
+  // and neither key reads the DOM a second way.
+  const pickup = APP.match(/function pickupAt\(x, y\) \{[\s\S]*?\n\}/);
+  assert.ok(pickup, "pickupAt is the one record lookup");
+  assert.match(pickup[0], /pickUpIntent\(clipboardSurfaceAt\(x, y\)\)/);
+  assert.match(pickup[0], /railRowAt\(x, y\)/);
+  assert.match(pickup[0], /personRowAt\(x, y\)/);
+  const copyKey = APP.match(/function onClipboardKey\(e\) \{[\s\S]*?\n\}/);
+  assert.ok(copyKey, "Ctrl+C is bound");
+  assert.match(copyKey[0], /pickupAt\(x, y\)/);
+  assert.equal(copyKey[0].includes("railRowAt("), false, "the copy resolves no row of its own");
+  assert.equal(copyKey[0].includes("personRowAt("), false, "the copy resolves no header of its own");
+  const deleteKey = APP.match(/function onDeleteKey\(e\) \{[\s\S]*?\n\}/);
+  assert.ok(deleteKey, "Delete is bound");
+  assert.match(deleteKey[0], /pickupAt\(x, y\)/);
+  assert.equal(deleteKey[0].includes("railRowAt("), false, "Delete resolves no row of its own");
+  assert.equal(deleteKey[0].includes("personRowAt("), false, "Delete resolves no header of its own");
+});
+
+test("the record lookup answers only on the row itself, never the column around it", () => {
+  // The whole of the People column and the whole of the rail are the surfaces
+  // the pointer's position decides, but the record is the row: the strip of a
+  // row header, and the rail's own button. Somewhere else in either surface
+  // answers nothing, so neither key reaches a record the pointer is merely near.
+  const pickup = APP.match(/function pickupAt\(x, y\) \{[\s\S]*?\n\}/);
+  assert.match(pickup[0], /if \(intent === PROJECT\) \{/);
+  assert.match(pickup[0], /return rail \? \{ kind: PROJECT, record: rail\.project \} : null;/);
+  assert.match(pickup[0], /if \(intent === PERSON\) \{/);
+  assert.match(pickup[0], /return head \? \{ kind: PERSON, record: head\.person \} : null;/);
+  assert.match(pickup[0], /return null;/);
+  // A block in the grid is none of the surfaces, so nothing is picked up there.
+  assert.equal(pickup[0].includes("ASSIGNMENT"), false);
+});
+
 test("Escape clears the clipboard for any kind, under whatever is nearer", () => {
   const handler = APP.match(/document\.addEventListener\("keydown", function \(e\) \{\n {4}if \(e\.key !== "Escape" \|\| e\.defaultPrevented\) return;[\s\S]*?\n {2}\}\);/);
   assert.ok(handler, "the clipboard's Escape handler is bound");
