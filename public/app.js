@@ -2130,8 +2130,10 @@ function refresh(opts) {
   });
 }
 
-// One POST for a new Assignment - a Stack drop or a paste - then the usual
-// refresh and focus, so the two paths behave identically.
+// One POST for a new Assignment - a Stack drop, a paste or a copy - then the
+// usual refresh and focus, so the paths behave identically. The created
+// Assignment is handed back, or null when the write failed and was reported, so
+// a caller that has something to say about the new one can hold its tongue.
 function postAssignment(payload) {
   var created = null;
   return api("POST", "/api/assignments", payload).then(function (assignment) {
@@ -2139,9 +2141,11 @@ function postAssignment(payload) {
     return refresh();
   }).then(function () {
     if (created) focusAssignment(created.id);
+    return created;
   }).catch(function (err) {
     showError(err);
     render();
+    return null;
   });
 }
 
@@ -2157,6 +2161,43 @@ function createAssignment(project, personId, dayIdx) {
     share: 100,
     tags: [],
     note: ""
+  });
+}
+
+/*
+ * Duplicate an Assignment where it already is: the copy lands on the same
+ * Person over the same start and end dates and carries the same Share, tags and
+ * note, made through the one create path a drop and a paste use, so the grid's
+ * refusals stand and the write is one Undo step back. The tags are copied into
+ * their own list, so the copy can never share one with its source. The source
+ * is untouched, and the copy draws as a second band above it, because the row
+ * stacks a person's Assignments by cumulative share.
+ *
+ * One function, taking the Assignment, so the panel's button drives the same
+ * road a later shortcut would.
+ */
+function copyAssignment(a) {
+  var project = projectById[a.project.id];
+  var person = personById[a.person.id];
+  if (!project || !person) return;
+  var refusal = gridCreateRefusal(person, project);
+  if (refusal) {
+    // The grid's own message, and nothing is created: a copy is the same
+    // gesture as a drop or a paste and is refused for the same reasons.
+    showError(new Error(refusal));
+    return;
+  }
+  return postAssignment({
+    projectId: project.id,
+    personId: person.id,
+    start: a.raw.start,
+    end: a.raw.end,
+    share: a.share,
+    tags: (a.raw.tags || []).slice(),
+    note: a.raw.note || ""
+  }).then(function (created) {
+    if (!created) return;
+    showToast("Copied the Assignment of \"" + project.name + "\" on \"" + person.name + "\"");
   });
 }
 
@@ -3053,6 +3094,14 @@ function openAssignmentPanel(a, trigger) {
     restoreRemove.setAttribute("aria-label", "Delete " + a.project.name + " on " + a.person.name);
     foot.appendChild(restoreRemove);
   } else {
+    // Copying destroys nothing, so it carries the ordinary style, not the two
+    // danger buttons' - and it sits before them for the same reason. An archived
+    // Assignment is history and offers no copy, as Ctrl+C over its block does
+    // not: there is nothing to duplicate while it is out of the plan.
+    foot.appendChild(button("btn-ghost", "Copy assignment", function () {
+      closePanel(false);
+      copyAssignment(a);
+    }));
     var archive = button("btn-danger", "Archive assignment", function () {
       closePanel(false);
       archiveAssignment(a.id);

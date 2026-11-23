@@ -232,3 +232,69 @@ test("the feature reference describes the Person copy and paste", () => {
   assert.match(prose, /`Ctrl\+V` over the People column makes the copy/);
   assert.match(prose, /a held Person tints the row header under the pointer/i);
 });
+
+/* --- copying an Assignment from its dialog ------------------------------- */
+
+test("the Assignment dialog's Copy duplicates it in place, through the one create", () => {
+  const copyButton = APP.match(/button\("btn-ghost", "Copy assignment", function \(\) \{[\s\S]*?\n {4}\}\)\)/);
+  assert.ok(copyButton, "the Assignment dialog has a Copy button");
+  assert.match(copyButton[0], /copyAssignment\(a\)/);
+  // Copy is the ordinary style, and the two danger buttons keep theirs and
+  // their order: nothing is destroyed, so Copy comes first.
+  assert.equal(APP.match(/button\("btn-danger", "Archive assignment"/g).length, 1);
+  assert.equal(APP.match(/button\("btn-danger", "Delete assignment"/g).length, 1);
+  const copyAt = APP.indexOf('"Copy assignment"');
+  const archiveAt = APP.indexOf('"Archive assignment"');
+  const deleteAt = APP.indexOf('"Delete assignment"');
+  assert.ok(copyAt > 0 && copyAt < archiveAt && archiveAt < deleteAt,
+    "Copy sits before Archive and Delete");
+  // An archived Assignment is history and offers no copy, as Ctrl+C over its
+  // block holds nothing: the button is outside the archived branch.
+  const archivedBranch = APP.match(/var foot = el\("div", "panel__foot"\);\n {2}if \(archived\) \{[\s\S]*?\n {2}\} else \{/);
+  assert.ok(archivedBranch, "the Assignment panel's archived branch is readable");
+  assert.equal(archivedBranch[0].includes("Copy assignment"), false,
+    "an archived Assignment offers no copy");
+});
+
+test("copyAssignment carries every field of the source and destroys nothing", () => {
+  const copier = APP.match(/function copyAssignment\(a\) \{[\s\S]*?\n\}/);
+  assert.ok(copier, "copyAssignment is the one Assignment copy path");
+  // The create is the grid's own: a drop, a paste and this button all reach
+  // postAssignment, and the grid's refusals are asked before anything is made.
+  assert.match(copier[0], /postAssignment\(\{/);
+  assert.equal(copier[0].includes('api("POST"'), false);
+  assert.match(copier[0], /gridCreateRefusal\(person, project\)/);
+  assert.match(copier[0], /return;/);
+  // Same Person, same Project and the source's own dates.
+  assert.match(copier[0], /\n\s+projectId: project\.id,/);
+  assert.match(copier[0], /\n\s+personId: person\.id,/);
+  assert.match(copier[0], /\n\s+start: a\.raw\.start,/);
+  assert.match(copier[0], /\n\s+end: a\.raw\.end,/);
+  assert.match(copier[0], /\n\s+share: a\.share,/);
+  // The tags are the copy's own list, never the source's.
+  assert.match(copier[0], /\n\s+tags: \(a\.raw\.tags \|\| \[\]\)\.slice\(\),/);
+  assert.match(copier[0], /\n\s+note: a\.raw\.note \|\| ""/);
+  // It announces itself in the toast, naming both ends of the copy, and it
+  // speaks only once the create came back.
+  assert.match(copier[0], /if \(!created\) return;/);
+  assert.match(copier[0], /showToast\("Copied the Assignment of/);
+  // Nothing is archived or deleted on the way.
+  ["destroyAssignment(", "archiveAssignment(", "DELETE"].forEach((word) => {
+    assert.equal(copier[0].includes(word), false, "copyAssignment must not carry " + word);
+  });
+  // The toast's word is the create's own answer, so postAssignment hands the
+  // created Assignment back and null when the write failed.
+  const poster = APP.match(/function postAssignment\(payload\) \{[\s\S]*?\n\}/);
+  assert.ok(poster, "postAssignment is the one Assignment create call");
+  assert.match(poster[0], /return created;/);
+  assert.match(poster[0], /return null;/);
+});
+
+test("the feature reference describes Copy assignment", () => {
+  const prose = DOCS.replace(/\s+/g, " ");
+  assert.match(prose, /Clicking a block opens it: Share, tags and a note, plus Copy assignment, Archive assignment and Delete assignment\./);
+  assert.match(prose, /Copy assignment duplicates the Assignment where it already is/);
+  assert.match(prose, /the copy lands on the same Person over the same start and end dates/);
+  assert.match(prose, /`Copied the Assignment of "Atlas" on "Anna Meier"`/);
+  assert.match(prose, /Copy, Archive and Delete sit at the foot of the Assignment dialog/);
+});

@@ -2755,15 +2755,19 @@ down to the last row and no further. */
 /* The footer holds a panel's actions, so it stays against the bottom of the
    panel while the body scrolls under it instead of scrolling away with the
    content. Its own bottom padding replaces the panel's, so the panel's
-   background reaches its border and the body cannot show below the actions. */
+   background reaches its border and the body cannot show below the actions.
+   A panel can hold more actions than its width takes - the Assignment's Copy,
+   Archive and Delete above their Save - so the footer wraps onto a second line
+   rather than clipping the first action out of its left edge. */
 .panel__foot {
   position: sticky;
   bottom: 0;
   z-index: 1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--sp-3);
+  gap: var(--sp-2) var(--sp-3);
   margin-top: var(--sp-4);
   padding-bottom: var(--sp-5);
   background: var(--canvas);

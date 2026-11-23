@@ -176,15 +176,31 @@ so the two can never store different numbers. The grid keeps every drag inside
 the Plan period, and a change that would leave it is refused with a message
 naming the period.
 
-Clicking a block opens it: Share, tags and a note, plus Archive assignment and
-Delete assignment. Assignment tags are their own vocabulary, suggested from that
-Project's other Assignments. The Delete key deletes the Assignment under the
-pointer with no confirmation - [Undo](../GLOSSARY.md#undo) is the recovery - and
-`Ctrl+C` then `Ctrl+V` over a block copies it to the pointer's row at the same
-share, tags, note and length. That copy lives in memory only; the system
-clipboard is never read or written, and a copy is used up by the paste it makes.
+Clicking a block opens it: Share, tags and a note, plus Copy assignment,
+Archive assignment and Delete assignment. Assignment tags are their own
+vocabulary, suggested from that Project's other Assignments. The Delete key
+deletes the Assignment under the pointer with no confirmation -
+[Undo](../GLOSSARY.md#undo) is the recovery - and `Ctrl+C` then `Ctrl+V` over a
+block copies it to the pointer's row at the same share, tags, note and length.
+That copy lives in memory only; the system clipboard is never read or written,
+and a copy is used up by the paste it makes.
 An archived Assignment is history: it is drawn, marked, and can be restored,
 but it cannot be dragged or copied until it is.
+
+Copy assignment duplicates the Assignment where it already is, with no form and
+no clipboard in between: the copy lands on the same Person over the same start
+and end dates and carries the same [Allocation](../GLOSSARY.md#allocation),
+tags and note, with the tags copied into their own list rather than shared with
+the source. Nothing is destroyed, so Copy sits before Archive assignment and
+Delete assignment and wears the ordinary style rather than the danger one. It
+is the one create the grid makes anyway, so the grid's own rules hold: an
+archived Person or Project refuses by name and nothing is created, and an
+archived Assignment offers no copy at all. The source is untouched, the new
+Assignment is announced in the app's toast, as `Copied the Assignment of
+"Atlas" on "Anna Meier"`, and it is one step of [Undo](../GLOSSARY.md#undo)
+away. Because a row stacks a Person's Assignments by cumulative share, the copy
+draws as a second band directly above the original, and the row's figure and
+hatching then read the duplication.
 
 A Project is copied the same way, but from the rail. With the pointer over a
 rail row, `Ctrl+C` holds that Project and says `Copied Atlas`; `Ctrl+V` over
@@ -222,7 +238,9 @@ says; a day that is not a working day for that Person carries no load at all.
 
 **Where the controls are.** Drag a Project from the rail onto a row, or drag
 across empty row space, to create. Drag a block's body or ends to change it;
-click it, or focus it and press Enter, to open it. The Delete, `Ctrl+C` and
+click it, or focus it and press Enter, to open it. Copy, Archive and Delete sit
+at the foot of the Assignment dialog, in that order, with Copy in the ordinary
+style and Archive and Delete in the danger one. The Delete, `Ctrl+C` and
 `Ctrl+V` keys need only the pointer over a block; over a rail row, `Ctrl+C`
 copies that Project and `Ctrl+V` over the rail makes the copy, and over a row
 header, `Ctrl+C` copies that Person and `Ctrl+V` over the People column makes
