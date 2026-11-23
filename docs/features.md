@@ -134,7 +134,9 @@ what an archived Project is most often wanted for.
 clicking a rail row opens it. Copy, Archive and Delete sit at the foot of the
 Project panel, in that order and with Copy in the ordinary style rather than the
 danger one; Archive and Delete are hidden on an archived Project and Copy is
-not. Absence is a checkbox in the same panel.
+not - and `Ctrl+C` over a rail row then `Ctrl+V` over the rail is the same copy
+with no panel in the way (see [Assignments](#assignments)). Absence is a
+checkbox in the same panel.
 
 ## Assignments
 
@@ -171,6 +173,23 @@ clipboard is never read or written, and a copy is used up by the paste it makes.
 An archived Assignment is history: it is drawn, marked, and can be restored,
 but it cannot be dragged or copied until it is.
 
+A Project is copied the same way, but from the rail. With the pointer over a
+rail row, `Ctrl+C` holds that Project and says `Copied Atlas`; `Ctrl+V` over
+the rail makes the copy at once. It needs no target position - a Project lives
+in the rail and sorts itself - and it is the Copy project button's own path, so
+the copy carries the source's colour, tags, notes and Absence mark, takes the
+next free `X (copy)` name, and is one press of [Undo](../GLOSSARY.md#undo)
+away. A held Project tints the rail row under the pointer. A block in the grid
+carries nothing to `Ctrl+C` - only a rail row does - and over the grid `Ctrl+V`
+on a held Project does nothing at all, since there is no position for it to
+land at.
+
+One slot holds both kinds, so what is held decides what a paste can be: a held
+Project never pastes as an Assignment, and a held Assignment never pastes as a
+Project. `Escape` clears the slot whichever kind it holds, and the tint and the
+ghost go with it. It keeps its other meanings first: a panel, a list inside one
+and a drag in progress each take the key before the clipboard does.
+
 Over-allocation is allowed and drawn, never refused. The part of a block above
 the Person's Availability line is hatched, and the row header's figure turns to
 the signal colour. A Person row's figure is read at the Marker's date from the
@@ -180,7 +199,8 @@ says; a day that is not a working day for that Person carries no load at all.
 **Where the controls are.** Drag a Project from the rail onto a row, or drag
 across empty row space, to create. Drag a block's body or ends to change it;
 click it, or focus it and press Enter, to open it. The Delete, `Ctrl+C` and
-`Ctrl+V` keys need only the pointer over a block.
+`Ctrl+V` keys need only the pointer over a block; over a rail row, `Ctrl+C`
+copies that Project and `Ctrl+V` over the rail makes the copy.
 
 ## Absences
 

@@ -1471,6 +1471,13 @@ h1, h2, h3, p { margin: 0; }
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
 }
 
+/* The rail row a held Project will paste beside, tinted with the grid's own
+   is-drop mix so "a paste lands here" reads the same on both surfaces. Declared
+   after the hover rule so the held copy wins over a pointer that is also there. */
+.stack__item.is-drop {
+  background: color-mix(in srgb, var(--ink) var(--mix-drop), transparent);
+}
+
 /* An archived entry is already drawn in --ink-soft, so its hover still has a
    name to darken; a live one is already --ink. */
 .stack__item:hover .stack__name { color: var(--ink); }
