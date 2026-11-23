@@ -106,13 +106,17 @@ import { copyName } from "./lib/copy.mjs";
 import {
   RAIL,
   GRID,
+  PEOPLE,
   PROJECT,
+  PERSON,
   projectCopy,
+  personCopy,
   assignmentCopy,
   clipboardKind,
   pickUpIntent,
   pasteIntent,
-  railRowTinted
+  railRowTinted,
+  rowHeaderTinted
 } from "./lib/clipboard.mjs";
 import {
   STACK_COLLAPSED_DEFAULT,
@@ -336,21 +340,24 @@ var gridProjects = [];
 var gridAssignments = [];
 
 // The Session clipboard: what Ctrl+C holds, and what Ctrl+V makes of it. One
-// slot serves both kinds - a Project picked up from the rail and an Assignment
-// picked up from a block - so it carries what it holds beside the thing itself,
-// and a held Project can never be pasted as an Assignment or the reverse. Held
-// in memory only: the system clipboard is never read or written, so copying
-// text elsewhere keeps working and the held copy dies with a page reload.
+// slot serves all three kinds - a Project picked up from a rail row, an
+// Assignment picked up from a block and a Person picked up from a row header -
+// so it carries what it holds beside the thing itself, and a held copy can never
+// be pasted as another kind. Held in memory only: the system clipboard is never
+// read or written, so copying text elsewhere keeps working and the held copy
+// dies with a page reload.
 var clipboard = null;
 // Where the pointer last was, so a keypress can act on the day and row under
 // it without a click.
 var clipboardPointer = null;
 // What the pointer drives while the clipboard holds something: the tinted rail
-// row for a held Project, the tinted target row and the ghost of the copy for a
-// held Assignment.
+// row for a held Project, the tinted row header for a held Person, the tinted
+// target row and the ghost of the copy for a held Assignment.
 var pastePreview = null;
 var pasteDropRow = null;
-var railTintItem = null;
+// The row the pointer tints: one slot, because the clipboard holds one kind at
+// a time and only one of them can be tinting a row.
+var clipboardTint = null;
 
 /* --- dates (UTC, so day arithmetic never crosses a DST edge) ------------- */
 
@@ -1584,15 +1591,29 @@ function railRowAt(x, y) {
   return project ? { item: item, project: project } : null;
 }
 
+// The row header under the pointer: its button, and the Person it names. An
+// archived Person has a header too, so copying one with the keyboard is offered
+// as it is from their panel - copying creates rather than restores, so nothing
+// is refused here.
+function personRowAt(x, y) {
+  var node = document.elementFromPoint(x, y);
+  var head = node && node.closest ? node.closest(".rowhead[data-person]") : null;
+  if (!head) return null;
+  var person = personById[head.getAttribute("data-person")];
+  return person ? { head: head, person: person } : null;
+}
+
 // Which surface the pointer is over, as the clipboard reads it: the Projects
-// rail, the grid of Person rows, or neither. The whole rail counts, not only
-// its rows, because a Project needs no target position. A report has no grid
-// rows and lists views rather than Projects, so it is neither.
+// rail, the People column of row headers, the grid of Person rows, or none of
+// them. The rail and the People column count whole, not only their rows, because
+// a Project and a Person both need no target position. A report has no grid rows
+// and lists views rather than Projects, so it is none of them.
 function clipboardSurfaceAt(x, y) {
   if (isReport) return null;
   var node = document.elementFromPoint(x, y);
   if (!node) return null;
   if (stackPanel && stackPanel.contains(node)) return RAIL;
+  if (node.closest && node.closest(".tl__heads")) return PEOPLE;
   if (rowInfoAt(x, y)) return GRID;
   return null;
 }
@@ -1623,29 +1644,45 @@ function clearPastePreview() {
   if (pastePreview) { pastePreview.node.remove(); pastePreview = null; }
 }
 
-function clearRailTint() {
-  if (railTintItem) { railTintItem.classList.remove("is-drop"); railTintItem = null; }
+function clearClipboardTint() {
+  if (clipboardTint) { clipboardTint.classList.remove("is-drop"); clipboardTint = null; }
+}
+
+// Tint the row the pointer is over while the clipboard holds a kind that pastes
+// at no position: the rail row for a held Project, the row header for a held
+// Person, both with the drag's own is-drop tint. False when nothing is held
+// there, so the caller can fall through to the ghost a held Assignment draws.
+function tintRowUnderPointer() {
+  if (!clipboardPointer) return false;
+  var surface = clipboardSurfaceAt(clipboardPointer.x, clipboardPointer.y);
+  var item = null;
+  if (railRowTinted(clipboard) && surface === RAIL) {
+    var rail = railRowAt(clipboardPointer.x, clipboardPointer.y);
+    item = rail && rail.item;
+  } else if (rowHeaderTinted(clipboard) && surface === PEOPLE) {
+    var head = personRowAt(clipboardPointer.x, clipboardPointer.y);
+    item = head && head.head;
+  }
+  if (!item) return false;
+  clipboardTint = item;
+  clipboardTint.classList.add("is-drop");
+  return true;
 }
 
 // While the clipboard holds something, the pointer shows what a paste would do
-// with it. A held Project has no position to ghost, so the rail row under the
-// pointer carries the drag's own is-drop tint instead. A held Assignment tints
-// its target row and follows the pointer with a ghost of the copy, at the day
-// the paste would land on; it stands down over an archived Person, whose paste
-// is refused.
+// with it. A held Project and a held Person have no position to ghost, so the
+// row under the pointer carries the tint instead. A held Assignment tints its
+// target row and follows the pointer with a ghost of the copy, at the day the
+// paste would land on; it stands down over an archived Person, whose paste is
+// refused, and anywhere off the grid, where a paste would do nothing.
 function updatePastePreview() {
-  clearRailTint();
-  if (railRowTinted(clipboard)) {
+  clearClipboardTint();
+  if (tintRowUnderPointer()) { clearPastePreview(); return; }
+  if (!clipboard || !clipboardPointer) { clearPastePreview(); return; }
+  if (clipboardSurfaceAt(clipboardPointer.x, clipboardPointer.y) !== GRID) {
     clearPastePreview();
-    if (!clipboardPointer) return;
-    if (clipboardSurfaceAt(clipboardPointer.x, clipboardPointer.y) !== RAIL) return;
-    var rail = railRowAt(clipboardPointer.x, clipboardPointer.y);
-    if (!rail) return;
-    railTintItem = rail.item;
-    railTintItem.classList.add("is-drop");
     return;
   }
-  if (!clipboard || !clipboardPointer) { clearPastePreview(); return; }
   var row = rowInfoAt(clipboardPointer.x, clipboardPointer.y);
   if (!row) { clearPastePreview(); return; }
   if (row.el !== pasteDropRow) {
@@ -1705,6 +1742,18 @@ function pasteProject() {
   copyProject(source);
 }
 
+// A Person paste makes the copy at once, through the same function the Person
+// panel's Copy button calls - one creation path, one name rule, one Undo step -
+// with no target position to name, because a name sorts itself into the column.
+// Like the other two it uses the copy up.
+function pastePerson() {
+  var source = personById[clipboard.personId];
+  if (!source) return;
+  clipboard = null;
+  updatePastePreview();
+  copyPerson(source);
+}
+
 function onClipboardPointerMove(ev) {
   clipboardPointer = { x: ev.clientX, y: ev.clientY };
   if (clipboard) updatePastePreview();
@@ -1718,15 +1767,26 @@ function onClipboardKey(e) {
   var x = clipboardPointer.x, y = clipboardPointer.y;
 
   if (key === "c") {
-    // Only the rail's rows pick up. A block in the grid carries nothing: it
-    // names a Project the reader is hovering, and copying that Project from
-    // there would copy something nobody pointed at.
-    if (pickUpIntent(clipboardSurfaceAt(x, y)) === PROJECT) {
+    // Only the rail's rows pick a Project up and only a row header picks a
+    // Person up. A block in the grid carries nothing: it names a Project the
+    // reader is hovering, and copying that Project from there would copy
+    // something nobody pointed at.
+    var pickUp = pickUpIntent(clipboardSurfaceAt(x, y));
+    if (pickUp === PROJECT) {
       var rail = railRowAt(x, y);
       if (!rail) return;
       e.preventDefault();
       clipboard = projectCopy(rail.project.id);
       showToast("Copied " + rail.project.name);
+      updatePastePreview();
+      return;
+    }
+    if (pickUp === PERSON) {
+      var head = personRowAt(x, y);
+      if (!head) return;
+      e.preventDefault();
+      clipboard = personCopy(head.person.id);
+      showToast("Copied \"" + head.person.name + "\"");
       updatePastePreview();
       return;
     }
@@ -1742,6 +1802,11 @@ function onClipboardKey(e) {
   if (intent === PROJECT) {
     e.preventDefault();
     pasteProject();
+    return;
+  }
+  if (intent === PERSON) {
+    e.preventDefault();
+    pastePerson();
     return;
   }
   var row = rowInfoAt(x, y);
@@ -2777,6 +2842,15 @@ function openPersonPanel(person, trigger) {
   var error = errorLine(node);
 
   var foot = el("div", "panel__foot");
+  if (editing) {
+    // Copying destroys nothing, so it carries the ordinary style, not the two
+    // danger buttons' - and it is offered on an archived Person too, where
+    // copying one as a new Person is still a create rather than a restore.
+    foot.appendChild(button("btn-ghost", "Copy person", function () {
+      closePanel(false);
+      copyPerson(person);
+    }));
+  }
   if (editing && !person.archived) {
     var archive = button("btn-danger", "Archive person", function () {
       closePanel(false);
@@ -2814,6 +2888,31 @@ function openPersonPanel(person, trigger) {
 
   openPanel(node, trigger);
   if (!editing) nameInput.focus();
+}
+
+/*
+ * Copy a Person at once, with no form in between: the new Person carries the
+ * source's Location, Availability, Person tags and note, takes the name the rule
+ * offers so it is never one a live Person already holds, and starts with no
+ * Assignments of their own - their work is their own, so a copy is an empty row.
+ * The write is the ordinary create, so it is one Undo step back like any other.
+ *
+ * One function, taking the Person, so a keyboard shortcut can drive the same
+ * road the button does.
+ */
+function copyPerson(person) {
+  var live = data.people.filter(function (p) { return !p.archived; })
+    .map(function (p) { return p.name; });
+  var name = copyName(person.name, live);
+  return api("POST", "/api/people", {
+    name: name,
+    location: person.location,
+    availability: person.availability,
+    tags: person.tags,
+    note: person.note
+  }).then(refresh).then(function () {
+    showToast("Copied \"" + person.name + "\" as \"" + name + "\"");
+  }).catch(showError);
 }
 
 function openProjectPanel(project, trigger) {
@@ -5213,12 +5312,12 @@ function bindChrome() {
   panelLayer.addEventListener("pointerdown", function (e) {
     if (e.target === panelLayer) closePanel(true);
   });
-  // Escape clears the Session clipboard for either kind, so a copy picked up by
-  // mistake is abandoned the same way whatever it holds - and with it the rail's
-  // tint and the paste's ghost. It stands down when something nearer claims the
-  // key, which is why it is registered before the panel's own: a panel, the
-  // Options menu, a list inside a panel, and a drag already in flight all keep
-  // the Escape they have, and only a second press reaches the clipboard.
+  // Escape clears the Session clipboard for all three kinds, so a copy picked up
+  // by mistake is abandoned the same way whatever it holds - and with it the
+  // row's tint and the paste's ghost. It stands down when something nearer
+  // claims the key, which is why it is registered before the panel's own: a
+  // panel, the Options menu, a list inside a panel, and a drag already in flight
+  // all keep the Escape they have, and only a second press reaches the clipboard.
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape" || e.defaultPrevented) return;
     if (panel || (optionsMenu && !optionsMenu.hidden)) return;
@@ -5231,9 +5330,9 @@ function bindChrome() {
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && panel) closePanel(true);
   });
-  // Copy and paste what the pointer is over: a Project from a rail row, an
-  // Assignment from a block. They stand down inside text fields, so the
-  // browser's own keys are untouched there.
+  // Copy and paste what the pointer is over: a Project from a rail row, a
+  // Person from a row header, an Assignment from a block. They stand down inside
+  // text fields, so the browser's own keys are untouched there.
   document.addEventListener("keydown", onClipboardKey);
   // Delete removes the Assignment under the pointer, beside them.
   document.addEventListener("keydown", onDeleteKey);
