@@ -29,7 +29,7 @@ import {
   normalizeStep,
   stepSettingRefusal
 } from "./lib/panels.mjs";
-import { offeredTags, tickToggled, commitLabel, committedTags } from "./lib/tag-picker.mjs";
+import { offeredTags, tickToggled, commitLabel, committedTags, enterTags } from "./lib/tag-picker.mjs";
 import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
@@ -2334,9 +2334,11 @@ var tagMenuSeq = 0;
 
 // The tag field: chips, an input that takes a new tag, and the suggestion list
 // it opens. The list is the Filter's own fixed dropdown - it narrows as you
-// type, the arrow keys move the highlight, Space ticks a row and Enter adds
-// every ticked tag at once - so one narrowing serves several picks, and the
-// plan's vocabulary can be taken more than a tag at a time.
+// type with its first row already highlighted, the arrow keys move the
+// highlight, Space ticks a row and Enter takes the highlighted row or, while
+// rows are ticked, adds every ticked tag at once - so one narrowing serves
+// several picks, and the plan's vocabulary can be taken more than a tag at a
+// time.
 // `onChange`, when given, is called with the new list after a chip is added or
 // removed, so a list that saves itself needs no Save button of its own.
 function tagEditor(initial, suggest, onChange) {
@@ -2484,7 +2486,11 @@ function tagEditor(initial, suggest, onChange) {
       watch(false);
       return;
     }
-    if (rowIndex >= shown.length) rowIndex = shown.length - 1;
+    // The highlight lands on the first row of every redraw - an opened list and
+    // a narrowing alike - so one Space ticks the obvious choice, and it stays
+    // inside the rows on show: a narrowing that leaves nothing leaves no
+    // highlight rather than a stale one.
+    rowIndex = shown.length ? 0 : -1;
     updateCommitRow();
     watch(true);
     place();
@@ -2503,24 +2509,23 @@ function tagEditor(initial, suggest, onChange) {
     updateCommitRow();
   }
 
-  function commitTicks() {
-    tags = committedTags(tags, "", ticks);
+  // Adding the tags a key chose, whichever key chose them: the commits below
+  // differ only in what they read and in whether the typed text is spent.
+  function commitAdd(add) {
+    tags = committedTags(tags, "", add);
     input.value = "";
     render();
     close();
     if (onChange) onChange(tags.slice());
   }
 
+  function commitTicks() { commitAdd(ticks); }
+
   // The typed text is committed as it always was, so free text is never lost to
-  // the list: Enter with nothing ticked, a comma, or leaving the field makes a
-  // new tag of it.
+  // the list: a comma, or leaving the field, makes a new tag of it.
   function commitTyped() {
     if (input.value.trim() === "") { input.value = ""; close(); return; }
-    tags = committedTags(tags, input.value, []);
-    input.value = "";
-    render();
-    close();
-    if (onChange) onChange(tags.slice());
+    commitAdd([input.value]);
   }
 
   commitRow.addEventListener("mousedown", function (e) { e.preventDefault(); });
@@ -2533,7 +2538,6 @@ function tagEditor(initial, suggest, onChange) {
       e.preventDefault();
       if (menu.hidden) {
         // The list opens where the field was left, with its first row in reach.
-        rowIndex = 0;
         draw();
       } else if (shown.length) {
         rowIndex = e.key === "ArrowDown"
@@ -2554,8 +2558,9 @@ function tagEditor(initial, suggest, onChange) {
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      if (ticks.length) commitTicks();
-      else commitTyped();
+      var add = enterTags(input.value, ticks, shown, rowIndex);
+      if (add.length) commitAdd(add);
+      else { input.value = ""; close(); }
       return;
     }
     if (e.key === ",") { e.preventDefault(); commitTyped(); return; }

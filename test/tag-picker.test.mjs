@@ -4,7 +4,8 @@ import {
   offeredTags,
   tickToggled,
   commitLabel,
-  committedTags
+  committedTags,
+  enterTags
 } from "../public/lib/tag-picker.mjs";
 import { suggestPersonTags } from "../public/lib/panels.mjs";
 
@@ -65,4 +66,33 @@ test("a commit adds the typed text and every ticked tag at once", () => {
   );
   // Nothing typed and nothing ticked leaves the tags exactly as they were.
   assert.deepEqual(committedTags(["lead"], "", []), ["lead"]);
+});
+
+test("Enter ranks ticked rows, then the highlighted row, then the typed text", () => {
+  const rows = ["skill:backend", "skill:frontend"];
+  // Ticked rows outrank the highlight: the multi-select lands whole, and the
+  // typed text is spent on narrowing rather than added as a tag of its own.
+  assert.deepEqual(enterTags("skill:f", ["ops", "design"], rows, 0), ["ops", "design"]);
+  // A highlighted row beats the typed text: a partial word chooses the tag it
+  // was narrowing to instead of making a new one of it.
+  assert.deepEqual(enterTags("skill:back", [], rows, 0), ["skill:backend"]);
+  assert.deepEqual(enterTags("skill:front", [], rows, 1), ["skill:frontend"]);
+  // With nothing highlighted, the typed text is only committed when the list
+  // holds no row: a term matching nothing is still the way a new tag is made.
+  assert.deepEqual(enterTags("skill:mobile", [], rows, -1), ["skill:mobile"]);
+  assert.deepEqual(enterTags("skill:mobile", [], [], -1), ["skill:mobile"]);
+  // Nothing typed and nothing highlighted adds nothing.
+  assert.deepEqual(enterTags("", [], rows, -1), []);
+  assert.deepEqual(enterTags("   ", [], [], -1), []);
+  assert.deepEqual(enterTags(null, null, null, -1), []);
+});
+
+test("typed text differing only by case or surrounding space names the row", () => {
+  const rows = ["skill:backend", "ops"];
+  // The highlighted row, whatever the case the typist used.
+  assert.deepEqual(enterTags(" Skill:Backend ", [], rows, 0), ["skill:backend"]);
+  // And even with no highlight to go on, the row answers rather than a second
+  // tag differing by a capital letter.
+  assert.deepEqual(enterTags("OPS", [], rows, -1), ["ops"]);
+  assert.deepEqual(enterTags("  ops", [], rows, -1), ["ops"]);
 });
