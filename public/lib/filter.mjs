@@ -21,8 +21,10 @@
  *
  * A query is either plain text - searched through the "Look in" scope as
  * before - or a single `field: value` term, which names one field and ignores
- * the scope. There is one owner for that rule: parseFilterTerm, below, is what
- * both the filter and the suggestions read.
+ * the scope. Text before a colon that names no field is plain text, so the
+ * plan's own typed vocabulary can be typed as typed. There is one owner for
+ * that rule: parseFilterTerm, below, is what both the filter and the
+ * suggestions read.
  */
 import { absenceProjectIds, absencesFor, isWorkingDay } from "./workdays.mjs";
 
@@ -204,8 +206,12 @@ export function fieldLabel(fields) {
  * - Letters-and-spaces before the colon, a value after it, and a prefix in the
  *   table: a field term, carrying its field ids and the trimmed value.
  * - Letters-and-spaces before the colon, a value after it, but no such prefix:
- *   an unknown term carrying the offending prefix. The caller shows no match
- *   and names it, rather than quietly treating it as plain text.
+ *   plain text too, carrying the prefix it could not read as a field. A
+ *   typed tag looks exactly like the Filter's own `field: value`, so
+ *   `skill:De` is the query a reader naturally types; it is searched as text
+ *   and finds the rows carrying `skill:DevOps`. `unknownPrefix` is what lets
+ *   the empty state name the prefix when the text search leaves nothing, so a
+ *   mistyped field still explains itself instead of passing silently.
  *
  * The value is everything after the first colon, spaces included, with only
  * the outer spaces stripped. The prefix is matched case-insensitively and
@@ -225,15 +231,17 @@ export function parseFilterTerm(query) {
   if (!plausible || value === "") return { kind: "plain", text: trimmed };
 
   const fields = PREFIX_FIELDS[prefix];
-  if (!fields) return { kind: "unknown", prefix: prefix };
+  if (!fields) return { kind: "plain", text: trimmed, unknownPrefix: prefix };
   return { kind: "field", fields: fields.slice(), value: value, prefix: prefix };
 }
 
 // The hint for an unrecognised prefix: it names the offending word and the
-// fields the Filter does know.
+// fields the Filter does know. It is a possibility, not a verdict, because the
+// term was still searched as text: it is shown only when that search found
+// nothing, and a working typed-tag search never sees it.
 export function unknownFieldHint(prefix) {
-  return '"' + String(prefix == null ? "" : prefix) + '" is not a field the Filter knows. ' +
-    "Try person, people, person tag, person note, person location, project, " +
+  return '"' + String(prefix == null ? "" : prefix) + ':" is not a field the Filter knows - if you meant a field, try ' +
+    "person, people, person tag, person note, person location, project, " +
     "project note, project tag, assignment tag, assignment note, milestone, " +
     "milestone tag, milestone note, name, tag or note.";
 }
@@ -251,20 +259,25 @@ function won(text, q) {
 }
 
 /*
- * A tag is matched exactly when the value carries its own kind - a colon
- * inside it, as in `person tag: skill:DevOps` - and as a substring otherwise.
- * A plain value keeps finding every tag that contains its letters, so `devops`
- * still reaches `DevOps`, `skill:DevOps` and `skill:DevOps-2`; a value with a
- * colon asks for that one tag and nothing beside it. The signal is the colon
- * alone: the Filter cannot know a plan's tag kinds at match time, so it never
- * asks whether the text before the colon names one.
+ * The one tag rule, serving all four tag fields, so a value is read the same
+ * way whichever of them it reaches. A value that carries a colon is a typed
+ * tag and matches by prefix, case-insensitively and trimmed: `skill:D` finds
+ * `skill:DevOps` and `skill:Data`, and `person tag: skill:DevOps` finds
+ * `skill:DevOps-2` beside `skill:DevOps` - while still sparing a bare `DevOps`,
+ * which is what a colon asks for. Prefix rather than equality is what lets a
+ * reader narrow a typed vocabulary one character at a time. A value without a
+ * colon keeps the loose substring rule, so `devops` still reaches `DevOps`,
+ * `skill:DevOps` and `skill:DevOps-2`. The signal is the colon alone: the
+ * Filter cannot know a plan's tag kinds at match time, so it never asks
+ * whether the text before the colon names one.
  */
 function someTag(tags, q) {
   const wanted = lower(q).trim();
-  if (wanted.indexOf(":") === -1) {
-    return (tags || []).some(function (tag) { return won(tag, wanted); });
-  }
-  return (tags || []).some(function (tag) { return lower(tag).trim() === wanted; });
+  const typed = wanted.indexOf(":") !== -1;
+  return (tags || []).some(function (tag) {
+    const text = lower(tag).trim();
+    return typed ? text.indexOf(wanted) === 0 : text.indexOf(wanted) !== -1;
+  });
 }
 
 // One place each field is read from, so matching and suggesting cannot drift
@@ -323,8 +336,7 @@ function assignmentMatches(assignment, q) {
  * means no filter at all.
  *
  * A field term ignores the scope and is matched only against the field or
- * fields it names; an unknown term matches nothing. Propagation is the same
- * for every kind of match.
+ * fields it names. Propagation is the same for every kind of match.
  *
  * Milestones are narrowed only by a term that names a milestone field: they
  * are annotations over the rows, so a term about them says nothing about which
@@ -378,7 +390,7 @@ export function filterPlan(plan, query, scopes) {
         if (assignmentMatches(assignment, q)) matchedAssignments.add(assignment.id);
       });
     }
-  } else if (term.kind === "field") {
+  } else {
     narrowsMilestones = namesKind(term.fields, "milestone");
     narrowsRows = namesRowField(term.fields);
     const q = lower(term.value);
@@ -398,10 +410,6 @@ export function filterPlan(plan, query, scopes) {
         if (termMatches("milestone", milestone, term.fields, q)) matchedMilestones.add(milestone.id);
       });
     }
-  } else {
-    // An unrecognised prefix: no match at all, so the empty state can explain
-    // the field it did not recognise.
-    return { people: [], projects: [], assignments: [], milestones: [] };
   }
 
   const shownMilestones = narrowsMilestones
@@ -538,8 +546,8 @@ function addCandidate(out, seen, plan, prefix, source, value, unit) {
   seen.add(key);
   // The count comes from the very query selecting the row runs, read in the
   // row's unit, so a suggestion can never promise a result it does not apply.
-  // A tag value is therefore counted by the matcher's case-insensitive
-  // substring rule, not by exact equality.
+  // A tag value is therefore counted by whatever rule the inserted term's
+  // colon or lack of one puts it under.
   const insert = prefix + ": " + text;
   const view = filterPlan(plan, insert, defaultScopes());
   out.push({
@@ -726,19 +734,20 @@ export function searchEverywhereSuggestion(plan, query, scopes) {
  * things it would match. A plain query draws only from the areas currently
  * looked in, so Milestones - an annotation rather than a look-in area - are
  * offered by their own prefixes alone; a typed term draws only from the field it
- * names; an unknown prefix draws nothing. Alongside the vocabulary, a plain
- * query is offered the field prefixes themselves.
+ * names. Alongside the vocabulary, a plain query is offered the field prefixes
+ * themselves.
  */
 export function filterSuggestions(plan, query, scopes) {
   const term = parseFilterTerm(query);
-  if (term.kind === "unknown") return [];
   if (term.kind === "field") return fieldSuggestions(plan, term.fields, term.value, term.prefix);
 
   const q = lower(query).trim();
   if (q === "") return [];
   // A recognised prefix with no value yet - `person tag:` - is not a term, so
-  // the scope still applies to the text; but the dropdown can still teach the
-  // field's whole vocabulary. A colon on anything else is prose.
+  // the text still governs the scope; but the dropdown can still teach the
+  // field's whole vocabulary. Anything else carrying a colon is a plain term,
+  // because a prefix the Filter does not know is searched as text - so a typed
+  // tag typed as typed is offered the tags it is narrowing.
   const colon = query.indexOf(":");
   if (colon !== -1) {
     const prefix = query.slice(0, colon).trim().toLowerCase().replace(/\s+/g, " ");
@@ -746,7 +755,6 @@ export function filterSuggestions(plan, query, scopes) {
     if (fields && query.slice(colon + 1).trim() === "") {
       return fieldSuggestions(plan, fields, "", prefix);
     }
-    return [];
   }
   return withTeachingPrefixes(scopedSuggestions(plan, q, scopes), q);
 }

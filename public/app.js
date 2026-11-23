@@ -4467,8 +4467,10 @@ function initMinimap() {
 /* --- render -------------------------------------------------------------- */
 
 // The empty result: it names what was typed, says what was searched and
-// offers a way out. A typed term names its field; an unrecognised prefix is
-// named back with a hint. The filter is still on, so the field stays as it is.
+// offers a way out. A typed term names its field; a term whose prefix named no
+// field was searched as text, so it is named back with the hint that the
+// prefix may have meant a field. The filter is still on, so the field stays as
+// it is.
 function buildEmptyState() {
   var term = parseFilterTerm(filterQuery);
   var box = el("div", "filter-empty");
@@ -4481,11 +4483,11 @@ function buildEmptyState() {
     line.appendChild(typed);
     line.appendChild(document.createTextNode(" in " + fieldLabel(term.fields) + "."));
     hint.textContent = "A typed term searches only the field it names; Look in is not used.";
-  } else if (term.kind === "unknown") {
+  } else if (term.unknownPrefix) {
     typed.textContent = filterQuery.trim();
     line.appendChild(typed);
-    line.appendChild(document.createTextNode("."));
-    hint.textContent = unknownFieldHint(term.prefix);
+    line.appendChild(document.createTextNode(" in " + searchedAreas(filterScopes) + "."));
+    hint.textContent = unknownFieldHint(term.unknownPrefix);
   } else {
     typed.textContent = filterQuery.trim();
     line.appendChild(typed);
@@ -5506,7 +5508,7 @@ function updateFilterChrome() {
   var term = parseFilterTerm(filterInput.value);
   // A typed term aims at one field, so the plain-term scope is still
   // described but visibly set aside while one is in the field.
-  var overridden = term.kind === "field" || term.kind === "unknown";
+  var overridden = term.kind === "field";
   // The button names the count; the full selection, and the note that a typed
   // term sets the scope aside, ride on the accessible label.
   filterScopeBtn.textContent = scopeLabel(filterScopes);

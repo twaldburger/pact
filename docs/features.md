@@ -527,12 +527,20 @@ aside: `person tag: architect`, `project notes: delayed`, `people: tim`,
 `tag:` searches the rows' three tag kinds and never the Milestones', `name:`
 searches People and Projects, and `note:` searches Person and Assignment notes.
 A tag value that carries its own kind - a colon inside it, as in
-`person tag: skill:DevOps` - matches that tag exactly and case-insensitively
-rather than as a substring, while a value without a colon keeps the loose rule,
-so `person tag: devops` still finds `DevOps`, `skill:DevOps` and
-`skill:DevOps-2`.
-An unrecognised prefix matches nothing and the empty state names it with a list
-of the fields the Filter knows, rather than quietly treating it as text.
+`person tag: skill:D` - matches every tag that starts with it, case-insensitively
+and trimmed, so a typed tag can be narrowed a character at a time: `skill:D`
+finds `skill:DevOps` and `skill:Data`. It reaches the numbered neighbour too,
+so `person tag: skill:DevOps` finds `skill:DevOps-2` beside `skill:DevOps`, but
+never a bare `DevOps`, which is what the colon asks to be spared. A value
+without a colon keeps the loose rule, so `person tag: devops` still finds
+`DevOps`, `skill:DevOps` and `skill:DevOps-2`.
+
+The text before a colon that names no field is not a field name, so the whole
+term is read as plain text: the plan's own typed vocabulary can be searched as
+it is typed, and `skill:De` finds the rows carrying `skill:DevOps` the way any
+plain term does. When that plain search leaves nothing, the empty state names
+the prefix it could not read as a field and lists the fields the Filter does
+know, so a mistyped field still explains itself rather than passing as text.
 
 A term naming a Milestone field narrows the Milestones alone and leaves the rows
 whole. That is deliberate: with the Milestone rules switched off, hiding the
