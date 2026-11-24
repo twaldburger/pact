@@ -85,8 +85,8 @@ A body of work that Assignments place onto People; it carries a name, a colour, 
 _Avoid_: engagement, job, client, ticket
 
 **Assignment**:
-One Project placed on one Person for a continuous date range at an Allocation - the rectangle drawn on the Timeline. A change of share or a gap means a second Assignment. It carries any number of Assignment tags and an optional note.
-_Avoid_: booking, block, slot, shift, work
+One Project placed on one Person for a continuous date range at an Allocation - the rectangle drawn on the Timeline. A change of share or a gap means a second Assignment. It carries any number of Assignment tags, an optional note, and an optional name: free text that says which work the block is, so a Person allocated to the same Project twice can tell the two apart. The name is never a second Project - it carries no colour, no tags and no capacity, and the Project still decides the fill.
+_Avoid_: booking, block, slot, shift, work, title
 
 **Stack**:
 The list of Projects available to drag onto the Timeline; it holds no dates of its own. The interface labels this rail Projects, and a report mounts the same rail - same width, same fold, same remembered collapsed state - listing the report's views instead.
@@ -112,7 +112,7 @@ Its absence means the default; if it exists but cannot be read, the default is u
 _Avoid_: preferences, settings, options, registry
 
 **View setting**:
-One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band, the holiday band, the Milestone rules, the availability lines, whether the assignment blocks are drawn, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's default on its own.
+One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band, the holiday band, the Milestone rules, the availability lines, whether the assignment blocks are drawn, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, what a [Block label](#block-label) names, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's default on its own.
 _Avoid_: preference, option, display state
 
 **Step**:
@@ -135,12 +135,16 @@ _Avoid_: today line, now line, cursor, playhead, reference line, milestone
 An overview strip of the Timeline, off by default and turned on under the Options glyph, fixed at the board's bottom-right. Its height is how much of the shown rows' available capacity is used on each day rather than an absolute assigned share, and a day past full is over-allocation, drawn at the top of that scale in the signal colour. It follows the Filter and Show archived as the grid does and shows an empty map when the Filter leaves nothing, and it highlights the stretch of the period the grid currently shows, which can be dragged - or the strip clicked - to scroll the Timeline. It is a view setting, kept in the Config and restored on load like Zoom and Row height, and is independent of the collapsible Stack.
 _Avoid_: overview, thumbnail, mini-chart, density chart
 
+**Block label**:
+What the label drawn inside a block names: its Project's name, its Assignment's own name, or both - `Project · 40%`, `PDF export · 40%` or `PDF export · Atlas Platform Rebuild · 40%`. The choice is one row in the Options menu that cycles the three on a press, stored as a [View setting](#view-setting) and restored by `Reset view`. It chooses words and nothing else: the Project still decides the colour, the tags and every figure, and the Share follows the name whatever is chosen. A nameless Assignment falls back to its Project's name under the settings that ask for a name, so a block is never left saying only a percentage.
+_Avoid_: title, caption, block text, assignment label, block name
+
 **Zoom**:
 The drawn width of one day. It changes what you see and never what is stored: dates are always exact days. There are four levels - Day, Week, Sprint and Month - each opening on its own Grid spacing; Sprint opens at half Week's width, so by default a two-week sprint spans what one week does at Week zoom, while its secondary band names the sprint chain instead of days or weeks.
 _Avoid_: granularity, resolution, scale
 
 **Grid spacing**:
-The drawn width of one day for the active Zoom, in whole pixels, set by the horizontal-arrow pair between the row-height stepper and Undo/Redo. Each of the four zooms remembers its own value, so re-entering a zoom returns to the width last set for it rather than resetting. The Zoom buttons open the defaults - Day 44, Week 16, Sprint 8, Month 5 - and the pair then moves the active zoom's width in 2px steps between 2 and 48, disabled at each end. A block too narrow for its label draws nothing, exactly as before, and its label above still names the Project.
+The drawn width of one day for the active Zoom, in whole pixels, set by the horizontal-arrow pair between the row-height stepper and Undo/Redo. Each of the four zooms remembers its own value, so re-entering a zoom returns to the width last set for it rather than resetting. The Zoom buttons open the defaults - Day 44, Week 16, Sprint 8, Month 5 - and the pair then moves the active zoom's width in 2px steps between 2 and 48, disabled at each end. A block too narrow for its label draws nothing, exactly as before, and its label above names it in the words the Block label setting chose.
 _Avoid_: day width, column width, density, gap
 
 **Sprint**:
@@ -164,7 +168,7 @@ To step the plan back one change at a time, and Redo to step forward again, from
 _Avoid_: revert, roll back, history, snapshot
 
 **Filter**:
-The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `project tag:platform`, `people: tim` or `project notes: delayed`, with a bare `tag:` spanning the rows' three tag kinds and `project tag:` narrowing to Projects. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. The Filter also reaches Milestones, by name, tag and note (`milestone: api`, `milestone tag: delivery`, `milestone note: signed`): a term naming a milestone field narrows the Milestones alone and leaves the rows whole, because a Milestone is an annotation over the rows rather than one of them, and it still obeys the visibility rule that decides which Milestones are drawn. Milestone tags are their own fourth vocabulary, so a bare `tag:` never reaches them. It is session-only and respects Show archived.
+The one piece of text that hides everything on the grid that does not match it, as a case-insensitive substring. A plain term is read through the Look in scope, across the People, Projects and Assignments it is set to look in; a single `field: value` term names the field it searches and ignores that scope, as in `person tag:architect`, `project tag:platform`, `people: tim`, `assignment name: wiring` or `project notes: delayed`, with a bare `tag:` spanning the rows' three tag kinds, `name:` spanning every row name - an Assignment's own included - and `project tag:` narrowing to Projects. A match carries what belongs to it - a matching Project brings all of its Assignments, a matching Person all of their work, and a matching Assignment its Person's row and its Project. The Filter also reaches Milestones, by name, tag and note (`milestone: api`, `milestone tag: delivery`, `milestone note: signed`): a term naming a milestone field narrows the Milestones alone and leaves the rows whole, because a Milestone is an annotation over the rows rather than one of them, and it still obeys the visibility rule that decides which Milestones are drawn. Milestone tags are their own fourth vocabulary, so a bare `tag:` never reaches them. It is session-only and respects Show archived.
 _Avoid_: search, find, search bar, query
 
 **Tag split**:

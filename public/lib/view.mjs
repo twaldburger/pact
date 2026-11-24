@@ -4,7 +4,8 @@
  * zoom and which of its views is showing, the weekend band, the holiday band,
  * the milestone rules, the availability lines, the assignment blocks, the Grid
  * dividers, the Minimap and the Marker's own visibility, the Colour palette,
- * whether the Stack rail is folded, and the two sort keys. It lives in
+ * what a block's label names, whether the Stack rail is folded, and the two
+ * sort keys. It lives in
  * `data/config.json` beside the active plan file, so it survives a reload; the
  * Filter and the Marker's date do not, being a query and a cursor rather than
  * settings.
@@ -27,6 +28,7 @@ import {
   clampGridSpacing
 } from "./timeline.mjs";
 import { PALETTE_DEFAULT, isPalette } from "./palette.mjs";
+import { BLOCK_LABEL_DEFAULT, isBlockLabel } from "./label.mjs";
 import { STACK_COLLAPSED_DEFAULT } from "./stack.mjs";
 import { REPORT_VIEW_DEFAULT, normalizeReportView } from "./report-views.mjs";
 import { MINIMAP_DEFAULT } from "./minimap.mjs";
@@ -65,6 +67,10 @@ export const VIEW_DEFAULTS = Object.freeze({
   // is how the grid opened while its visibility was not a setting.
   marker: true,
   palette: PALETTE_DEFAULT,
+  // What a block's label names: its Project, its Assignment's own name, or both.
+  // The Project's name alone is what every block said before an Assignment
+  // could have a name, so an untouched plan draws exactly as it did.
+  blockLabel: BLOCK_LABEL_DEFAULT,
   stackCollapsed: STACK_COLLAPSED_DEFAULT,
   sort: Object.freeze({ projects: null, people: null })
 });
@@ -85,6 +91,7 @@ export const VIEW_KEYS = Object.freeze([
   "minimap",
   "marker",
   "palette",
+  "blockLabel",
   "stackCollapsed",
   "sort"
 ]);
@@ -156,6 +163,7 @@ export function normalizeView(raw) {
     minimap: booleanOr(source.minimap, VIEW_DEFAULTS.minimap),
     marker: booleanOr(source.marker, VIEW_DEFAULTS.marker),
     palette: isPalette(source.palette) ? source.palette : VIEW_DEFAULTS.palette,
+    blockLabel: isBlockLabel(source.blockLabel) ? source.blockLabel : VIEW_DEFAULTS.blockLabel,
     stackCollapsed: booleanOr(source.stackCollapsed, VIEW_DEFAULTS.stackCollapsed),
     sort: {
       projects: normalizeSort("projects", source.sort && source.sort.projects),

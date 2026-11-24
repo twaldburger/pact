@@ -90,6 +90,15 @@ const UNTAGGED_PLAN = path.join(DIR, "untagged.pact.json");
 fs.writeFileSync(UNTAGGED_PLAN, JSON.stringify(UNTAGGED, null, 2) + "\n");
 
 // The plan a new PACT starts from: no records at all.
+// The fixture with one Assignment named: the reads must show the name in text
+// and in --json, and a second Assignment of the same Project stays nameless.
+const NAMED = Object.assign({}, FIXTURE, {
+  assignments: FIXTURE.assignments.map((a) =>
+    (a.id === "a-solar-anna" ? Object.assign({}, a, { name: "PDF export" }) : a))
+});
+const NAMED_PLAN = path.join(DIR, "named.pact.json");
+fs.writeFileSync(NAMED_PLAN, JSON.stringify(NAMED, null, 2) + "\n");
+
 const EMPTY = { range: { start: "2026-01-01", end: "2026-01-31" }, people: [], projects: [], assignments: [] };
 const EMPTY_PLAN = path.join(DIR, "empty.pact.json");
 fs.writeFileSync(EMPTY_PLAN, JSON.stringify(EMPTY, null, 2) + "\n");
@@ -375,6 +384,37 @@ test("text and --json show the same period, rows and figures", () => {
   const personText = cli(["person", "anna", "--plan", PLAN, "--period", "2026-11"]);
   assert.ok(personText.stdout.includes(percent(person.person.ofOffer)));
   assert.ok(personText.stdout.includes("over-allocated"));
+});
+
+test("a Person's and a Project's Assignments show the Assignment's own name", () => {
+  // In --json, under the store's own key.
+  const person = okJSON(["person", "anna", "--plan", NAMED_PLAN, "--period", "2026-11"]);
+  const named = person.assignments.find((a) => a.id === "a-solar-anna");
+  assert.equal(named.name, "PDF export");
+  // An unnamed Assignment reads as empty rather than as a missing key, so a
+  // caller never has to tell the two apart.
+  assert.equal(person.assignments.find((a) => a.id === "a-borealis-anna").name, "");
+
+  // In the text, in the Assignments table's own column, and "-" where there is
+  // no name to show.
+  const personText = cli(["person", "anna", "--plan", NAMED_PLAN, "--period", "2026-11"]);
+  assert.equal(personText.status, 0, personText.stderr);
+  assert.match(personText.stdout, /^Project .*Name .*Allocation \(%\)/m);
+  const rows = personText.stdout.split("\n").filter((line) => /a-solar|Solar/.test(line));
+  const solarRow = personText.stdout.split("\n").find((line) => /^Solar\s/.test(line));
+  assert.ok(solarRow, "no Solar row in:\n" + personText.stdout);
+  assert.match(solarRow, /^Solar +PDF export +/);
+  const borealisRow = personText.stdout.split("\n").find((line) => /^Borealis\s/.test(line));
+  assert.match(borealisRow, /^Borealis +- +/);
+
+  // The Project's own read names them too: the same rows, read from the other
+  // end.
+  const project = okJSON(["project", "Solar", "--plan", NAMED_PLAN, "--period", "2026-11"]);
+  assert.equal(project.assignments.find((a) => a.id === "a-solar-anna").name, "PDF export");
+  const projectText = cli(["project", "Solar", "--plan", NAMED_PLAN, "--period", "2026-11"]);
+  assert.equal(projectText.status, 0, projectText.stderr);
+  assert.match(projectText.stdout, /^Person .*Name .*Allocation \(%\)/m);
+  assert.match(projectText.stdout, /PDF export/);
 });
 
 /* --- period resolution --------------------------------------------------- */

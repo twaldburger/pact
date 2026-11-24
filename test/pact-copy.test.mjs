@@ -51,7 +51,7 @@ function fixture() {
     ],
     assignments: [
       { id: "a-atlas-anna", projectId: "atlas", personId: "anna", start: "2026-11-02",
-        end: "2026-11-13", share: 100, tags: ["lead"], note: "kick-off" },
+        end: "2026-11-13", share: 100, name: "PDF export", tags: ["lead"], note: "kick-off" },
       { id: "a-borealis-anna", projectId: "borealis", personId: "anna", start: "2026-11-02",
         end: "2026-11-30", share: 30, tags: [], note: "" },
       { id: "a-leave-ben", projectId: "leave", personId: "ben", start: "2026-11-16",
@@ -183,6 +183,7 @@ test("the copy preview is the default and the plan file is not touched", async (
   assert.equal(assignment.status, 0, assignment.stderr);
   assert.match(assignment.stdout, /Copy of the Assignment/);
   assert.match(assignment.stdout, /Atlas \/ Anna Meier/);
+  assert.match(assignment.stdout, /Name: PDF export/);
   assert.match(assignment.stdout, /2026-11-02 to 2026-11-13, 100%/);
   assert.match(assignment.stdout, /Tags: lead/);
   assert.match(assignment.stdout, /Note: kick-off/);
@@ -257,7 +258,7 @@ test("--apply copies a Person with Location, Availability, tags and note, and no
   assert.equal(plan.assignments.filter((entry) => entry.personId === "anna").length, 2);
 });
 
-test("--apply copies an Assignment with the same Person, dates, Share, tags and note", async () => {
+test("--apply copies an Assignment with the same Person, dates, Share, name, tags and note", async () => {
   const started = await app(fixture());
   const source = structuredClone(started.file().assignments.find((a) => a.id === "a-atlas-anna"));
 
@@ -273,16 +274,36 @@ test("--apply copies an Assignment with the same Person, dates, Share, tags and 
   const copy = copies[0];
   assert.deepEqual({
     projectId: copy.projectId, personId: copy.personId, start: copy.start,
-    end: copy.end, share: copy.share, tags: copy.tags, note: copy.note
+    end: copy.end, share: copy.share, name: copy.name, tags: copy.tags, note: copy.note
   }, {
     projectId: "atlas", personId: "anna", start: "2026-11-02",
-    end: "2026-11-13", share: 100, tags: ["lead"], note: "kick-off"
+    end: "2026-11-13", share: 100, name: "PDF export", tags: ["lead"], note: "kick-off"
   });
   // The source is untouched, and no other record came with the copy.
   assert.deepEqual(plan.assignments.find((entry) => entry.id === "a-atlas-anna"), source);
   assert.equal(plan.assignments.length, 4);
   assert.equal(plan.people.length, 2);
   assert.equal(plan.projects.length, 3);
+});
+
+test("an Assignment copy carries the name the source holds, and says so", async () => {
+  const started = await app(fixture());
+  // In the body the app's own POST takes, where a nameless source reads as an
+  // empty name rather than a missing key.
+  const body = JSON.parse((await copyAssignment(started.planPath, ["--json"])).stdout);
+  assert.equal(body.kind, "assignment");
+  assert.equal(body.create.name, "PDF export");
+  // A source with no name carries none, so a copy of it stays nameless.
+  const nameless = fixture();
+  nameless.assignments.find((a) => a.id === "a-borealis-anna").name = "";
+  const other = await app(nameless);
+  const otherBody = JSON.parse((await cli(["assignment", "copy", "Borealis", "--person",
+    "Anna Meier", "--plan", other.planPath, "--json"])).stdout);
+  assert.equal(otherBody.create.name, "");
+  const preview = await cli(["assignment", "copy", "Borealis", "--person", "Anna Meier",
+    "--plan", other.planPath]);
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.doesNotMatch(preview.stdout, /Name:/, "a nameless copy says nothing about a name");
 });
 
 test("a copied Absence Assignment says what kind of time it holds", async () => {

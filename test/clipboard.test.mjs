@@ -28,12 +28,14 @@ test("a held Project carries its kind and the Project's id, and nothing else", (
   assert.equal(clipboardKind(projectCopy("p1")), PROJECT);
 });
 
-test("a held Assignment carries its kind and what a paste needs", () => {
-  const held = assignmentCopy({ projectId: "p1", share: 60, tags: ["design"], note: "n", days: 3 });
+test("a held Assignment carries its kind, its name and what a paste needs", () => {
+  const held = assignmentCopy({ projectId: "p1", share: 60, name: "PDF export", tags: ["design"], note: "n", days: 3 });
   assert.deepEqual(held, {
-    kind: ASSIGNMENT, projectId: "p1", share: 60, tags: ["design"], note: "n", days: 3
+    kind: ASSIGNMENT, projectId: "p1", share: 60, name: "PDF export", tags: ["design"], note: "n", days: 3
   });
   assert.equal(clipboardKind(held), ASSIGNMENT);
+  // A source with no name held a nameless Assignment, which is not "undefined".
+  assert.equal(assignmentCopy({ projectId: "p1", share: 60 }).name, "");
 });
 
 test("an Assignment copy takes its own list of tags, never the source's", () => {
@@ -42,7 +44,7 @@ test("an Assignment copy takes its own list of tags, never the source's", () => 
   tags.push("later");
   assert.deepEqual(held.tags, ["design"]);
   assert.deepEqual(assignmentCopy({ projectId: "p1" }), {
-    kind: ASSIGNMENT, projectId: "p1", share: undefined, tags: [], note: "", days: undefined
+    kind: ASSIGNMENT, projectId: "p1", share: undefined, name: "", tags: [], note: "", days: undefined
   });
 });
 
@@ -307,6 +309,9 @@ test("copyAssignment carries every field of the source and destroys nothing", ()
   assert.match(copier[0], /\n\s+start: a\.raw\.start,/);
   assert.match(copier[0], /\n\s+end: a\.raw\.end,/);
   assert.match(copier[0], /\n\s+share: a\.share,/);
+  // The source's name travels with the copy, so a copied named block reads as
+  // the work it duplicates.
+  assert.match(copier[0], /\n\s+name: a\.raw\.name \|\| "",/);
   // The tags are the copy's own list, never the source's.
   assert.match(copier[0], /\n\s+tags: \(a\.raw\.tags \|\| \[\]\)\.slice\(\),/);
   assert.match(copier[0], /\n\s+note: a\.raw\.note \|\| ""/);
@@ -328,9 +333,11 @@ test("copyAssignment carries every field of the source and destroys nothing", ()
 
 test("the feature reference describes Copy assignment", () => {
   const prose = DOCS.replace(/\s+/g, " ");
-  assert.match(prose, /Clicking a block opens it: Share, tags and a note, plus Copy, Archive and Delete\./);
+  assert.match(prose, /Clicking a block opens it: Name, Share, tags and a note, plus Copy, Archive and Delete\./);
   assert.match(prose, /Copy duplicates the Assignment where it already is/);
   assert.match(prose, /the copy lands on the same Person over the same start and end dates/);
+  // The copy carries the Assignment's own name as well as its tags and note.
+  assert.match(prose, /name, tags and note, with the tags copied into their own list/);
   assert.match(prose, /`Copied the Assignment of "Atlas" on "Anna Meier"`/);
   assert.match(prose, /Copy, Archive and Delete sit at the foot of the Assignment dialog/);
 });

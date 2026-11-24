@@ -10,10 +10,10 @@
  * the label's own font: the caller measures, this decides.
  */
 
-// The label as it is drawn: the Project's name, then its share of the Person.
-// Both have to fit before the label is worth writing at all, because a bare
-// percentage inside an unidentified block reads as noise - and the share is
-// already in the Assignment popover and in the row header.
+// The label as it is drawn: the part the Block label setting chooses, then the
+// share of the Person. Both have to fit before the label is worth writing at
+// all, because a bare percentage inside an unidentified block reads as noise -
+// and the share is already in the Assignment popover and in the row header.
 export const LABEL_SEPARATOR = " \u00b7 ";
 
 // What marks a title that had to be cut.
@@ -47,6 +47,44 @@ export const LABEL_MIN_CHARS = 3;
 
 export function labelText(title, share) {
   return title + LABEL_SEPARATOR + share + "%";
+}
+
+/*
+ * What a block's label names, as the Options menu's Block label row cycles it:
+ * the Project's name, the Assignment's own name, or both. `project` is what
+ * every block said before an Assignment could have a name, so it is the
+ * default and an untouched plan draws exactly as it did.
+ */
+export const BLOCK_LABEL_SETTINGS = ["project", "assignment", "both"];
+export const BLOCK_LABEL_DEFAULT = "project";
+
+export const BLOCK_LABEL_LABELS = {
+  project: "Project name",
+  assignment: "Assignment name",
+  both: "Both"
+};
+
+export function isBlockLabel(value) {
+  return BLOCK_LABEL_SETTINGS.indexOf(value) !== -1;
+}
+
+/*
+ * The first part of a block's label, which is what the setting chooses: the
+ * Share still follows it, so the label composes as labelText always has. A
+ * nameless Assignment falls back to its Project's name rather than leaving the
+ * block with a percentage alone - under `assignment` and under `both` alike, so
+ * a plan that has not been named yet reads as it always did. An unknown
+ * setting reads as the default, as every other view setting's does.
+ */
+export function blockTitle(setting, projectName, assignmentName) {
+  const project = projectName == null ? "" : String(projectName);
+  const name = typeof assignmentName === "string" ? assignmentName.trim() : "";
+  if (setting === "assignment") return name || project;
+  if (setting === "both") {
+    if (name && project) return name + LABEL_SEPARATOR + project;
+    return name || project;
+  }
+  return project;
 }
 
 /*

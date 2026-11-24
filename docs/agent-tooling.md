@@ -137,7 +137,8 @@ and the preview is the default. `--dry-run` says the same thing out loud.
   `assignment copy <project> --person <name>` create a second record from one
   that exists, carrying what the app's own Copy carries: a Project's colour,
   tags, notes and absence flag; a Person's Location, Availability, tags and
-  note; an Assignment's Person, dates, Share, tags and note. **No work follows
+  note; an Assignment's Person, dates, Share, name, tags and note. **No work
+  follows
   a copy** - a copied Person or Project has no Assignments - and the source is
   untouched. The name is the app's own rule, `<source> (copy)` and then
   `(copy 2)`, `(copy 3)` while a live record holds it.
@@ -182,13 +183,17 @@ Two commands are about neither the plan nor its figures but how the app draws
 it. Both read the running app, because the display settings live there.
 
 - `view` prints the View settings - the Zoom and each zoom's Grid spacing, the
-  Row height, the overlays, the palette, whether the Stack rail is folded, the
+  Row height, the overlays, the palette, the Block label, whether the Stack rail
+  is folded, the
   report's zoom and which of its views is showing, the two sort orders - the
   plan period, Step and sprint cadence they rest on, and the URL the app serves
   on, so a reader knows where to open.
 - `view set <key> <value>` changes one of those settings, previews first, and
   needs `--apply` like a plan write. The app's Undo covers the plan and not its
-  display, so the preview prints the command that puts the setting back.
+  display, so the preview prints the command that puts the setting back. The
+  Block label is written as `view set blockLabel <project|assignment|both>` - an
+  explicit value, never a cycle, because a command line has room to say which
+  one it means where a press of the menu row does not.
 
 Neither touches a plan record, a figure, or anything that deletes.
 

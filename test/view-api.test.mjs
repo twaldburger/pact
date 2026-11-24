@@ -82,6 +82,7 @@ test("a changed view is stored and read back", async () => {
     minimap: true,
     marker: false,
     palette: "set3",
+    blockLabel: "both",
     stackCollapsed: true,
     sort: {
       projects: { key: "fte", direction: "asc" },
@@ -100,7 +101,7 @@ test("a changed view is stored and read back", async () => {
 
 test("a malformed value falls back for that key alone", async () => {
   const { base } = await server();
-  await api(base, "POST", "/api/view", { zoom: "week", palette: "set3", minimap: true, marker: false, availabilityLines: false, assignments: false });
+  await api(base, "POST", "/api/view", { zoom: "week", palette: "set3", blockLabel: "assignment", minimap: true, marker: false, availabilityLines: false, assignments: false });
 
   const written = await api(base, "POST", "/api/view", { zoom: "year", rowHeight: "tall", marker: "no", availabilityLines: "yes", assignments: "no" });
   assert.equal(written.status, 200);
@@ -109,6 +110,10 @@ test("a malformed value falls back for that key alone", async () => {
   assert.equal(written.body.rowHeight, 48);
   assert.equal(written.body.palette, "set3");
   assert.equal(written.body.minimap, true);
+  // Block label is a stored setting like the palette beside it, so a value the
+  // store does not take falls back to the Project's name alone.
+  assert.equal(written.body.blockLabel, "assignment");
+  assert.equal((await api(base, "POST", "/api/view", { blockLabel: "title" })).body.blockLabel, "project");
   // The Marker's visibility is a stored setting like the rest: only a boolean
   // is one, so a malformed value reads as the default of drawn.
   assert.equal(written.body.marker, true);

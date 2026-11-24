@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "../public/lib/options.mjs";
+import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, nextBlockLabel, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "../public/lib/options.mjs";
 import { VIEW_KEYS } from "../public/lib/view.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
@@ -278,6 +278,26 @@ test("the palette, period and step are each one collapsed row, not a group", () 
   assert.equal(stepControl(10).label, "Percentage step");
 });
 
+test("the Block label row cycles Project name, Assignment name and Both, and states the one in force", () => {
+  assert.deepEqual(blockLabelControl("project"), { key: "blockLabel", label: "Block label", detail: "Project name" });
+  assert.equal(blockLabelControl("assignment").detail, "Assignment name");
+  assert.equal(blockLabelControl("both").detail, "Both");
+  // A missing or unknown setting reads as the Project's name, which is what
+  // every block said before an Assignment could have one.
+  assert.equal(blockLabelControl(undefined).detail, "Project name");
+  assert.equal(blockLabelControl("title").detail, "Project name");
+  // One press takes the next setting, and the last wraps back to the first.
+  assert.equal(nextBlockLabel("project"), "assignment");
+  assert.equal(nextBlockLabel("assignment"), "both");
+  assert.equal(nextBlockLabel("both"), "project");
+  // The cycle is whole whatever it is handed, so a press never lands nowhere.
+  assert.equal(nextBlockLabel(undefined), "assignment");
+  assert.equal(nextBlockLabel("title"), "assignment");
+  // It is a view setting, like the palette it sits after: stored in the config
+  // and restored by Reset view, never written to the plan.
+  assert.equal(VIEW_KEYS.includes("blockLabel"), true);
+});
+
 test("the Help entry is an action carrying the panel-opener's ellipsis", () => {
   // Named the way every other row that opens a panel is named, and with no
   // detail: there is nothing about the help to count.
@@ -288,16 +308,19 @@ test("the menu reads as five groups in order: the help, what is drawn, what is i
   const items = optionsItems(false, false, true, false, false);
   assert.deepEqual(optionGroups(items), [
     ["help"],
-    ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "palette", "reset-view"],
+    ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "palette", "blockLabel", "reset-view"],
     ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
     ["plan-file"]
   ]);
+  // The Block label follows the palette directly: both are display choices
+  // about how a block is drawn, and neither is one of the overlay toggles.
+  assert.equal(optionGroups(items)[1].indexOf("blockLabel"), optionGroups(items)[1].indexOf("palette") + 1);
   // A future view toggle joins the view group by being in optionsItems alone;
   // Show archived is the one row there that is not a view toggle.
   const added = items.concat([{ key: "noise", label: "X" }]);
   assert.deepEqual(optionGroups(added)[0], ["help"]);
-  assert.deepEqual(optionGroups(added)[1], ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "noise", "palette", "reset-view"]);
+  assert.deepEqual(optionGroups(added)[1], ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "noise", "palette", "blockLabel", "reset-view"]);
   assert.deepEqual(optionGroups(added)[2], ["archived"]);
 });
 

@@ -31,7 +31,7 @@ import {
 } from "./lib/panels.mjs";
 import { offeredTags, tickToggled, commitLabel, committedTags, enterTags } from "./lib/tag-picker.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, nextBlockLabel, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
@@ -101,7 +101,7 @@ import {
   unknownFieldHint,
   SUGGESTION_LIMIT
 } from "./lib/filter.mjs";
-import { blockLabel, hoverText, labelText, rangeLabel } from "./lib/label.mjs";
+import { blockTitle, blockLabel, hoverText, isBlockLabel, labelText, rangeLabel } from "./lib/label.mjs";
 import { copyName } from "./lib/copy.mjs";
 import { deletionNotice } from "./lib/delete.mjs";
 import {
@@ -232,6 +232,11 @@ var DAY_MS = 86400000;
 // restored on load, Paired until one is chosen. It is never written to the
 // plan. A Project's colour is a slot into whichever palette is active.
 var activePalette = PALETTE_DEFAULT;
+// What a block's label names: the Project, the Assignment's own name, or both.
+// One of the view settings kept in the config and restored on load, like the
+// palette; never written to the plan. It defaults to the Project's name alone,
+// which is what every block said before an Assignment could have one.
+var blockLabelSetting = VIEW_DEFAULTS.blockLabel;
 // The plan's percentage step for the session, resolved from the loaded plan:
 // the stored value, or the default of 10 when the plan carries none. The
 // steppers, the panels and the vertical drag all move by it.
@@ -936,16 +941,20 @@ function blockFor(group, s) {
   // draws hollow instead of falling back to its Project's palette colour. With
   // no such key chosen it keeps that colour, so an untouched plan is unchanged.
   var hollow = blockIsHollow(a.raw && a.raw.tags, a.project && a.project.tags, tagKeyMap, tagSlotMap);
+  // What the label names, by the Block label setting: the Project, the
+  // Assignment's own name, or both. A nameless Assignment falls back to its
+  // Project's name, so no block is left with a percentage alone.
+  var title = blockTitle(blockLabelSetting, a.project.name, a.raw && a.raw.name);
   var b = el("div", "blk" + (archived ? " is-archived" : "") + (absence ? " is-absence" : "") + (hollow ? " is-hollow" : ""));
   b.setAttribute("role", "button");
   b.setAttribute("tabindex", "0");
   b.setAttribute("data-assignment", a.id);
   // The full label on hover, whatever the grid can show: a block too narrow or
-  // too short for its own label still names its Project and share under the
-  // pointer, with the Assignment's note on a second line when it has one.
-  // Native chrome, so there is no tooltip to position or draw.
-  b.title = hoverText(a.project.name, a.share, a.raw && a.raw.note);
-  b.setAttribute("aria-label", a.project.name + " on " + a.person.name + ", " +
+  // too short for its own label still names what its label names and its share
+  // under the pointer, with the Assignment's note on a second line when it has
+  // one. Native chrome, so there is no tooltip to position or draw.
+  b.title = hoverText(title, a.share, a.raw && a.raw.note);
+  b.setAttribute("aria-label", title + " on " + a.person.name + ", " +
     a.share + "% from " + fmtRange(a.start, a.end) +
     (absence ? ", absence" : "") +
     (archived ? ", archived" : "") +
@@ -970,9 +979,9 @@ function blockFor(group, s) {
     b.appendChild(hatch);
   }
   var tag = el("span", "blk__tag");
-  tag.dataset.title = a.project.name;
+  tag.dataset.title = title;
   tag.dataset.share = String(a.share);
-  tag.textContent = labelText(a.project.name, a.share);
+  tag.textContent = labelText(title, a.share);
   b.appendChild(tag);
   // A block too short to hold its own label carries the name on the paper just
   // above it instead. The text and its visibility are set by drawBlockLabels,
@@ -1636,9 +1645,9 @@ function pickupAt(x, y) {
   return null;
 }
 
-// Remember the Assignment the pointer is over: its Project, Share, tags, note
-// and its length in whole days. An archived Assignment is history and cannot
-// be copied, so it is left alone.
+// Remember the Assignment the pointer is over: its Project, Share, name, tags,
+// note and its length in whole days. An archived Assignment is history and
+// cannot be copied, so it is left alone.
 function copyAssignmentAt(x, y) {
   var node = document.elementFromPoint(x, y);
   var block = node && node.closest ? node.closest("[data-assignment]") : null;
@@ -1650,6 +1659,7 @@ function copyAssignmentAt(x, y) {
   clipboard = assignmentCopy({
     projectId: a.project.id,
     share: a.share,
+    name: (a.raw && a.raw.name) || "",
     tags: a.raw && a.raw.tags ? a.raw.tags : [],
     note: (a.raw && a.raw.note) || "",
     days: a.endIdx - a.startIdx + 1
@@ -1720,8 +1730,8 @@ function updatePastePreview() {
 }
 
 // A paste is an ordinary new Assignment: the same create path, carrying the
-// copied Project, Share, tags and note, starting on the pointer's day with the
-// copy's own length in the pointer's row.
+// copied Project, Share, name, tags and note, starting on the pointer's day
+// with the copy's own length in the pointer's row.
 function pasteAssignment(row, dayIdx) {
   var copy = clipboard;
   var project = projectById[copy.projectId];
@@ -1744,6 +1754,7 @@ function pasteAssignment(row, dayIdx) {
     start: iso(addDays(rangeStart, range.start)),
     end: iso(addDays(rangeStart, range.end)),
     share: copy.share,
+    name: copy.name,
     tags: copy.tags.slice(),
     note: copy.note
   });
@@ -2196,12 +2207,12 @@ function createAssignment(project, personId, dayIdx) {
 
 /*
  * Duplicate an Assignment where it already is: the copy lands on the same
- * Person over the same start and end dates and carries the same Share, tags and
- * note, made through the one create path a drop and a paste use, so the grid's
- * refusals stand and the write is one Undo step back. The tags are copied into
- * their own list, so the copy can never share one with its source. The source
- * is untouched, and the copy draws as a second band above it, because the row
- * stacks a person's Assignments by cumulative share.
+ * Person over the same start and end dates and carries the same Share, name,
+ * tags and note, made through the one create path a drop and a paste use, so
+ * the grid's refusals stand and the write is one Undo step back. The tags are
+ * copied into their own list, so the copy can never share one with its source.
+ * The source is untouched, and the copy draws as a second band above it,
+ * because the row stacks a person's Assignments by cumulative share.
  *
  * One function, taking the Assignment, so the panel's button drives the same
  * road a later shortcut would.
@@ -2223,6 +2234,7 @@ function copyAssignment(a) {
     start: a.raw.start,
     end: a.raw.end,
     share: a.share,
+    name: a.raw.name || "",
     tags: (a.raw.tags || []).slice(),
     note: a.raw.note || ""
   }).then(function (created) {
@@ -3123,6 +3135,11 @@ function openAssignmentPanel(a, trigger) {
     fmtRange(a.start, a.end));
 
   var form = el("form", "form");
+  // The Assignment's own name, free text and optional: it says which work the
+  // block is, where its Project says only which Project. It is never a second
+  // Project - no colour, no tags of its own, no share.
+  var nameInput = input(a.raw.name);
+  form.appendChild(formRow("Name", nameInput));
   // The Share stepper and a vertical edge drag reach the same number; it opens
   // on the Assignment's current share, so the two cannot disagree.
   var share = shareControl(a.share);
@@ -3179,6 +3196,7 @@ function openAssignmentPanel(a, trigger) {
   var save = saveButton("Save", function () {
     submitPanel(node, error, function () {
       return api("PATCH", "/api/assignments/" + encodeURIComponent(a.id), {
+        name: nameInput.value,
         share: share.value(),
         tags: tags.tags(),
         note: noteInput.value
@@ -3207,6 +3225,8 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
   node.appendChild(fields);
 
   var form = el("form", "form");
+  var nameInput = input("");
+  form.appendChild(formRow("Name", nameInput));
   var projectSelect = document.createElement("select");
   projectSelect.setAttribute("aria-label", "Project");
   var choose = document.createElement("option");
@@ -3256,6 +3276,7 @@ function openNewAssignmentPanel(person, range, rect, trigger) {
         start: iso(start),
         end: iso(end),
         share: share.value(),
+        name: nameInput.value,
         tags: tags.tags(),
         note: noteInput.value
       });
@@ -5909,6 +5930,7 @@ function currentView() {
     minimap: minimapEnabled,
     marker: markerVisible,
     palette: activePalette,
+    blockLabel: blockLabelSetting,
     stackCollapsed: stackCollapsed,
     sort: { projects: sortState.projects, people: sortState.people }
   };
@@ -5939,6 +5961,7 @@ function adoptView(view) {
   gridDividers = v.dividers;
   minimapEnabled = v.minimap;
   markerVisible = v.marker;
+  blockLabelSetting = v.blockLabel;
   stackCollapsed = v.stackCollapsed;
   sortState = { projects: v.sort.projects, people: v.sort.people };
   // Apply the stored width now, before the caller's first draw, so a spacing
@@ -5971,6 +5994,7 @@ function resetView() {
   applyRowHeight();
   updateOptionsMenu();
   updatePaletteMenu();
+  updateBlockLabelRow();
   updateSortControl("projects");
   updateSortControl("people");
   render();
@@ -5991,6 +6015,7 @@ var openDisclosureKey = null;
 var rangeStartInput = null;
 var rangeEndInput = null;
 var rangeError = null;
+var blockLabelDetail = null;
 var stepInput = null;
 var stepError = null;
 var sprintsOptionDetail = null;
@@ -6149,6 +6174,25 @@ function updatePaletteMenu() {
   });
 }
 
+// The Block label row states the setting in force beside its label, so the
+// closed row says what a press will change.
+function updateBlockLabelRow() {
+  if (!blockLabelDetail) return;
+  blockLabelDetail.textContent = blockLabelControl(blockLabelSetting).detail;
+}
+
+// Switching what a block's label names is a view change, not a plan change: the
+// blocks are rebuilt with the new label and the view is stored. The plan file is
+// untouched. The menu row always takes an explicit setting - it is the click
+// that has nowhere to put three choices, not this function's caller.
+function setBlockLabel(setting) {
+  if (!isBlockLabel(setting) || setting === blockLabelSetting) return;
+  blockLabelSetting = setting;
+  updateBlockLabelRow();
+  render();
+  persistView();
+}
+
 // Switching palette is a view change, not a plan change: it sets the root's
 // data-palette (which swaps the --proj-* fills), redraws and stores the new
 // view. The plan file is untouched.
@@ -6181,6 +6225,7 @@ function buildOptionsMenu() {
     optionsMenu.appendChild(buildOptionToggle(item));
   });
   buildDisclosureRow(paletteControl(activePalette), buildPaletteControl());
+  optionsMenu.appendChild(buildBlockLabelRow());
   optionsMenu.appendChild(buildResetViewItem());
   var archivedItem = items.filter(function (item) { return item.key === "archived"; })[0];
   optionsMenu.appendChild(buildOptionToggle(archivedItem));
@@ -6210,6 +6255,27 @@ function buildOptionToggle(item) {
     if (action) action();
   });
   optionButtons[item.key] = btn;
+  return btn;
+}
+
+/* The Block label row: one row that cycles Project name, Assignment name and
+ * Both on a press, directly after the Colour palette so the two choices about
+ * how a block is drawn stand together and neither is mistaken for an overlay
+ * toggle. Its detail names the setting in force; there is no control under it,
+ * because three choices are one click apart. */
+function buildBlockLabelRow() {
+  var item = blockLabelControl(blockLabelSetting);
+  var btn = el("button", optionRowClass(item.key));
+  btn.type = "button";
+  btn.id = "option-" + item.key;
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  blockLabelDetail = el("span", "options__item-detail");
+  blockLabelDetail.textContent = item.detail;
+  btn.appendChild(blockLabelDetail);
+  btn.addEventListener("click", function () {
+    setBlockLabel(nextBlockLabel(blockLabelSetting));
+  });
   return btn;
 }
 
@@ -6978,6 +7044,7 @@ function openOptions(open) {
     closeSortMenus();
     if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
     updateOptionsMenu();
+    updateBlockLabelRow();
     updateRangeControl();
     updateStepControl();
     updateSprintsItem();

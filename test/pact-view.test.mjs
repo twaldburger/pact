@@ -76,6 +76,7 @@ const STORED_VIEW = {
   minimap: true,
   marker: false,
   palette: "set3",
+  blockLabel: "both",
   stackCollapsed: true,
   sort: {
     projects: { key: "fte", direction: "asc" },
@@ -189,6 +190,7 @@ test("view reads the stored View settings in plain words", async () => {
     "weekends on, holidays on, milestones on, availability lines off, assignments off, " +
     "dividers off, minimap on, marker off");
   assert.equal(row(result.stdout, "Palette"), "set3");
+  assert.equal(row(result.stdout, "Block label"), "both");
   assert.equal(row(result.stdout, "Report"), "zoom day, Allocation by tag");
   assert.equal(row(result.stdout, "Sort"), "projects: Total assigned FTE, ascending, people: Name, descending");
   assert.equal(row(result.stdout, "Rail"), "folded away");
@@ -291,6 +293,40 @@ test("a toggle is written as on or off, the app's own boolean", async () => {
   assert.equal(started.config().view.marker, true);
 });
 
+test("the Block label is written as one of its three settings, never cycled", async () => {
+  const started = await app({ view: STORED_VIEW });
+  // The preview names the setting, its old and new value, and writes nothing.
+  const preview = await set(started, "blockLabel", "assignment");
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.match(preview.stdout, /blockLabel: both -> assignment/);
+  assert.match(preview.stdout, /Nothing written\. Re-run with --apply\./);
+  assert.equal(started.config().view.blockLabel, "both");
+
+  const applied = await set(started, "blockLabel", "assignment", ["--apply"]);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(started.config().view.blockLabel, "assignment");
+  // The read back is the stored value, and the command that puts it back is
+  // printed with the key the store takes.
+  assert.match(applied.stdout, /read back from its view: blockLabel is assignment/);
+  assert.match(applied.stdout, /view set blockLabel both --apply/);
+  const read = await view(started);
+  assert.equal(row(read.stdout, "Block label"), "assignment");
+
+  // The label the menu draws for one is taken too, and stored as its key.
+  const byLabel = await set(started, "blockLabel", "Project name", ["--apply"]);
+  assert.equal(byLabel.status, 0, byLabel.stderr);
+  assert.equal(started.config().view.blockLabel, "project");
+
+  // And it is not a cycle: a word that means "the next one" is refused, and
+  // nothing is written by any refusal.
+  for (const value of ["yes", "next", ""]) {
+    const refused = await set(started, "blockLabel", value, ["--apply"]);
+    assert.equal(refused.status, 1, value);
+    assert.match(refused.stderr, /is not a Block label setting/);
+    assert.equal(started.config().view.blockLabel, "project");
+  }
+});
+
 test("a setting another hand moved in between the preview and the write is kept", async () => {
   const started = await app({ view: STORED_VIEW });
   const preview = await set(started, "gridSpacing.week", "24");
@@ -322,7 +358,7 @@ test("an unknown key names the keys view set does write", async () => {
   const result = await set(started, "contrast", "high");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /unknown view key "contrast"/);
-  for (const key of ["zoom", "rowHeight", "gridSpacing.day", "weekends", "palette", "sort.people"]) {
+  for (const key of ["zoom", "rowHeight", "gridSpacing.day", "weekends", "palette", "blockLabel", "sort.people"]) {
     assert.ok(result.stderr.includes(key), key);
   }
   // It says what the keys are before the app is asked anything, so it answers
@@ -340,6 +376,7 @@ test("a value the app would refuse, or store as something else, names what it ta
     { key: "gridSpacing.week", value: "60", says: /a whole number of pixels from 2 to 48/ },
     { key: "weekends", value: "yes", says: /a toggle is on or off/ },
     { key: "palette", value: "neon", says: /the palettes are paired and set3/ },
+    { key: "blockLabel", value: "title", says: /they are project, assignment and both/ },
     { key: "reportView", value: "nope", says: /they are by-project, by-person, by-tag/ },
     { key: "sort.projects", value: "bogus", says: /they are name, start, end and fte/ }
   ];

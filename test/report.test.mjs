@@ -898,8 +898,11 @@ test("a report withdraws the grid-only Options entries and no plan-facing one", 
     "dividers",
     "minimap",
     "marker",
+    "blockLabel",
     "reset-view"
   ]);
+  // Block label names what a block says, and a report page draws no blocks at
+  // all, so it has nothing to act on there.
   // The plan-facing entries - the period, the step, the palette, Sprints, the
   // Holidays panel, the Plan file panel - Help and Show archived, which acts on
   // the rail, all stay live in a report.
