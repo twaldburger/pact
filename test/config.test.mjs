@@ -158,6 +158,23 @@ test("a stored view round-trips through the config", () => {
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).view, view);
 });
 
+test("the Block label round-trips through the config, and Reset view restores it", () => {
+  const dir = tempDir();
+  const file = path.join(dir, CONFIG_FILENAME);
+  ["project", "assignment", "both"].forEach((name) => {
+    writeView(file, { blockLabel: name });
+    assert.equal(readConfig(file).config.view.blockLabel, name);
+    assert.equal(readView(file).blockLabel, name);
+  });
+  // A value the store does not take is dropped rather than stored.
+  writeView(file, { blockLabel: "title" });
+  assert.equal(readView(file).blockLabel, "project");
+  // Reset view is the defaults written whole, so it puts the setting back.
+  writeView(file, { blockLabel: "both" });
+  assert.equal(writeView(file, VIEW_DEFAULTS).blockLabel, "project");
+  assert.equal(readView(file).blockLabel, "project");
+});
+
 test("a view write keeps the plan path and every other field", () => {
   const dir = tempDir();
   const file = path.join(dir, CONFIG_FILENAME);

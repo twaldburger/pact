@@ -33,6 +33,7 @@ test("the defaults are exactly what the app shipped with", () => {
     minimap: false,
     marker: true,
     palette: "paired",
+    blockLabel: "project",
     stackCollapsed: false,
     sort: { projects: null, people: null }
   });
@@ -64,6 +65,7 @@ test("an absent view, or any non-object, reads as every default", () => {
       minimap: false,
       marker: true,
       palette: "paired",
+      blockLabel: "project",
       stackCollapsed: false,
       sort: { projects: null, people: null }
     });
@@ -100,6 +102,7 @@ test("every key survives a normalise at a non-default value", () => {
     minimap: true,
     marker: false,
     palette: "set3",
+    blockLabel: "both",
     stackCollapsed: true,
     sort: {
       projects: { key: "fte", direction: ASCENDING },
@@ -150,6 +153,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     minimap: "on",
     marker: "yes",
     palette: "neon",
+    blockLabel: "title",
     stackCollapsed: "true",
     sort: { projects: { key: "nonsense" }, people: null }
   };
@@ -168,6 +172,7 @@ test("a malformed value falls back for that key and leaves the rest", () => {
     minimap: false,
     marker: true,
     palette: "paired",
+    blockLabel: "project",
     stackCollapsed: false,
     sort: { projects: null, people: null }
   });

@@ -39,6 +39,7 @@ import {
   optionsItems,
   optionGroups,
   paletteControl,
+  blockLabelControl,
   rangeControl,
   stepControl,
   helpItem,
@@ -87,6 +88,7 @@ function menuCapabilities() {
   return [
     ...optionsItems(),
     paletteControl(),
+    blockLabelControl(),
     rangeControl(),
     stepControl(),
     helpItem(),

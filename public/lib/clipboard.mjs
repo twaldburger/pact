@@ -33,15 +33,16 @@ export function projectCopy(projectId) {
   return { kind: PROJECT, projectId: String(projectId) };
 }
 
-// A held Assignment keeps what a paste needs: the Project, the Share, the tags,
-// the note and the length in whole days. The id is the Project's, never the
-// Assignment's - a paste creates a new one.
+// A held Assignment keeps what a paste needs: the Project, the Share, the name,
+// the tags, the note and the length in whole days. The id is the Project's,
+// never the Assignment's - a paste creates a new one.
 export function assignmentCopy(copy) {
   const source = copy || {};
   return {
     kind: ASSIGNMENT,
     projectId: String(source.projectId),
     share: source.share,
+    name: source.name || "",
     tags: (source.tags || []).slice(),
     note: source.note || "",
     days: source.days

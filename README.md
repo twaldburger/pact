@@ -36,8 +36,11 @@ person's time.
 
 - **A plan of people's time.** An Assignment puts a Project on one Person's row
   for a set of dates, and the block's height is the share of that person it
-  takes. Two Assignments over the same dates commit that person twice over, and
-  the board shows that rather than refusing it.
+  takes. An Assignment may carry its own optional Name, so two blocks of one
+  Project can say which work each is, and the Options menu chooses whether a
+  block's label shows the Project, the Name or both. Two Assignments over the
+  same dates commit that person twice over, and the board shows that rather than
+  refusing it.
 - **Capacity against demand.** Every Person has an Availability - the most they
   can be scheduled for, their own 100% - and each row sets what is asked of them
   against it. Over-allocation is allowed and drawn: the part of a block above the

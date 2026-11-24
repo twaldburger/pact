@@ -38,11 +38,11 @@ function plan() {
       { id: "borealis", name: "Borealis", notes: "", tags: [] }
     ],
     assignments: [
-      { id: "a-react-anna", projectId: "react", personId: "anna", start: "2026-10-01", end: "2026-10-10", share: 60, tags: ["React"], note: "" },
+      { id: "a-react-anna", projectId: "react", personId: "anna", start: "2026-10-01", end: "2026-10-10", share: 60, name: "Wiring plan", tags: ["React"], note: "" },
       { id: "a-bor-anna", projectId: "borealis", personId: "anna", start: "2026-11-01", end: "2026-11-10", share: 20, tags: [], note: "" },
       { id: "a-bor-ben", projectId: "borealis", personId: "ben", start: "2026-10-01", end: "2026-10-05", share: 50, tags: ["Design"], note: "handover from Atlas" },
       { id: "a-react-cara", projectId: "react", personId: "cara", start: "2026-10-20", end: "2026-10-30", share: 40, tags: ["React"], note: "React migration" },
-      { id: "a-other-dora", projectId: "borealis", personId: "dora", start: "2026-12-01", end: "2026-12-10", share: 30, tags: ["Support"], note: "" }
+      { id: "a-other-dora", projectId: "borealis", personId: "dora", start: "2026-12-01", end: "2026-12-10", share: 30, name: "Second opinion", tags: ["Support"], note: "" }
     ]
   };
 }
@@ -691,8 +691,8 @@ test("every canonical field and alias names the field it should search", () => {
     "person names: x": ["person.name"],
     "person: x": ["person.name"],
     "people: x": ["person.name"],
-    "name: x": ["person.name", "project.name"],
-    "names: x": ["person.name", "project.name"],
+    "name: x": ["person.name", "project.name", "assignment.name"],
+    "names: x": ["person.name", "project.name", "assignment.name"],
     "person location: x": ["person.location"],
     "person locations: x": ["person.location"],
     "location: x": ["person.location"],
@@ -713,6 +713,8 @@ test("every canonical field and alias names the field it should search", () => {
     "project notes: x": ["project.notes"],
     "project tag: x": ["project.tags"],
     "project tags: x": ["project.tags"],
+    "assignment name: x": ["assignment.name"],
+    "assignment names: x": ["assignment.name"],
     "assignment tag: x": ["assignment.tags"],
     "assignment tags: x": ["assignment.tags"],
     "assignment note: x": ["assignment.note"],
@@ -793,6 +795,47 @@ test("a typed term matches only its own field, case-insensitively", () => {
   assert.deepEqual(ids(view("project notes", "phase").projects), ["react"]);
   assert.deepEqual(ids(view("assignment tag", "design").assignments), ["a-bor-ben"]);
   assert.deepEqual(ids(view("assignment note", "handover").assignments), ["a-bor-ben"]);
+  assert.deepEqual(ids(view("assignment name", "wiring").assignments), ["a-react-anna"]);
+  assert.deepEqual(ids(view("assignment names", "WIRING").assignments), ["a-react-anna"]);
+});
+
+test("an Assignment's own name is searched like every other field of its own", () => {
+  // A plain term reaches it, and the match carries the Assignment's row and
+  // its Project with it.
+  const plain = filterPlan(plan(), "wiring", defaultScopes());
+  assert.deepEqual(ids(plain.assignments), ["a-react-anna"]);
+  assert.deepEqual(ids(plain.people), ["anna"]);
+  assert.deepEqual(ids(plain.projects), ["react"]);
+  // The scope still governs a plain query: with Assignments switched off there
+  // is nowhere for that term to match.
+  assert.equal(filterIsEmpty(filterPlan(plan(), "wiring", scopes(true, true, false))), true);
+  // `name:` spans every name, the Assignment's included.
+  assert.deepEqual(ids(filterPlan(plan(), "name: second", defaultScopes()).assignments), ["a-other-dora"]);
+  // The field does not reach a Project's name, and an unnamed Assignment is
+  // found by none of it.
+  assert.equal(filterIsEmpty(filterPlan(plan(), "assignment name: borealis", defaultScopes())), true);
+});
+
+test("the dropdown offers the plan's Assignment names with counts that agree", () => {
+  const typed = filterSuggestions(plan(), "assignment name: wir", defaultScopes());
+  const item = typed.find((i) => i.source === "Assignment name");
+  assert.ok(item, "no Assignment name suggestion");
+  assert.equal(item.value, "Wiring plan");
+  assert.equal(item.insert, "assignment name: Wiring plan");
+  // The count is the very query the row inserts, so the suggestion cannot
+  // promise a result it does not apply.
+  assert.equal(item.count, filterPlan(plan(), item.insert, defaultScopes()).assignments.length);
+  assert.equal(item.count, 1);
+  assert.equal(item.matchLabel, "1 assignment");
+  // A plain query offers them from the Assignments area, and a named one
+  // inserts the field prefix it belongs to.
+  const plain = filterSuggestions(plan(), "second", defaultScopes()).find((i) => i.value === "Second opinion");
+  assert.ok(plain, "no plain Assignment name suggestion");
+  assert.equal(plain.insert, "assignment name: Second opinion");
+  // Nothing is offered while nothing has been named.
+  const unnamed = plan();
+  unnamed.assignments.forEach((assignment) => { delete assignment.name; });
+  assert.equal(filterSuggestions(unnamed, "assignment name:", defaultScopes()).length, 0);
 });
 
 test("a Location is matched case-insensitively as a substring", () => {

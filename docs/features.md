@@ -167,11 +167,22 @@ continuous date range at one [Allocation](../GLOSSARY.md#allocation). It is the
 rectangle drawn on the Timeline. A change of share, or a gap, is a second
 Assignment - the share holds for the whole range.
 
+An Assignment carries an optional `Name` as well as its tags and note: free
+text, set in the Assignment's own dialog, and absent from a plan that never uses
+it. It says which work the block is where the Project says only which Project,
+so a Person allocated to the same Project twice - or to a Project that is
+several different things - produces blocks that read apart. It is not a second
+Project: the name carries no colour, no tags and no capacity, and the Project
+still decides the fill, the tags and the figures. Two Assignments may share a
+name, as they may share a note; nothing is refused. What a block's label names
+is the [Block label](../GLOSSARY.md#block-label) setting, and a nameless
+Assignment falls back to its Project's name there under every setting.
+
 There are two ways to make one. Dragging a Project from the rail onto a row
 creates five days at 100% from the day under the pointer, kept inside the
 period. Dragging across an empty stretch of a row opens a New assignment panel
-with those dates already set, where a Project, a Share, tags and a note are
-chosen. The dates in that
+with those dates already set, where a Project, a Share, a name, tags and a note
+are chosen. The dates in that
 panel are read-only: the drawn range is the range, because drawing is how a
 range is set. Only live Projects are offered there; creating a Project stays a
 rail action.
@@ -185,12 +196,13 @@ so the two can never store different numbers. The grid keeps every drag inside
 the Plan period, and a change that would leave it is refused with a message
 naming the period.
 
-Clicking a block opens it: Share, tags and a note, plus Copy, Archive and
+Clicking a block opens it: Name, Share, tags and a note, plus Copy, Archive and
 Delete. Assignment tags are their own
 vocabulary, suggested from that Project's other Assignments. The Delete key
 deletes the Assignment under the pointer with no confirmation -
 [Undo](../GLOSSARY.md#undo) is the recovery - and `Ctrl+C` then `Ctrl+V` over a
-block copies it to the pointer's row at the same share, tags, note and length.
+block copies it to the pointer's row at the same share, name, tags, note and
+length.
 That copy lives in memory only; the system clipboard is never read or written,
 and a copy is used up by the paste it makes.
 An archived Assignment is history: it is drawn, marked, and can be restored,
@@ -199,7 +211,8 @@ but it cannot be dragged or copied until it is.
 Copy duplicates the Assignment where it already is, with no form and
 no clipboard in between: the copy lands on the same Person over the same start
 and end dates and carries the same [Allocation](../GLOSSARY.md#allocation),
-tags and note, with the tags copied into their own list rather than shared with
+name, tags and note, with the tags copied into their own list rather than shared
+with
 the source. Nothing is destroyed, so Copy sits before Archive and Delete and
 wears the ordinary style rather than the danger one. It
 is the one create the grid makes anyway, so the grid's own rules hold: an
@@ -523,9 +536,11 @@ all of its Assignments even while Assignments is switched off.
 
 A single `field: value` term names the field it searches and sets the scope
 aside: `person tag: architect`, `project notes: delayed`, `people: tim`,
-`project tag: platform`, `milestone: api`. Both singular and plural work, a bare
+`project tag: platform`, `assignment name: wiring`, `milestone: api`. Both
+singular and plural work, a bare
 `tag:` searches the rows' three tag kinds and never the Milestones', `name:`
-searches People and Projects, and `note:` searches Person and Assignment notes.
+searches every name of the three row kinds - an Assignment's own included - and
+`note:` searches Person and Assignment notes.
 A tag value that carries its own kind - a colon inside it, as in
 `person tag: skill:D` - matches every tag that starts with it, case-insensitively
 and trimmed, so a typed tag can be narrowed a character at a time: `skill:D`
@@ -655,7 +670,7 @@ they do, with a divider above the first row of each group after the first:
 - `Help...`, alone, because it opens the help rather than changing anything;
 - the view settings: `Weekends`, `Holidays`, `Milestones`, `Availability
   lines`, `Assignments`, `Grid dividers`, `Minimap`, `Marker`, then the `Colour
-  palette` disclosure and `Reset view`;
+  palette` disclosure, the `Block label` row and `Reset view`;
 - `Show archived`, alone, because it decides which records are included rather
   than how they are drawn;
 - the plan's own settings: `Plan period` and `Percentage step` disclosures,
@@ -688,6 +703,35 @@ a view setting kept in the config, so the plan never learns which one is active.
 
 **Where the controls are.** `Options` then `Colour palette`, which expands to the
 two schemes.
+
+## Block label
+
+What a block's drawn label names: its Project, its Assignment's own name, or
+both. The row cycles through `Project name`, `Assignment name` and `Both` on a
+press, and its detail states the one in force, so the closed row says what a
+press will change.
+
+`Project name` is the default and is what every block said before an Assignment
+could be named, so an untouched plan draws exactly as it did. `Assignment name`
+draws the Assignment's own name where the Project's used to be, and `Both`
+draws the name followed by the Project's. The share follows either way, so a
+block reads `PDF export · 40%` or `PDF export · Atlas Platform Rebuild ·
+40%`. A nameless Assignment falls back to its Project's name under both of the
+settings that ask for a name, so no block is ever left saying only a percentage.
+
+What the label names is not what the block is: the Project still decides the
+fill, the tags, the Share and every figure, and the setting changes nothing
+anywhere outside the drawing. A block too narrow for its label draws nothing and
+names itself on the paper above it instead, in the same words this setting
+chose.
+
+It is a view setting kept in the config, so the plan never learns which one is
+active, `Reset view` returns it to `Project name`, and a report disables the row
+the same way it disables the other grid-only entries: a report page draws no
+blocks.
+
+**Where the controls are.** `Options` then `Block label`, directly below
+`Colour palette`.
 
 ## Plan period
 
@@ -848,7 +892,8 @@ select for the key, then the values grouped by key with their swatches.
 `Reset view` returns every view setting to the default the app ships with, in
 one press: zoom and each level's grid spacing, row height, the bands, the
 Milestone rules, the availability lines, the assignment blocks, the Grid
-dividers, the Minimap, the Marker's visibility, the colour palette, the folded
+dividers, the Minimap, the Marker's visibility, the colour palette, what a
+block's label names, the folded
 rail, the two sort orders, and the report's own zoom and view.
 
 It leaves the plan alone, and it deliberately leaves the plan path, the Filter,

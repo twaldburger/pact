@@ -11,6 +11,12 @@ import {
   PALETTE_NAMES,
   isPalette
 } from "./palette.mjs";
+import {
+  BLOCK_LABEL_DEFAULT,
+  BLOCK_LABEL_LABELS,
+  BLOCK_LABEL_SETTINGS,
+  isBlockLabel
+} from "./label.mjs";
 import { DEFAULT_STEP, STEP_MIN, STEP_MAX, normalizeStep } from "./panels.mjs";
 import { cadenceFrom, sprintsFor } from "./sprints.mjs";
 import { tagKeys, tagColourSlots } from "./tags.mjs";
@@ -44,11 +50,12 @@ export function optionsItems(showArchived, highlightWeekends, gridDividers, mini
  * The Options menu, group by group, top to bottom: the help, what is drawn,
  * what is included, the plan and the app. `items` is optionsItems' own list
  * minus Show archived, so a future view toggle joins the view group without a
- * second edit; the palette and Reset view follow them. Show archived is alone
- * in the third group, because it changes which records are included rather
- * than what is drawn - the owner's decision, and the reason Reset view leaves
- * it alone. The plan group's "holidays" and "milestones" are the actions that
- * open their panels, not the toggles of the same keys above. This is the one
+ * second edit; the palette, the Block label and Reset view follow them. Show
+ * archived is alone in the third group, because it changes which records are
+ * included rather than what is drawn - the owner's decision, and the reason
+ * Reset view leaves it alone. The plan group's "holidays" and "milestones" are
+ * the actions that open their panels, not the toggles of the same keys above.
+ * This is the one
  * place the menu's shape is stated; public/app.js appends its rows in this
  * order.
  *
@@ -60,7 +67,7 @@ export function optionGroups(items) {
   const view = items
     .map(function (item) { return item.key; })
     .filter(function (key) { return key !== "archived"; })
-    .concat(["palette", "reset-view"]);
+    .concat(["palette", "blockLabel", "reset-view"]);
   return [
     ["help"],
     view,
@@ -83,18 +90,19 @@ export function optionDividerKeys(items) {
 /*
  * The menu entries a report cannot act on, by key: the grid's own display
  * toggles (the weekend band, the holiday band, the availability lines, the
- * assignment blocks, the Grid dividers, the Minimap and the Marker) and Reset
- * view. A report page draws no grid and makes no plan writes, so these are
- * disabled rather than moved or hidden; the plan-facing entries, Show archived
- * - which decides which records a report includes, so it is a group of its own
- * - and Milestones stay live, since a report's chart
- * draws the milestone rules and takes the same switch the grid does. Help is
+ * assignment blocks, the Grid dividers, the Minimap and the Marker), the Block
+ * label - which names what a block says, and a report page draws no blocks at
+ * all - and Reset view. A report page draws no grid and makes no plan writes,
+ * so these are disabled rather than moved or hidden; the plan-facing entries,
+ * Show archived - which decides which records a report includes, so it is a
+ * group of its own - and Milestones stay live, since a report's chart draws the
+ * milestone rules and takes the same switch the grid does. Help is
  * live too: a report's own vocabulary needs the reference as much as the
  * grid's does. Expressed here, beside the menu's own items, so the menu and
  * the report cannot disagree about which rows act.
  */
 export function reportDisabledOptionKeys() {
-  return ["weekends", "holidays", "availabilityLines", "assignments", "dividers", "minimap", "marker", "reset-view"];
+  return ["weekends", "holidays", "availabilityLines", "assignments", "dividers", "minimap", "marker", "blockLabel", "reset-view"];
 }
 
 /*
@@ -219,6 +227,36 @@ export function paletteControl(active) {
     label: "Colour palette",
     detail: PALETTE_LABELS[name]
   };
+}
+
+/*
+ * The Block label row: the second display choice about how a block is drawn,
+ * directly after the Colour palette, because the two belong together and
+ * neither is one of the overlay toggles. Unlike the palette it is a single row
+ * that cycles on a press - three choices are one click apart, so it opens no
+ * control of its own - and its detail names the setting that is active now, so
+ * the closed row says what a press will change. A view setting stored in the
+ * config, like the palette.
+ */
+export function blockLabelControl(active) {
+  const name = isBlockLabel(active) ? active : BLOCK_LABEL_DEFAULT;
+  return {
+    key: "blockLabel",
+    label: "Block label",
+    detail: BLOCK_LABEL_LABELS[name]
+  };
+}
+
+/*
+ * The setting one press of the Block label row takes, wrapping from the last
+ * back to the first. The menu cycles because a click has nowhere to put three
+ * choices; the agent tool takes an explicit value instead, so this is the row's
+ * rule alone.
+ */
+export function nextBlockLabel(active) {
+  const name = isBlockLabel(active) ? active : BLOCK_LABEL_DEFAULT;
+  const at = BLOCK_LABEL_SETTINGS.indexOf(name);
+  return BLOCK_LABEL_SETTINGS[(at + 1) % BLOCK_LABEL_SETTINGS.length];
 }
 
 // One stored range date as the menu states it: two-digit day, month and year,

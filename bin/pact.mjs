@@ -369,9 +369,11 @@ person copy, project copy and assignment copy take these as well
   --person <name>      assignment copy only: the Person the Assignment is on;
                        required, as it is for assignment move and archive
                        A copy takes nothing else: it carries the record's own
-                       fields, and the name it takes is the copy rule's, not
-                       yours to set. There is no --period either, because a copy
-                       counts no figure.
+                       fields. A Person's or a Project's copy takes the copy
+                       rule's name, not one of yours to set; an Assignment's
+                       copy keeps the Assignment's own name, since a copy is
+                       the same work in one more band. There is no --period
+                       either, because a copy counts no figure.
 
 person add takes these as well
   --location <name>    the Person's Location; its holidays are the ones taken out
@@ -694,13 +696,14 @@ The view, and how it looks
   keys it writes are zoom, reportZoom, reportView, rowHeight, gridSpacing.day,
   gridSpacing.week, gridSpacing.sprint, gridSpacing.month, weekends, holidays,
   milestones, availabilityLines, assignments, dividers, minimap, marker,
-  palette, stackCollapsed, sort.projects and sort.people. A value is what you
-  would type there: day, week, sprint or month for a zoom, on or off for a
-  toggle, a whole number of pixels for the height and the spacing, paired or
-  set3 for the palette, a report view's key or the label it wears, and a sort
-  key by its name or label with an optional direction - or none. An unknown key,
-  or a value the app would refuse or silently store as something else, is an
-  error naming what it does take.
+  palette, blockLabel, stackCollapsed, sort.projects and sort.people. A value is
+  what you would type there: day, week, sprint or month for a zoom, on or off
+  for a toggle, a whole number of pixels for the height and the spacing, paired
+  or set3 for the palette, project, assignment or both for the Block label - an
+  explicit value, never a cycle - a report view's key or the label it wears,
+  and a sort key by its name or label with an optional direction - or none. An
+  unknown key, or a value the app would refuse or silently store as something
+  else, is an error naming what it does take.
 
   The preview comes first and nothing is written without --apply. The app's
   Undo covers the plan and not its display, so a view change is not an Undo
@@ -1182,6 +1185,9 @@ function renderAssignments(assignments, subject) {
   const rows = assignments.map(function (assignment) {
     return [
       subject === "person" ? assignment.project : assignment.person,
+      // The Assignment's own name: empty for one that has none, so a plan that
+      // has never named an Assignment reads as it always did.
+      assignment.name || "-",
       String(assignment.share) + "%",
       assignment.start,
       assignment.end,
@@ -1190,8 +1196,8 @@ function renderAssignments(assignments, subject) {
     ];
   });
   return renderColumns(
-    [subject === "person" ? "Project" : "Person", "Allocation (%)", "Start", "End", "Absence", "Tags"],
-    rows, [false, true, false, false, false, false]
+    [subject === "person" ? "Project" : "Person", "Name", "Allocation (%)", "Start", "End", "Absence", "Tags"],
+    rows, [false, false, true, false, false, false, false]
   );
 }
 
@@ -1864,6 +1870,7 @@ function renderCopy(data) {
   } else {
     lines.push("Copy of the Assignment");
     lines.push("  " + data.subject.project + " / " + data.subject.person);
+    if (create.name !== "") lines.push("  Name: " + create.name);
     lines.push("  " + create.start + " to " + create.end + ", " + create.share + "%");
     lines.push("  Tags: " + (create.tags.length > 0 ? create.tags.join(", ") : "-"));
     if (create.note !== "") lines.push("  Note: " + create.note);
@@ -3404,6 +3411,7 @@ function renderView(data) {
       spacingText(view.gridSpacing)],
     ["Overlays", overlaysText(view)],
     ["Palette", view.palette],
+    ["Block label", view.blockLabel],
     ["Report", "zoom " + view.reportZoom + ", " + reportViewLabel(view.reportView)],
     ["Sort", "projects: " + sortText("projects", view.sort.projects) + ", people: " +
       sortText("people", view.sort.people)],

@@ -56,7 +56,7 @@ function fixture() {
       { id: "leave", name: "Annual Leave", colour: 4, absence: true, tags: ["Absence"], notes: "" }
     ],
     assignments: [
-      { id: "a-atlas-anna", projectId: "atlas", personId: "anna", start: "2026-11-02", end: "2026-11-13", share: 100, tags: ["lead"], note: "kick-off" },
+      { id: "a-atlas-anna", projectId: "atlas", personId: "anna", start: "2026-11-02", end: "2026-11-13", share: 100, name: "", tags: ["lead"], note: "kick-off" },
       { id: "a-borealis-anna", projectId: "borealis", personId: "anna", start: "2026-11-02", end: "2026-11-30", share: 30, tags: [], note: "" },
       { id: "a-leave-ben", projectId: "leave", personId: "ben", start: "2026-11-16", end: "2026-11-20", share: 100, tags: [], note: "" }
     ],
@@ -213,6 +213,7 @@ test("--apply changes only the fields the diff named", async () => {
   assert.equal(moved.start, "2026-11-02");
   assert.deepEqual(moved.tags, ["lead"]);
   assert.equal(moved.note, "kick-off");
+  assert.equal(moved.name, "");
   assert.equal(moved.projectId, "atlas");
   assert.equal(moved.personId, "anna");
 

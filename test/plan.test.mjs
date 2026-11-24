@@ -342,6 +342,75 @@ test("assignments can be created, updated and archived", () => {
   assert.equal(after.assignments.find((a) => a.id === created.id).archived, true);
 });
 
+test("an Assignment's name is optional free text, and two may share one", () => {
+  const file = tempFile();
+  const store = createStore(file);
+  const before = store.get().projects;
+  const named = store.createAssignment({
+    projectId: "borealis",
+    personId: "cara",
+    start: day(10),
+    end: day(14),
+    share: 50,
+    name: "PDF export"
+  });
+  assert.equal(named.name, "PDF export");
+  // A name is the Assignment's own, not a second Project: no Project is
+  // created, none takes the name, and no colour, tag or capacity moves.
+  assert.deepEqual(store.get().projects, before);
+  assert.equal(store.get().projects.some((p) => p.name === "PDF export"), false);
+
+  // Two Assignments may share a name, as they may share a note: nothing is
+  // refused.
+  const second = store.createAssignment({
+    projectId: "atlas",
+    personId: "cara",
+    start: day(15),
+    end: day(17),
+    share: 20,
+    name: "PDF export"
+  });
+  assert.equal(second.name, "PDF export");
+  assert.deepEqual(store.get().assignments.filter((a) => a.name === "PDF export").length, 2);
+
+  // Absent means nameless, which is stored as an empty name like a note: every
+  // existing plan stays valid and needs no migration.
+  const unnamed = store.createAssignment({
+    projectId: "atlas",
+    personId: "anna",
+    start: day(0),
+    end: day(2),
+    share: 10
+  });
+  assert.equal(unnamed.name, "");
+
+  // A name is set and cleared through the same update path as a note.
+  assert.equal(store.updateAssignment(unnamed.id, { name: "Wiring plan" }).name, "Wiring plan");
+  assert.equal(store.updateAssignment(unnamed.id, { name: "" }).name, "");
+});
+
+test("an Assignment's name is a string or nothing, and no other field is invented", () => {
+  const store = createStore(tempFile());
+  const body = { projectId: "atlas", personId: "anna", start: day(0), end: day(2), share: 10 };
+  // A non-string is refused with the field named, as an Assignment note is.
+  assert.throws(() => store.createAssignment(Object.assign({}, body, { name: 42 })),
+    /assignment\.name must be a string/);
+  const created = store.createAssignment(Object.assign({}, body, { name: "Wiring plan" }));
+  assert.throws(() => store.updateAssignment(created.id, { name: false }),
+    /assignment\.name must be a string/);
+  // A field the Assignment does not hold is still refused beside it.
+  assert.throws(() => store.createAssignment(Object.assign({}, body, { colour: 1 })), ValidationError);
+  // The stored plan's own validator names the same refusal, so a hand-edited
+  // file is caught on load as well as on a write.
+  const plan = seedPlan();
+  plan.assignments[0].name = 7;
+  assert.deepEqual(validatePlan(plan), ["assignments.name must be a string"]);
+  plan.assignments[0].name = "Wiring plan";
+  assert.deepEqual(validatePlan(plan), []);
+  plan.assignments[0].name = "";
+  assert.deepEqual(validatePlan(plan), []);
+});
+
 test("archiving a project keeps its assignments", () => {
   const store = createStore(tempFile());
   const project = store.createProject({ name: "Summit", colour: "plum", notes: "" });

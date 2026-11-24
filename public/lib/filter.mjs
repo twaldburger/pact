@@ -75,10 +75,12 @@ export function searchedAreas(scopes) {
  * The fields a typed term can name, and the words that name them. A prefix is
  * matched case-insensitively and trimmed, and both the singular and the plural
  * work. The bare `tag:`/`tags:` means all three tag kinds, `note:`/`notes:` both
- * person and assignment notes, and `name:`/`names:` both names; everything
- * else points at exactly one field. The milestone fields are named only by
- * their own prefixes: a Milestone's tags are a fourth, separate vocabulary, so
- * a bare `tag:` never reaches them.
+ * person and assignment notes, and `name:`/`names:` every name of the three row
+ * kinds, an Assignment's own included; everything else points at exactly one
+ * field. An Assignment's own name is reached by `assignment name:` and by a
+ * plain term, like any other field of its own. The milestone fields are named
+ * only by their own prefixes: a Milestone's tags are a fourth, separate
+ * vocabulary, so a bare `tag:` never reaches them.
  */
 export const FILTER_FIELDS = [
   "person.name",
@@ -88,6 +90,7 @@ export const FILTER_FIELDS = [
   "project.name",
   "project.notes",
   "project.tags",
+  "assignment.name",
   "assignment.tags",
   "assignment.note",
   "milestone.name",
@@ -104,6 +107,7 @@ export const FIELD_LABELS = {
   "project.name": "project names",
   "project.notes": "project notes",
   "project.tags": "project tags",
+  "assignment.name": "assignment names",
   "assignment.tags": "assignment tags",
   "assignment.note": "assignment notes",
   "milestone.name": "milestone names",
@@ -138,6 +142,8 @@ const PREFIX_FIELDS = {
   "project notes": ["project.notes"],
   "project tag": ["project.tags"],
   "project tags": ["project.tags"],
+  "assignment name": ["assignment.name"],
+  "assignment names": ["assignment.name"],
   "assignment tag": ["assignment.tags"],
   "assignment tags": ["assignment.tags"],
   "assignment note": ["assignment.note"],
@@ -150,8 +156,8 @@ const PREFIX_FIELDS = {
   "milestone tags": ["milestone.tags"],
   "milestone note": ["milestone.notes"],
   "milestone notes": ["milestone.notes"],
-  "name": ["person.name", "project.name"],
-  "names": ["person.name", "project.name"]
+  "name": ["person.name", "project.name", "assignment.name"],
+  "names": ["person.name", "project.name", "assignment.name"]
 };
 
 // The prefixes the dropdown teaches, one row each, with the field it points
@@ -165,12 +171,13 @@ const TEACHING_PREFIXES = [
   { name: "project", label: "projects by name", fields: ["project.name"] },
   { name: "project note", label: "project notes", fields: ["project.notes"] },
   { name: "project tag", label: "project tags", fields: ["project.tags"] },
+  { name: "assignment name", label: "assignment names", fields: ["assignment.name"] },
   { name: "assignment tag", label: "assignment tags", fields: ["assignment.tags"] },
   { name: "assignment note", label: "assignment notes", fields: ["assignment.note"] },
   { name: "milestone", label: "milestones by name", fields: ["milestone.name"] },
   { name: "milestone tag", label: "milestone tags", fields: ["milestone.tags"] },
   { name: "milestone note", label: "milestone notes", fields: ["milestone.notes"] },
-  { name: "name", label: "people and projects by name", fields: ["person.name", "project.name"] },
+  { name: "name", label: "people, projects and assignments by name", fields: ["person.name", "project.name", "assignment.name"] },
   { name: "tag", label: "person, project and assignment tags", fields: ["person.tags", "project.tags", "assignment.tags"] },
   { name: "note", label: "person and assignment notes", fields: ["person.note", "assignment.note"] }
 ];
@@ -242,7 +249,7 @@ export function parseFilterTerm(query) {
 export function unknownFieldHint(prefix) {
   return '"' + String(prefix == null ? "" : prefix) + ':" is not a field the Filter knows - if you meant a field, try ' +
     "person, people, person tag, person note, person location, project, " +
-    "project note, project tag, assignment tag, assignment note, milestone, " +
+    "project note, project tag, assignment name, assignment tag, assignment note, milestone, " +
     "milestone tag, milestone note, name, tag or note.";
 }
 
@@ -290,6 +297,7 @@ const FIELD_MATCHES = {
   "project.name": function (item, q) { return won(item.name, q); },
   "project.notes": function (item, q) { return won(item.notes, q); },
   "project.tags": function (item, q) { return someTag(item.tags, q); },
+  "assignment.name": function (item, q) { return won(item.name, q); },
   "assignment.tags": function (item, q) { return someTag(item.tags, q); },
   "assignment.note": function (item, q) { return won(item.note, q); },
   "milestone.name": function (item, q) { return won(item.name, q); },
@@ -325,6 +333,7 @@ function projectMatches(project, q) {
 }
 
 function assignmentMatches(assignment, q) {
+  if (won(assignment.name, q)) return true;
   if (someTag(assignment.tags, q)) return true;
   return won(assignment.note, q);
 }
@@ -487,6 +496,7 @@ const SOURCE_ASSIGNMENT_TAG = "Assignment tag";
 const SOURCE_PERSON_TAG = "Person tag";
 const SOURCE_PROJECT_TAG = "Project tag";
 const SOURCE_PROJECT_NOTE = "Project note";
+const SOURCE_ASSIGNMENT_NAME = "Assignment name";
 const SOURCE_ASSIGNMENT_NOTE = "Assignment note";
 const SOURCE_PERSON_NOTE = "Person note";
 const SOURCE_PERSON_LOCATION = "Person location";
@@ -603,6 +613,11 @@ function collectField(plan, field, q, out, seen, prefix) {
       if (!person.note || !won(person.note, q)) return;
       addCandidate(out, seen, plan, fieldPrefix, SOURCE_PERSON_NOTE, person.note, "person");
     });
+  } else if (field === "assignment.name") {
+    assignments.forEach(function (assignment) {
+      if (!assignment.name || !won(assignment.name, q)) return;
+      addCandidate(out, seen, plan, fieldPrefix, SOURCE_ASSIGNMENT_NAME, assignment.name, "assignment");
+    });
   } else if (field === "assignment.tags") {
     collectTags(assignments).forEach(function (tag) {
       addCandidate(out, seen, plan, fieldPrefix, SOURCE_ASSIGNMENT_TAG, tag, "assignment");
@@ -658,6 +673,7 @@ function scopedSuggestions(plan, q, scopes) {
     collectField(plan, "person.note", q, out, seen);
   }
   if (s.assignments) {
+    collectField(plan, "assignment.name", q, out, seen);
     collectField(plan, "assignment.tags", q, out, seen);
     collectField(plan, "assignment.note", q, out, seen);
   }

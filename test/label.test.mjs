@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  BLOCK_LABEL_DEFAULT,
+  BLOCK_LABEL_SETTINGS,
   blockLabel,
+  blockTitle,
   hoverText,
+  isBlockLabel,
   labelText,
   rangeLabel,
   ELLIPSIS,
@@ -153,4 +157,56 @@ test("the range label names the year once when the months share it", () => {
 
 test("the range label names a single month on its own", () => {
   assert.equal(rangeLabel("2026-09-01", "2026-09-30"), "Sep 2026");
+});
+
+/* --- what a block's label names ------------------------------------------- */
+
+test("the Block label setting chooses the first part and the Share stays last", () => {
+  // The three settings, each composed exactly as labelText draws it.
+  assert.equal(labelText(blockTitle("project", "Atlas Platform Rebuild", "PDF export"), SHARE),
+    "Atlas Platform Rebuild \u00b7 60%");
+  assert.equal(labelText(blockTitle("assignment", "Atlas Platform Rebuild", "PDF export"), SHARE),
+    "PDF export \u00b7 60%");
+  assert.equal(labelText(blockTitle("both", "Atlas Platform Rebuild", "PDF export"), SHARE),
+    "PDF export \u00b7 Atlas Platform Rebuild \u00b7 60%");
+});
+
+test("a nameless Assignment falls back to its Project's name, never a bare percentage", () => {
+  // A rule, not a preference: under either setting that asks for the name, a
+  // block with no name of its own still says which Project it belongs to.
+  assert.equal(blockTitle("assignment", "Atlas", ""), "Atlas");
+  assert.equal(blockTitle("both", "Atlas", ""), "Atlas");
+  // The same for a name that is only whitespace, and for one stored as absent.
+  assert.equal(blockTitle("assignment", "Atlas", "   "), "Atlas");
+  assert.equal(blockTitle("assignment", "Atlas", undefined), "Atlas");
+  assert.equal(blockTitle("assignment", "Atlas", null), "Atlas");
+  // Under `both` the block shows the one name that exists.
+  assert.equal(labelText(blockTitle("both", "Atlas", ""), SHARE), "Atlas \u00b7 60%");
+  // The Project's own name is the setting that never looks at the Assignment.
+  assert.equal(blockTitle("project", "Atlas", "PDF export"), "Atlas");
+});
+
+test("an unknown or absent setting reads as the Project's name alone", () => {
+  [undefined, null, "", "title", "Both", 2].forEach((setting) => {
+    assert.equal(blockTitle(setting, "Atlas", "PDF export"), "Atlas", String(setting));
+  });
+});
+
+test("the hover text carries the label the setting chose, name and note together", () => {
+  const both = labelText(blockTitle("both", "Atlas", "PDF export"), SHARE);
+  assert.equal(hoverText(blockTitle("both", "Atlas", "PDF export"), SHARE, "Ships with Lumen"),
+    both + "\nShips with Lumen");
+  // A named block with room for the whole label draws that same label.
+  const named = blockLabel(Object.assign({}, room, {
+    title: blockTitle("both", "Atlas", "PDF export"),
+    width: widthOf(labelText("PDF export \u00b7 Atlas", SHARE).length)
+  }));
+  assert.equal(named, "PDF export \u00b7 Atlas \u00b7 60%");
+});
+
+test("the three settings are the whole vocabulary, and the default is the Project's name", () => {
+  assert.deepEqual(BLOCK_LABEL_SETTINGS, ["project", "assignment", "both"]);
+  assert.equal(BLOCK_LABEL_DEFAULT, "project");
+  BLOCK_LABEL_SETTINGS.forEach((name) => assert.equal(isBlockLabel(name), true));
+  [undefined, null, "", "title", "Both", 1].forEach((value) => assert.equal(isBlockLabel(value), false));
 });
