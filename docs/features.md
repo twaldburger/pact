@@ -670,7 +670,7 @@ they do, with a divider above the first row of each group after the first:
 - `Help...`, alone, because it opens the help rather than changing anything;
 - the view settings: `Weekends`, `Holidays`, `Milestones`, `Availability
   lines`, `Assignments`, `Grid dividers`, `Minimap`, `Marker`, then the `Colour
-  palette` disclosure, the `Block label` row and `Reset view`;
+  palette` disclosure, the `Block label` disclosure and `Reset view`;
 - `Show archived`, alone, because it decides which records are included rather
   than how they are drawn;
 - the plan's own settings: `Plan period` and `Percentage step` disclosures,
@@ -707,9 +707,9 @@ two schemes.
 ## Block label
 
 What a block's drawn label names: its Project, its Assignment's own name, or
-both. The row cycles through `Project name`, `Assignment name` and `Both` on a
-press, and its detail states the one in force, so the closed row says what a
-press will change.
+both. The row states the setting in force, and expands to the three - `Project
+name`, `Assignment name` and `Both`, the active one checked - as the Colour
+palette beside it does.
 
 `Project name` is the default and is what every block said before an Assignment
 could be named, so an untouched plan draws exactly as it did. `Assignment name`
@@ -731,7 +731,7 @@ the same way it disables the other grid-only entries: a report page draws no
 blocks.
 
 **Where the controls are.** `Options` then `Block label`, directly below
-`Colour palette`.
+`Colour palette`, which expands to the three settings.
 
 ## Plan period
 

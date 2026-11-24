@@ -31,7 +31,7 @@ import {
 } from "./lib/panels.mjs";
 import { offeredTags, tickToggled, commitLabel, committedTags, enterTags } from "./lib/tag-picker.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, nextBlockLabel, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, blockLabelItems, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
@@ -5994,7 +5994,7 @@ function resetView() {
   applyRowHeight();
   updateOptionsMenu();
   updatePaletteMenu();
-  updateBlockLabelRow();
+  updateBlockLabelMenu();
   updateSortControl("projects");
   updateSortControl("people");
   render();
@@ -6010,12 +6010,12 @@ var optionsBtn = null;
 var optionsMenu = null;
 var optionButtons = {};
 var paletteButtons = {};
+var blockLabelButtons = {};
 var disclosureRows = {};
 var openDisclosureKey = null;
 var rangeStartInput = null;
 var rangeEndInput = null;
 var rangeError = null;
-var blockLabelDetail = null;
 var stepInput = null;
 var stepError = null;
 var sprintsOptionDetail = null;
@@ -6174,21 +6174,24 @@ function updatePaletteMenu() {
   });
 }
 
-// The Block label row states the setting in force beside its label, so the
-// closed row says what a press will change.
-function updateBlockLabelRow() {
-  if (!blockLabelDetail) return;
-  blockLabelDetail.textContent = blockLabelControl(blockLabelSetting).detail;
+// The Block label is a single choice between three settings. All three items
+// are checkable; exactly one is checked, and the tick and aria-checked state
+// it. The closed row states the setting in force beside its label.
+function updateBlockLabelMenu() {
+  setDisclosureDetail("blockLabel", blockLabelControl(blockLabelSetting).detail);
+  blockLabelItems(blockLabelSetting).forEach(function (item) {
+    var btn = blockLabelButtons[item.key];
+    if (btn) btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+  });
 }
 
 // Switching what a block's label names is a view change, not a plan change: the
 // blocks are rebuilt with the new label and the view is stored. The plan file is
-// untouched. The menu row always takes an explicit setting - it is the click
-// that has nowhere to put three choices, not this function's caller.
+// untouched. The menu's items and the agent tool both take an explicit setting.
 function setBlockLabel(setting) {
   if (!isBlockLabel(setting) || setting === blockLabelSetting) return;
   blockLabelSetting = setting;
-  updateBlockLabelRow();
+  updateBlockLabelMenu();
   render();
   persistView();
 }
@@ -6225,7 +6228,7 @@ function buildOptionsMenu() {
     optionsMenu.appendChild(buildOptionToggle(item));
   });
   buildDisclosureRow(paletteControl(activePalette), buildPaletteControl());
-  optionsMenu.appendChild(buildBlockLabelRow());
+  buildDisclosureRow(blockLabelControl(blockLabelSetting), buildBlockLabelControl());
   optionsMenu.appendChild(buildResetViewItem());
   var archivedItem = items.filter(function (item) { return item.key === "archived"; })[0];
   optionsMenu.appendChild(buildOptionToggle(archivedItem));
@@ -6255,27 +6258,6 @@ function buildOptionToggle(item) {
     if (action) action();
   });
   optionButtons[item.key] = btn;
-  return btn;
-}
-
-/* The Block label row: one row that cycles Project name, Assignment name and
- * Both on a press, directly after the Colour palette so the two choices about
- * how a block is drawn stand together and neither is mistaken for an overlay
- * toggle. Its detail names the setting in force; there is no control under it,
- * because three choices are one click apart. */
-function buildBlockLabelRow() {
-  var item = blockLabelControl(blockLabelSetting);
-  var btn = el("button", optionRowClass(item.key));
-  btn.type = "button";
-  btn.id = "option-" + item.key;
-  btn.setAttribute("role", "menuitem");
-  btn.appendChild(document.createTextNode(item.label));
-  blockLabelDetail = el("span", "options__item-detail");
-  blockLabelDetail.textContent = item.detail;
-  btn.appendChild(blockLabelDetail);
-  btn.addEventListener("click", function () {
-    setBlockLabel(nextBlockLabel(blockLabelSetting));
-  });
   return btn;
 }
 
@@ -6873,6 +6855,31 @@ function buildPaletteControl() {
   return wrap;
 }
 
+/* The Block label disclosure: the three settings, each a checkable item with
+ * the menu's own tick, directly after the Colour palette so the two choices
+ * about how a block is drawn stand together and neither is mistaken for an
+ * overlay toggle. Choosing one relabels every block at once. */
+function buildBlockLabelControl() {
+  var wrap = el("div", "options__disclosure");
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", "Block label");
+  blockLabelItems(blockLabelSetting).forEach(function (item) {
+    var btn = el("button", "options__item");
+    btn.type = "button";
+    btn.id = "block-label-" + item.key;
+    btn.setAttribute("role", "menuitemradio");
+    btn.setAttribute("aria-checked", item.checked ? "true" : "false");
+    var tick = el("span", "options__tick");
+    tick.setAttribute("aria-hidden", "true");
+    btn.appendChild(tick);
+    btn.appendChild(document.createTextNode(item.label));
+    btn.addEventListener("click", function () { setBlockLabel(item.key); });
+    blockLabelButtons[item.key] = btn;
+    wrap.appendChild(btn);
+  });
+  return wrap;
+}
+
 /* The plan period disclosure: one explicit start date and one explicit end
  * date, set together. The fields follow the menu's own item language, and a
  * refused pair is named in the control rather than closing it. */
@@ -7044,7 +7051,7 @@ function openOptions(open) {
     closeSortMenus();
     if (filterScopesEl && !filterScopesEl.hidden) openScopes(false);
     updateOptionsMenu();
-    updateBlockLabelRow();
+    updateBlockLabelMenu();
     updateRangeControl();
     updateStepControl();
     updateSprintsItem();

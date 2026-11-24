@@ -50,8 +50,9 @@ export function labelText(title, share) {
 }
 
 /*
- * What a block's label names, as the Options menu's Block label row cycles it:
- * the Project's name, the Assignment's own name, or both. `project` is what
+ * What a block's label names, as the Options menu's Block label disclosure and
+ * the agent tool set it: the Project's name, the Assignment's own name, or both.
+ * `project` is what
  * every block said before an Assignment could have a name, so it is the
  * default and an untouched plan draws exactly as it did.
  */

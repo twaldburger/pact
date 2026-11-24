@@ -230,13 +230,26 @@ export function paletteControl(active) {
 }
 
 /*
+ * The Block label group: the three settings as checkable items, exactly one of
+ * them checked, in the order the settings are stated. A view setting stored in
+ * the config, like the palette beside it.
+ */
+export function blockLabelItems(active) {
+  const name = isBlockLabel(active) ? active : BLOCK_LABEL_DEFAULT;
+  return BLOCK_LABEL_SETTINGS.map((key) => ({
+    key: key,
+    label: BLOCK_LABEL_LABELS[key],
+    checked: key === name
+  }));
+}
+
+/*
  * The Block label row: the second display choice about how a block is drawn,
  * directly after the Colour palette, because the two belong together and
- * neither is one of the overlay toggles. Unlike the palette it is a single row
- * that cycles on a press - three choices are one click apart, so it opens no
- * control of its own - and its detail names the setting that is active now, so
- * the closed row says what a press will change. A view setting stored in the
- * config, like the palette.
+ * neither is one of the overlay toggles. Like the palette it is a disclosure,
+ * not a group of items: its detail names the setting in force, and expanding it
+ * shows the three settings blockLabelItems lists, the active one checked. A
+ * view setting stored in the config, like the palette.
  */
 export function blockLabelControl(active) {
   const name = isBlockLabel(active) ? active : BLOCK_LABEL_DEFAULT;
@@ -245,18 +258,6 @@ export function blockLabelControl(active) {
     label: "Block label",
     detail: BLOCK_LABEL_LABELS[name]
   };
-}
-
-/*
- * The setting one press of the Block label row takes, wrapping from the last
- * back to the first. The menu cycles because a click has nowhere to put three
- * choices; the agent tool takes an explicit value instead, so this is the row's
- * rule alone.
- */
-export function nextBlockLabel(active) {
-  const name = isBlockLabel(active) ? active : BLOCK_LABEL_DEFAULT;
-  const at = BLOCK_LABEL_SETTINGS.indexOf(name);
-  return BLOCK_LABEL_SETTINGS[(at + 1) % BLOCK_LABEL_SETTINGS.length];
 }
 
 // One stored range date as the menu states it: two-digit day, month and year,

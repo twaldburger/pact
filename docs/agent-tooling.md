@@ -193,7 +193,7 @@ it. Both read the running app, because the display settings live there.
   display, so the preview prints the command that puts the setting back. The
   Block label is written as `view set blockLabel <project|assignment|both>` - an
   explicit value, never a cycle, because a command line has room to say which
-  one it means where a press of the menu row does not.
+  one it means.
 
 Neither touches a plan record, a figure, or anything that deletes.
 
