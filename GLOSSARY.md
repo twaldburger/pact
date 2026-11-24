@@ -136,7 +136,7 @@ An overview strip of the Timeline, off by default and turned on under the Option
 _Avoid_: overview, thumbnail, mini-chart, density chart
 
 **Block label**:
-What the label drawn inside a block names: its Project's name, its Assignment's own name, or both - `Project · 40%`, `PDF export · 40%` or `PDF export · Atlas Platform Rebuild · 40%`. The choice is one row in the Options menu that cycles the three on a press, stored as a [View setting](#view-setting) and restored by `Reset view`. It chooses words and nothing else: the Project still decides the colour, the tags and every figure, and the Share follows the name whatever is chosen. A nameless Assignment falls back to its Project's name under the settings that ask for a name, so a block is never left saying only a percentage.
+What the label drawn inside a block names: its Project's name, its Assignment's own name, or both - `Project · 40%`, `PDF export · 40%` or `PDF export · Atlas Platform Rebuild · 40%`. The choice is one row in the Options menu that states the setting in force and expands to the three, the active one checked, stored as a [View setting](#view-setting) and restored by `Reset view`. It chooses words and nothing else: the Project still decides the colour, the tags and every figure, and the Share follows the name whatever is chosen. A nameless Assignment falls back to its Project's name under the settings that ask for a name, so a block is never left saying only a percentage.
 _Avoid_: title, caption, block text, assignment label, block name
 
 **Zoom**:

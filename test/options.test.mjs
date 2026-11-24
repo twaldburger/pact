@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, nextBlockLabel, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "../public/lib/options.mjs";
+import { optionsItems, optionGroups, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, blockLabelItems, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "../public/lib/options.mjs";
 import { VIEW_KEYS } from "../public/lib/view.mjs";
 import { ZOOM_DEFAULT, ZOOM_LEVELS } from "../public/lib/timeline.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
@@ -264,21 +264,35 @@ test("the palette row states the active scheme as its detail", () => {
   assert.equal(paletteControl("vibrant").detail, "Paired");
 });
 
-test("the palette, period and step are each one collapsed row, not a group", () => {
+test("the palette, the Block label, the period and the step are each one collapsed row, not a group", () => {
   // The menu's second shape: a label and the value it holds, never a heading
   // over several rows.
-  [paletteControl("paired"), rangeControl({ start: "2026-01-01", end: "2026-12-31" }), stepControl(10)]
+  [paletteControl("paired"), blockLabelControl("project"), rangeControl({ start: "2026-01-01", end: "2026-12-31" }), stepControl(10)]
     .forEach((item) => {
       assert.equal(typeof item.label, "string");
       assert.equal(typeof item.detail, "string");
       assert.ok(item.detail.length > 0);
     });
   assert.equal(paletteControl("set3").label, "Colour palette");
+  assert.equal(blockLabelControl("both").label, "Block label");
   assert.equal(rangeControl(null).label, "Plan period");
   assert.equal(stepControl(10).label, "Percentage step");
 });
 
-test("the Block label row cycles Project name, Assignment name and Both, and states the one in force", () => {
+test("the Block label group is Project name, Assignment name and Both, exactly one checked", () => {
+  const items = blockLabelItems("project");
+  assert.deepEqual(items.map((item) => item.key), ["project", "assignment", "both"]);
+  assert.deepEqual(items.map((item) => item.label), ["Project name", "Assignment name", "Both"]);
+  assert.deepEqual(items.map((item) => item.checked), [true, false, false]);
+  assert.deepEqual(blockLabelItems("assignment").map((item) => item.checked), [false, true, false]);
+  assert.deepEqual(blockLabelItems("both").map((item) => item.checked), [false, false, true]);
+  // A missing or unknown setting checks Project name, which is what every
+  // block said before an Assignment could have one.
+  assert.deepEqual(blockLabelItems(undefined).map((item) => item.checked), [true, false, false]);
+  assert.deepEqual(blockLabelItems("title").map((item) => item.checked), [true, false, false]);
+});
+
+test("the Block label row states the active setting as its detail", () => {
   assert.deepEqual(blockLabelControl("project"), { key: "blockLabel", label: "Block label", detail: "Project name" });
   assert.equal(blockLabelControl("assignment").detail, "Assignment name");
   assert.equal(blockLabelControl("both").detail, "Both");
@@ -286,13 +300,6 @@ test("the Block label row cycles Project name, Assignment name and Both, and sta
   // every block said before an Assignment could have one.
   assert.equal(blockLabelControl(undefined).detail, "Project name");
   assert.equal(blockLabelControl("title").detail, "Project name");
-  // One press takes the next setting, and the last wraps back to the first.
-  assert.equal(nextBlockLabel("project"), "assignment");
-  assert.equal(nextBlockLabel("assignment"), "both");
-  assert.equal(nextBlockLabel("both"), "project");
-  // The cycle is whole whatever it is handed, so a press never lands nowhere.
-  assert.equal(nextBlockLabel(undefined), "assignment");
-  assert.equal(nextBlockLabel("title"), "assignment");
   // It is a view setting, like the palette it sits after: stored in the config
   // and restored by Reset view, never written to the plan.
   assert.equal(VIEW_KEYS.includes("blockLabel"), true);
