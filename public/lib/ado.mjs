@@ -52,6 +52,148 @@ function isNonEmptyText(value) {
 }
 
 /*
+ * One URL in, the address pair out.
+ *
+ * The panel asks for a URL because that is what a person has to hand - the
+ * browser bar, or a work item pasted out of a chat - while the plan stores the
+ * two things every API call needs. Asking a person to cut their own URL into
+ * two fields is where a wrong split fails at the worst moment: after a round
+ * trip to ADO, in Test connection, rather than at the paste.
+ *
+ * The forms, all of them real:
+ *
+ *   https://dev.azure.com/{org}/{project}
+ *   https://dev.azure.com/{org}                         (no project yet)
+ *   https://{org}.visualstudio.com/{project}
+ *   https://{org}.visualstudio.com/DefaultCollection/{project}
+ *   https://dev.azure.com/{org}/{project}/_workitems/edit/{id}
+ *
+ * and the same deep links under a board. The project is a path segment and
+ * never `_workitems` or `_boards`; a query string, a fragment and a trailing
+ * slash are dropped; `%20`-style encoding is decoded, so `PACT%20Lab` is the
+ * project `PACT Lab`. A host that is neither dev.azure.com nor
+ * {org}.visualstudio.com is refused rather than coerced into one.
+ *
+ * A URL carrying no project is not an error: the organisation is read and the
+ * project is left for the person to type.
+ */
+export const ADO_URL_SHAPES =
+  "Paste https://dev.azure.com/<organisation>, https://dev.azure.com/<organisation>/<project>, " +
+  "https://<organisation>.visualstudio.com/<project>, " +
+  "https://<organisation>.visualstudio.com/DefaultCollection/<project>, " +
+  "or a work item or board link below one of them.";
+
+const DEV_AZURE_HOST = "dev.azure.com";
+const VISUAL_STUDIO_SUFFIX = ".visualstudio.com";
+const COLLECTION_SEGMENT = "defaultcollection";
+// An organisation's name is a DNS label: ADO uses it as one.
+const ORGANISATION_NAME = /^[a-z0-9][a-z0-9-]*$/i;
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+// What a failed read answers: no address, and the refusal with the shapes it
+// would have accepted named, because "invalid URL" alone leaves a reader stuck.
+function unreadable(reason) {
+  return { organizationUrl: "", organization: "", project: "", refusal: reason + " " + ADO_URL_SHAPES };
+}
+
+function readable(organizationUrl, organization, project) {
+  return { organizationUrl: organizationUrl, organization: organization, project: project, refusal: "" };
+}
+
+// A path as its segments, empty ones dropped, each one decoded: a project's
+// name may be percent-encoded, and `PACT%20Lab` is `PACT Lab`.
+function pathSegments(pathname) {
+  return String(pathname || "")
+    .split("/")
+    .filter(function (segment) { return segment !== ""; })
+    .map(function (segment) {
+      try {
+        return decodeURIComponent(segment);
+      } catch (_) {
+        return segment;
+      }
+    });
+}
+
+// The project a path names: the first segment that is not ADO's own page
+// address, which is always written with a leading underscore.
+function projectFrom(segments) {
+  const found = segments.filter(function (segment) { return segment.charAt(0) !== "_"; })[0];
+  return found || "";
+}
+
+/*
+ * The URL as the address pair, or the refusal that says what PACT reads. The
+ * scheme may be left off - a URL copied out of a message often has it - and is
+ * always stored as https, which is what ADO serves.
+ */
+export function readAdoUrl(text) {
+  const raw = String(text === undefined || text === null ? "" : text).trim();
+  if (raw === "") return unreadable("Enter the URL of your Azure DevOps organisation or project.");
+  let parsed;
+  try {
+    parsed = new URL(URL_SCHEME.test(raw) ? raw : "https://" + raw);
+  } catch (_) {
+    return unreadable("That is not a URL.");
+  }
+  const host = parsed.hostname.toLowerCase();
+  const segments = pathSegments(parsed.pathname);
+
+  // A host is letters, digits, dots and hyphens. Anything else - a sentence
+  // with spaces in it, most of all - is prose that happened to parse, and is
+  // refused as prose rather than quoted back as if it were a host.
+  if (!/^[a-z0-9.-]+$/.test(host)) return unreadable("That is not a URL.");
+
+  if (host === DEV_AZURE_HOST) {
+    const organization = segments[0] || "";
+    if (!ORGANISATION_NAME.test(organization)) {
+      return unreadable("https://dev.azure.com/ needs the organisation's name after it.");
+    }
+    return readable("https://" + DEV_AZURE_HOST + "/" + organization, organization,
+      projectFrom(segments.slice(1)));
+  }
+
+  if (host.endsWith(VISUAL_STUDIO_SUFFIX)) {
+    const organization = host.slice(0, -VISUAL_STUDIO_SUFFIX.length);
+    if (!ORGANISATION_NAME.test(organization)) {
+      return unreadable("PACT reads 'dev.azure.com' and '<organisation>.visualstudio.com' " +
+        "addresses, and '" + host + "' is neither.");
+    }
+    const afterCollection = segments[0] && segments[0].toLowerCase() === COLLECTION_SEGMENT
+      ? segments.slice(1)
+      : segments;
+    return readable("https://" + host, organization, projectFrom(afterCollection));
+  }
+
+  return unreadable("PACT reads 'dev.azure.com' and '<organisation>.visualstudio.com' " +
+    "addresses, and '" + host + "' is neither.");
+}
+
+/*
+ * The address pair as the URL the panel shows, so a stored mapping reads as one
+ * URL and a paste of it reads back to the same pair.
+ */
+export function adoUrlFor(input) {
+  const block = input || {};
+  const base = trimOrganizationUrl(block.organizationUrl);
+  const project = String(block.project === undefined || block.project === null ? "" : block.project).trim();
+  if (base === "") return "";
+  return project === "" ? base : base + "/" + encodeURIComponent(project);
+}
+
+/*
+ * What a read is shown as: the two values named in one line, so a wrong reading
+ * is visible before anything is saved. A URL with no project says so rather
+ * than leaving the line short and looking like a project named nothing.
+ */
+export function adoReadingLine(reading) {
+  const found = reading || {};
+  if (!found.organization) return "";
+  const project = found.project ? found.project : "not in this URL - type it";
+  return "organisation: " + found.organization + " \u00b7 project: " + project;
+}
+
+/*
  * The address pair: what the panel's two text fields hold and what a test
  * connection needs before it can call anything. Returns the refusals as plain
  * sentences, or an empty array when the addresses may be used.

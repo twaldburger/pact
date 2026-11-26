@@ -894,6 +894,25 @@ PACT can be told how an Azure DevOps project maps onto the plan. A
 [Mapping](../GLOSSARY.md#mapping), which is plan data and is written into the
 plan file, and a personal access token, which is a secret and never is.
 
+The panel asks for one URL, because a URL is what a person has to hand - from
+the browser bar, or pasted out of a work item - while the organisation's address
+and the project's name are what PACT needs and not what anyone thinks in. The
+URL is read as it is pasted, and the panel states what it read:
+`organisation: timwaldburger · project: PACT`. Five shapes are read:
+`https://dev.azure.com/{org}/{project}`, `https://dev.azure.com/{org}` with no
+project yet, `https://{org}.visualstudio.com/{project}`,
+`https://{org}.visualstudio.com/DefaultCollection/{project}`, and any page below
+one of them, such as a work item or a board - the project is a path segment, so
+`_workitems` and `_boards` are never taken for it. A query string, a fragment
+and a trailing slash are ignored, and `%20`-style encoding is decoded, so
+`PACT%20Lab` is the project `PACT Lab`. A host that is neither `dev.azure.com`
+nor `{org}.visualstudio.com` is refused rather than coerced into one, and the
+refusal names the shapes it does accept. A URL carrying no project is not an
+error: the organisation is read, the project is asked for, and a project already
+typed is kept. The reading is displayed and never silent - both stored values
+stay in their own editable fields, so a wrong reading is corrected by hand
+before Test connection, and a URL shape nobody foresaw is still reachable.
+
 The mapping is the plan's `ado` block: the organisation's address, the ADO
 project's name, and three work-item type names - the type a Project is drawn
 from, the type an Assignment is drawn from, and, optionally, the type a tag is
@@ -932,10 +951,12 @@ unreachable the plan keeps working exactly as it does today, and the panel says
 why the last press failed. Saving the mapping is one plan write, so it is one
 Undo step back, like any other change.
 
-The panel holds the organisation address and the project, the three type
+The panel holds the URL, the two values read out of it, the three type
 selections - offered from the instance once Test connection has answered - and
-the token field with its Save and Clear actions. A plan carrying a mapping and no
-token keeps the panel and says where the token file goes.
+the token field with its Save and Clear actions. It opens with a stored mapping
+shown as the one URL it is, read back by the same rules a paste goes through. A
+plan carrying a mapping and no token keeps the panel and says where the token
+file goes.
 
 **Where the controls are.** `Options` then `ADO...`, whose detail says
 `Not configured` or names the mapped ADO project.
