@@ -316,7 +316,7 @@ test("a 203 whose body is JSON is the instance answering, and the connection is 
 test("a 2xx that is the sign-in page is a token refusal, never a connection", async () => {
   // The request ADO did not accept is redirected to its sign-in page, which
   // answers 203 with an HTML login form. Reading that as the project would
-  // print "Successfully connected" over a form.
+  // report a connection over a form.
   const app = await start("signin");
   await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
   const res = await withConsole(() => call(app.base, "POST", "/api/ado/test", {
@@ -326,6 +326,11 @@ test("a 2xx that is the sign-in page is a token refusal, never a connection", as
   assert.equal(res.status, 502);
   assert.match(res.json.error, /did not accept the token/);
   assert.match(res.json.error, /sign-in page/);
+  // Both causes and both scopes: the owner's failing token had Work Items but
+  // no Project and Team, so blaming the token alone would miss the actual fix.
+  assert.match(res.json.error, /wrong for this organisation, expired or revoked, or missing a scope/);
+  assert.match(res.json.error, /Work Items \(read\)/);
+  assert.match(res.json.error, /Project and Team \(read\)/);
   assert.doesNotMatch(res.json.error, /answered 203/);
   assert.doesNotMatch(res.text, /PACT Team/);
   assertNoToken(res, "a sign-in page");

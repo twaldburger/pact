@@ -344,14 +344,23 @@ test("there is no connection line until a test has run", () => {
   assert.equal(connectionLine(null), null);
 });
 
-test("a successful test is stated as the outcome, with its status in the title", () => {
+test("a successful test names the project, the team and every rank, green, with its status in the title", () => {
   const line = connectionLine({
     ok: true,
     project: "PACT",
-    organizationUrl: "https://dev.azure.com/timwaldburger",
+    team: "PACT Team",
+    types: [
+      { name: "Epic", rank: 4 },
+      { name: "Feature", rank: 3 },
+      { name: "User Story", rank: 2 },
+      { name: "Bug", rank: 1 },
+      { name: "Task", rank: 1 }
+    ],
     status: 203
   });
-  assert.equal(line.text, "Successfully connected to PACT at https://dev.azure.com/timwaldburger.");
+  // The line names what the mapping rows are chosen from; the URL is already
+  // visible in the field above it, so it is not repeated here.
+  assert.equal(line.text, "Connected to PACT (PACT Team): Epic 4, Feature 3, User Story 2, Bug 1, Task 1.");
   assert.match(line.className, /\bis-ok\b/);
   assert.equal(line.className.includes("is-failed"), false);
   // The status code is the reader's clue if they are debugging a proxy, and

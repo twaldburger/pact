@@ -950,7 +950,9 @@ DevOps redirects an unaccepted request to is a refused token, and never a
 connection. Everything else is refused in the panel's own words: a token that
 is expired, revoked or under-scoped (401 and 403), a project the instance does
 not have (404), an answer with no content or one that is not JSON, and the
-redirect to the sign-in page, which says the token was not accepted. Every ADO
+redirect to the sign-in page, which says the token was not accepted - it may be
+wrong for this organisation, expired or revoked, or missing a scope, because
+PACT needs Work Items (read) and Project and Team (read). Every ADO
 call is the direct result of a press - opening this panel (which loads the
 types once, because the slots are chosen from them), Test connection, Save
 mapping, or a token action. There is no status light, no timer and no polling:
@@ -962,12 +964,15 @@ The panel draws two lines under its rows, in one style. The first is the
 token's state - `A personal access token is set at <path>.` - green while a
 token is set and neutral while none is. The second is the connection's, and
 before any test has run there is no such line at all: after a successful test
-it reads `Successfully connected to PACT at https://dev.azure.com/timwaldburger.`
-in the same green, with the status ADO answered its project read with kept in
-the line's `title` rather than its words, because that code only helps somebody
-debugging whatever sits between this machine and ADO. A failed test replaces it
-with that failure's own sentence in the danger colour. Success is therefore
-drawn as success rather than as a failure that happens not to be one.
+it reads `Connected to PACT (PACT Team): Epic 4, Feature 3, User Story 2, Bug 1,
+Task 1.` in the same green - the project, its team and every backlog type with
+its rank, which is what the mapping rows are chosen from and why the line
+names them rather than saying only that something connected. The status ADO
+answered its project read with is kept in the line's `title` rather than its
+words, because that code only helps somebody debugging whatever sits between
+this machine and ADO. A failed test replaces the line with that failure's own
+sentence in the danger colour. Success is therefore drawn as success rather
+than as a failure that happens not to be one.
 
 The panel holds the URL, the three rows that name what the mapping is drawn
 from, and the token field with its Save and Clear actions. The rows read

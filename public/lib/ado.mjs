@@ -446,16 +446,20 @@ export function tokenLine(token) {
 
 /*
  * The connection's line: nothing until a test has run, the outcome when it has.
- * `test` is `null` before the first press, `{ ok: true, project,
- * organizationUrl, status }` after a success and `{ ok: false, message }` after
- * a failure. The status code is the line's `title` and never its words.
+ * `test` is `null` before the first press, `{ ok: true, project, team, types,
+ * status }` after a success and `{ ok: false, message }` after a failure. A
+ * success states the project, its team and each backlog type with its rank -
+ * what the mapping rows are chosen from, and why the line is worded that way
+ * rather than as a bare "connected". The status code is the line's `title`
+ * and never its words.
  */
 export function connectionLine(test) {
   if (!test) return null;
   if (test.ok) {
+    const ranks = (test.types || []).map((type) => type.name + " " + type.rank);
     return line(
       "ado__connection",
-      "Successfully connected to " + test.project + " at " + test.organizationUrl + ".",
+      "Connected to " + test.project + " (" + test.team + "): " + ranks.join(", ") + ".",
       test.status ? "Azure DevOps answered " + test.status + "." : "",
       "ok"
     );

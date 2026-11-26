@@ -6877,12 +6877,13 @@ function openAdoPanel(trigger) {
         drawLine(connectionStateLine, connectionLine({
           ok: true,
           project: result.project.name,
-          organizationUrl: reading.organizationUrl,
+          team: result.team,
+          types: result.types,
           status: result.status
         }));
-        var ranks = (result.types || []).map(function (type) { return type.name + " " + type.rank; });
-        // The line above says the outcome; this one says what was read.
-        setStatus(result.team + ": " + ranks.join(", ") + ".");
+        // The connection's line is the whole report of a test; the press line
+        // has nothing left to add.
+        setStatus("");
       }).catch(function (err) {
         instance = null;
         saveButtonEl.disabled = true;
