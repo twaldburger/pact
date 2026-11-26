@@ -2847,23 +2847,11 @@ down to the last row and no further. */
    plan path is long and is meant to be read whole. */
 .panel--planfile { width: 24rem; }
 
-/* The ADO panel: the one URL field, what it was read as, the two stored values
-   it fills, the three type slots and the token. A little wider than the default
-   so an organisation address and a long type name fit one line, and the
-   token's field and its two actions stack instead of squeezing the field into
-   an unreadable column. */
+/* The ADO panel: the one URL field, the three rows named after what each maps -
+   Project, Assignment and Tag - and the token. A little wider than the default
+   so a long URL and a long type name fit one line, and the token's field and its
+   two actions stack instead of squeezing the field into an unreadable column. */
 .panel--ado { width: 24rem; }
-
-/* What the URL was read as. It sits inside the form under the URL field, in the
-   field's own column - `5rem` and a gap are the form row's label column - so it
-   reads as that field's reading and not as another row's label. Its two values
-   can be long, so it wraps anywhere rather than widening the panel. */
-.ado__read {
-  padding-left: calc(5rem + var(--sp-3));
-  margin-top: calc(var(--sp-1) * -1);
-  margin-bottom: var(--sp-2);
-  overflow-wrap: anywhere;
-}
 
 .ado__token {
   display: flex;

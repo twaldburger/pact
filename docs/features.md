@@ -897,21 +897,20 @@ plan file, and a personal access token, which is a secret and never is.
 The panel asks for one URL, because a URL is what a person has to hand - from
 the browser bar, or pasted out of a work item - while the organisation's address
 and the project's name are what PACT needs and not what anyone thinks in. The
-URL is read as it is pasted, and the panel states what it read:
-`organisation: timwaldburger · project: PACT`. Five shapes are read:
-`https://dev.azure.com/{org}/{project}`, `https://dev.azure.com/{org}` with no
-project yet, `https://{org}.visualstudio.com/{project}`,
+URL is the panel's only address input: the pair it yields is written into the
+plan and never read back as two fields, so a mis-pasted URL is caught at `Test
+connection`, which reports the project it read. Five shapes are read:
+`https://dev.azure.com/{org}/{project}`, `https://dev.azure.com/{org}` which names
+no project, `https://{org}.visualstudio.com/{project}`,
 `https://{org}.visualstudio.com/DefaultCollection/{project}`, and any page below
 one of them, such as a work item or a board - the project is a path segment, so
 `_workitems` and `_boards` are never taken for it. A query string, a fragment
 and a trailing slash are ignored, and `%20`-style encoding is decoded, so
 `PACT%20Lab` is the project `PACT Lab`. A host that is neither `dev.azure.com`
 nor `{org}.visualstudio.com` is refused rather than coerced into one, and the
-refusal names the shapes it does accept. A URL carrying no project is not an
-error: the organisation is read, the project is asked for, and a project already
-typed is kept. The reading is displayed and never silent - both stored values
-stay in their own editable fields, so a wrong reading is corrected by hand
-before Test connection, and a URL shape nobody foresaw is still reachable.
+refusal names the shapes it does accept. A URL carrying no project is refused
+rather than used without one: the panel asks for a URL, so the project has to
+be in it.
 
 The mapping is the plan's `ado` block: the organisation's address, the ADO
 project's name, and three work-item type names - the type a Project is drawn
@@ -924,10 +923,10 @@ was a connection.
 
 The three slots are checked against the instance's own backlog ranks - the
 number ADO gives each backlog level, higher meaning a higher level - not against
-a fixed list of type names. The Project type must sit above the Assignment type,
+a fixed list of type names. The project slot must sit above the assignment slot,
 so an Epic-over-Feature instance and a Feature-over-User-Story configuration both
-work, while an equal or inverted pair is refused with both ranks named. The Tag
-type, when set, must be a type the instance reports, and it may be left unset.
+work, while an equal or inverted pair is refused with both ranks named. The tag
+slot, when set, must be a type the instance reports, and it may be left unset.
 Because the ranks belong to the instance, a mapping is saved only after a
 successful Test connection: the check needs the instance, and nothing is written
 when it cannot be read.
@@ -951,12 +950,21 @@ unreachable the plan keeps working exactly as it does today, and the panel says
 why the last press failed. Saving the mapping is one plan write, so it is one
 Undo step back, like any other change.
 
-The panel holds the URL, the two values read out of it, the three type
-selections - offered from the instance once Test connection has answered - and
-the token field with its Save and Clear actions. It opens with a stored mapping
-shown as the one URL it is, read back by the same rules a paste goes through. A
-plan carrying a mapping and no token keeps the panel and says where the token
-file goes.
+The panel holds the URL, the three rows that name what the mapping is drawn
+from, and the token field with its Save and Clear actions. The rows read
+`Project`, `Assignment` and `Tag`, and no line explains them on screen: each is
+a picker over the work-item types the instance itself reports - offered once
+Test connection has answered - and each explains itself on hover, as a `title`
+on the row's label, with the same slight delay a block's own title has. The
+`Project` row is the type a PACT Project comes from, and must sit at a higher
+level than the assignment's. The `Assignment` row is the type a PACT Assignment
+comes from, the level that carries a person and their time. The `Tag` row is the
+type whose name becomes a tag on the assignment; empty leaves nothing tagged.
+No row opens on a guess: all three start empty, and once Test connection has read
+the instance's ranks, choosing a project offers the level below it as the
+assignment, so the panel never sits on a pair the rank rule refuses. It opens
+with a stored mapping shown as the one URL it is. A plan carrying a mapping and
+no token keeps the panel and says where the token file goes.
 
 **Where the controls are.** `Options` then `ADO...`, whose detail says
 `Not configured` or names the mapped ADO project.
