@@ -31,7 +31,7 @@ import {
 } from "./lib/panels.mjs";
 import { offeredTags, tickToggled, commitLabel, committedTags, enterTags } from "./lib/tag-picker.mjs";
 import { planQuery } from "./lib/visibility.mjs";
-import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, blockLabelItems, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem } from "./lib/options.mjs";
+import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, blockLabelItems, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem, adoItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
 import { reportBucketLabel, FILTER_HANDOFF_KEY, serializeFilterHandoff, parseFilterHandoff } from "./lib/report.mjs";
 import { reportContent, tagKeyGroups, tagKeyState, tagChoices, tagSelection, tagToggled } from "./lib/report-content.mjs";
@@ -52,6 +52,7 @@ import {
   chartMilestoneRules
 } from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
+import { addressRefusals, adoRefusals, tokenNotice } from "./lib/ado.mjs";
 import {
   HELP_DOCUMENTS,
   HELP_DOCUMENT_DEFAULT,
@@ -2303,11 +2304,11 @@ function restoreAssignment(id) {
 // One step through the server's in-memory history. The server writes the
 // restored plan and the screen refreshes from it, as it does after any change.
 function undoPlan() {
-  api("POST", "/api/undo").then(refresh).catch(showError);
+  api("POST", "/api/undo").then(refresh).then(loadAdoState).catch(showError);
 }
 
 function redoPlan() {
-  api("POST", "/api/redo").then(refresh).catch(showError);
+  api("POST", "/api/redo").then(refresh).then(loadAdoState).catch(showError);
 }
 
 function focusAssignment(id) {
@@ -6024,6 +6025,8 @@ var tagsOptionDetail = null;
 var milestonesOptionDetail = null;
 var planFileState = null;
 var planFileOptionDetail = null;
+var adoState = null;
+var adoOptionDetail = null;
 
 // The rows a divider sits above, set from options.mjs' grouping rule as the
 // menu is built; every row builder asks it through optionRowClass, so no row
@@ -6239,6 +6242,7 @@ function buildOptionsMenu() {
   optionsMenu.appendChild(buildTagsItem());
   optionsMenu.appendChild(buildMilestonesItem());
   optionsMenu.appendChild(buildPlanFileItem());
+  optionsMenu.appendChild(buildAdoItem());
 }
 
 // One checkable row: a tick, a label and what it does. updateOptionsMenu reads
@@ -6461,6 +6465,44 @@ function updatePlanFileItem() {
   planFileOptionDetail.textContent = planFileItem(planFileState).detail;
 }
 
+/* The ADO entry: an action, not a toggle. It opens the Azure DevOps panel, and
+ * its detail says whether a mapping is configured and which ADO project it
+ * names. It is always in the menu, because the connection is set up from its
+ * panel rather than from a control that only appears once one exists. */
+function buildAdoItem() {
+  var item = adoItem(adoState && adoState.mapping);
+  var btn = el("button", optionRowClass(item.key) + " options__item--action");
+  btn.type = "button";
+  btn.id = "option-ado";
+  btn.setAttribute("role", "menuitem");
+  btn.appendChild(document.createTextNode(item.label));
+  adoOptionDetail = el("span", "options__item-detail");
+  adoOptionDetail.textContent = item.detail;
+  btn.appendChild(adoOptionDetail);
+  btn.addEventListener("click", function () {
+    openOptions(false);
+    openAdoPanel(btn);
+  });
+  return btn;
+}
+
+function updateAdoItem() {
+  if (!adoOptionDetail) return;
+  adoOptionDetail.textContent = adoItem(adoState && adoState.mapping).detail;
+}
+
+// The connection's state is the server's to know: the menu and the panel read
+// it back rather than keeping a copy that another tab or an Undo could stale.
+function loadAdoState() {
+  return api("GET", "/api/ado").then(function (state) {
+    adoState = state;
+    updateAdoItem();
+    return state;
+  }).catch(function () {
+    return adoState;
+  });
+}
+
 // The active file is the server's to know: the menu and the panel read it back
 // rather than keeping a copy that a restart or another window could stale.
 function loadPlanFileState() {
@@ -6554,7 +6596,11 @@ function openPlanFilePanel(trigger) {
       setStatus("Opened " + result.path);
       planFileState = result;
       updatePlanFileItem();
-      return refresh({ keepPanel: true });
+      return refresh({ keepPanel: true }).then(function () {
+        // The mapping travels with the plan, so a switched file may have one
+        // where the previous plan did not.
+        return loadAdoState();
+      });
     }
 
     function failed(err, missing) {
@@ -6602,6 +6648,291 @@ function openPlanFilePanel(trigger) {
     openPanel(node, trigger);
     if (!view.locked) pathInput.focus();
   });
+}
+
+/* --- the Azure DevOps panel ---------------------------------------------- */
+
+/*
+ * The connection PACT uses for Azure DevOps. The organisation address and the
+ * project are written into the plan, the three type slots are chosen from the
+ * types the instance itself reports, and the token is typed here and written by
+ * the server to this machine's config - it is never read back into the browser.
+ *
+ * Every call to ADO is caused by a press: opening this panel (which loads the
+ * types once, because the slots are chosen from them), Test connection, and
+ * Save mapping. There is no status light, no timer and no polling - closing the
+ * panel is the end of it, even when ADO is unreachable.
+ */
+function openAdoPanel(trigger) {
+  loadAdoState().then(function (state) {
+    var mapping = state.mapping || {};
+    var token = state.token || {};
+    var instance = null;
+
+    var node = panelShell("Azure DevOps",
+      "The plan carries the mapping, this machine's config carries the token, and the browser never sees it.");
+    node.classList.add("panel--ado");
+
+    var form = el("form", "form");
+    var orgInput = input(mapping.organizationUrl || "");
+    orgInput.id = "ado-org";
+    orgInput.spellcheck = false;
+    orgInput.setAttribute("aria-label", "Organisation address");
+    form.appendChild(formRow("Organisation", orgInput));
+    var projectInput = input(mapping.project || "");
+    projectInput.id = "ado-project";
+    projectInput.spellcheck = false;
+    projectInput.setAttribute("aria-label", "ADO project");
+    form.appendChild(formRow("Project", projectInput));
+
+    // The three slots. The Project and Assignment slots are backlog levels the
+    // instance ranks, so they are offered from those; the Tag slot may be any
+    // type the instance reports, or nothing at all.
+    var projectLevel = typeSelect();
+    projectLevel.id = "ado-project-level";
+    fillTypeSelect(projectLevel, [], mapping.projectLevel);
+    form.appendChild(formRow("Project type", projectLevel));
+    var assignmentLevel = typeSelect();
+    assignmentLevel.id = "ado-assignment-level";
+    fillTypeSelect(assignmentLevel, [], mapping.assignmentLevel);
+    form.appendChild(formRow("Assignment type", assignmentLevel));
+    var tagLevel = typeSelect();
+    tagLevel.id = "ado-tag-level";
+    fillTypeSelect(tagLevel, [], mapping.tagLevel || "", { allowNone: true });
+    form.appendChild(formRow("Tag type", tagLevel));
+
+    // The token: typed, saved and replaced here, and never shown again. Clear
+    // deletes the file, so a revoked token leaves nothing behind.
+    var tokenInput = document.createElement("input");
+    tokenInput.type = "password";
+    tokenInput.id = "ado-token";
+    tokenInput.autocomplete = "off";
+    tokenInput.spellcheck = false;
+    tokenInput.setAttribute("aria-label", "Personal access token");
+    var tokenWrap = el("div", "ado__token");
+    tokenWrap.appendChild(tokenInput);
+    var tokenButton = button("btn-ghost", token.present ? "Replace token" : "Save token", onTokenButton);
+    tokenButton.id = "ado-token-save";
+    tokenWrap.appendChild(tokenButton);
+    var clearButton = button("btn-ghost", "Clear token", clearToken);
+    clearButton.id = "ado-token-clear";
+    tokenWrap.appendChild(clearButton);
+    form.appendChild(formRow("Token", tokenWrap));
+    node.appendChild(form);
+
+    var tokenStateLine = el("p", "panel__sub ado__tokenstate");
+    tokenStateLine.textContent = tokenNotice(token);
+    node.appendChild(tokenStateLine);
+
+    // A token that is set is shown as set, not as a masked field that invites
+    // an edit: the field appears only when Replace is pressed, and the server
+    // never sends the stored value back to fill it.
+    var replacing = false;
+
+    function syncTokenControls() {
+      tokenInput.hidden = token.present && !replacing;
+      tokenButton.textContent = token.present && !replacing ? "Replace token" : "Save token";
+      clearButton.hidden = !token.present;
+    }
+
+    function onTokenButton() {
+      if (token.present && !replacing) {
+        replacing = true;
+        syncTokenControls();
+        tokenInput.focus();
+        return;
+      }
+      saveToken();
+    }
+
+    syncTokenControls();
+
+    var status = el("p", "ado__status");
+    status.setAttribute("role", "status");
+    status.hidden = true;
+    node.appendChild(status);
+
+    var error = errorLine(node);
+
+    var foot = el("div", "panel__foot");
+    var testButton = button("btn-ghost", "Test connection", runTest);
+    testButton.id = "ado-test";
+    foot.appendChild(testButton);
+    foot.appendChild(el("span", "panel__spacer"));
+    var saveButtonEl = saveButton("Save mapping", saveMapping);
+    saveButtonEl.id = "ado-save";
+    saveButtonEl.disabled = true;
+    foot.appendChild(saveButtonEl);
+    node.appendChild(foot);
+
+    function setStatus(message) {
+      status.textContent = message || "";
+      status.hidden = !message;
+    }
+
+    function errorText(err, fallback) {
+      return err && err.message ? err.message : fallback;
+    }
+
+    // The server's answer to a token action is the whole connection state, so
+    // the menu's detail and the token line move together.
+    function applyState(next) {
+      if (!next) return;
+      adoState = next;
+      updateAdoItem();
+      token = next.token || {};
+      tokenStateLine.textContent = tokenNotice(token);
+      replacing = false;
+      syncTokenControls();
+    }
+
+    function currentOr(select, fallback) {
+      return select.value !== "" ? select.value : (fallback || "");
+    }
+
+    function applyInstance(result) {
+      instance = result;
+      var ranked = (result.types || []).map(function (type) { return type.name; });
+      fillTypeSelect(projectLevel, ranked, currentOr(projectLevel, mapping.projectLevel));
+      fillTypeSelect(assignmentLevel, ranked, currentOr(assignmentLevel, mapping.assignmentLevel));
+      fillTypeSelect(tagLevel, result.reported || [], currentOr(tagLevel, mapping.tagLevel || ""), { allowNone: true });
+      saveButtonEl.disabled = false;
+    }
+
+    function runTest() {
+      var payload = {
+        organizationUrl: orgInput.value.trim(),
+        project: projectInput.value.trim()
+      };
+      var refusals = addressRefusals(payload);
+      if (refusals.length) {
+        error.set(refusals.join(" "));
+        return;
+      }
+      error.clear();
+      setStatus("Testing...");
+      testButton.disabled = true;
+      api("POST", "/api/ado/test", payload).then(function (result) {
+        applyInstance(result);
+        var ranks = (result.types || []).map(function (type) { return type.name + " " + type.rank; });
+        setStatus("Connected to " + result.project.name + " (" + result.team + "): " + ranks.join(", ") + ".");
+      }).catch(function (err) {
+        instance = null;
+        saveButtonEl.disabled = true;
+        setStatus("");
+        error.set(errorText(err, "Could not reach Azure DevOps."));
+      }).then(function () { testButton.disabled = false; });
+    }
+
+    function saveMapping() {
+      var payload = {
+        organizationUrl: orgInput.value.trim(),
+        project: projectInput.value.trim(),
+        projectLevel: projectLevel.value,
+        assignmentLevel: assignmentLevel.value
+      };
+      if (tagLevel.value !== "") payload.tagLevel = tagLevel.value;
+      var refusals = adoRefusals(payload);
+      if (refusals.length) {
+        error.set(refusals.join(" "));
+        return;
+      }
+      error.clear();
+      saveButtonEl.disabled = true;
+      api("POST", "/api/ado/mapping", payload).then(function (saved) {
+        return refresh({ keepPanel: true }).then(function () {
+          applyState(saved);
+          var stored = saved.mapping || payload;
+          setStatus("Mapping saved: " + stored.projectLevel + " for projects, " + stored.assignmentLevel +
+            " for assignments" + (stored.tagLevel ? ", tags from " + stored.tagLevel : "") + ".");
+        });
+      }).catch(function (err) {
+        error.set(errorText(err, "Could not save the mapping."));
+      }).then(function () { saveButtonEl.disabled = !instance; });
+    }
+
+    function saveToken() {
+      var value = tokenInput.value;
+      if (value.trim() === "") {
+        error.set("Type the personal access token first.");
+        tokenInput.focus();
+        return;
+      }
+      error.clear();
+      tokenButton.disabled = true;
+      api("POST", "/api/ado/token", { token: value }).then(function (next) {
+        tokenInput.value = "";
+        applyState(next);
+        setStatus("Token saved to " + next.token.path + ".");
+      }).catch(function (err) {
+        error.set(errorText(err, "Could not save the token."));
+      }).then(function () { tokenButton.disabled = false; });
+    }
+
+    function clearToken() {
+      error.clear();
+      api("DELETE", "/api/ado/token").then(function (next) {
+        applyState(next);
+        setStatus("Token cleared; the file was removed.");
+      }).catch(function (err) {
+        error.set(errorText(err, "Could not clear the token."));
+      });
+    }
+
+    form.addEventListener("submit", function (e) { e.preventDefault(); saveMapping(); });
+
+    openPanel(node, trigger);
+    orgInput.focus();
+    // Opening the panel is the press that loads the instance's own types: the
+    // three slots are chosen from them, so the stored mapping's names can be
+    // confirmed rather than assumed. With no token there is nothing to ask.
+    if (token.present && (orgInput.value.trim() !== "" || projectInput.value.trim() !== "")) runTest();
+  });
+}
+
+// A type slot's select, empty until the instance answers.
+function typeSelect() {
+  var select = document.createElement("select");
+  select.className = "ado__select";
+  return select;
+}
+
+/*
+ * Fill a type select from the instance, keeping a stored name visible even when
+ * the instance did not report it - a plan may arrive from another instance - so
+ * the panel shows what the plan holds rather than silently dropping it. An
+ * empty list means no test has answered yet.
+ */
+function fillTypeSelect(select, names, current, opts) {
+  var settings = opts || {};
+  var list = names.slice();
+  select.innerHTML = "";
+  // A stored name the instance did not report stays visible, so the panel shows
+  // what the plan holds rather than silently dropping it.
+  if (current && list.indexOf(current) === -1) list.unshift(current);
+  if (list.length === 0) {
+    var waiting = document.createElement("option");
+    waiting.value = "";
+    waiting.textContent = "Test connection first";
+    select.appendChild(waiting);
+    select.value = "";
+    return;
+  }
+  if (settings.allowNone) {
+    var none = document.createElement("option");
+    none.value = "";
+    none.textContent = "None";
+    select.appendChild(none);
+  }
+  list.forEach(function (name) {
+    var option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    select.appendChild(option);
+  });
+  select.value = current && list.indexOf(current) !== -1
+    ? current
+    : (settings.allowNone ? "" : list[0]);
 }
 
 /* --- the help panel ------------------------------------------------------ */
@@ -7184,6 +7515,7 @@ function boot() {
     initViewSwitch();
     syncReportControls();
     loadPlanFileState();
+    loadAdoState();
     window.requestAnimationFrame(function () {
       var tlRect = tl.getBoundingClientRect();
       var heads = tl.querySelector(".tl__heads");

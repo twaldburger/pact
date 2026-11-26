@@ -107,9 +107,16 @@ The app writes only this file, and refuses a write when the file changed underne
 _Avoid_: database, data store, document, save, dataset
 
 **Config**:
-The app's own settings file, `data/config.json`, kept beside the plan and gitignored like the rest of `data/`. It holds the active plan file's path - one active plan, never a list of recent ones - and the [View settings](#view-setting).
-Its absence means the default; if it exists but cannot be read, the default is used and the app says so rather than failing silently.
+The app's own settings file, `data/config.json`, kept beside the plan and gitignored like the rest of `data/`. It holds the active plan file's path - one active plan, never a list of recent ones - and the [View settings](#view-setting), and it may hold the path of the [Connection](#connection)'s token file. Its absence means the default; if it exists but cannot be read, the default is used and the app says so rather than failing silently.
 _Avoid_: preferences, settings, options, registry
+
+**Connection**:
+A configured Azure DevOps organisation and project: a [Mapping](#mapping) in the plan, plus a personal access token in this machine's config. The mapping travels with the plan and may be shared; the token is a secret that is never in the plan, never leaves the server and is never shown in the browser, which reads back only whether one is set. It is verified by a press - Test connection - and never by a background check: with Azure DevOps unreachable, the plan keeps working exactly as it does without a connection.
+_Avoid_: integration, sync, account, login, credential
+
+**Mapping**:
+The `ado` block in the plan: the Azure DevOps organisation's address, the project's name, and the work-item type that a Project, an Assignment and optionally a tag are drawn from. It holds type names and an address and never a secret, and a credential-shaped key inside it is refused so a shared plan cannot carry one. Its slots are checked against the instance's own backlog ranks - the project type above the assignment type, and a tag type the instance reports - when the mapping is saved. A plan without one behaves exactly as it did before there was a connection.
+_Avoid_: schema, field map, binding, metadata
 
 **View setting**:
 One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band, the holiday band, the Milestone rules, the availability lines, whether the assignment blocks are drawn, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, what a [Block label](#block-label) names, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's default on its own.
