@@ -53,11 +53,11 @@ import {
 } from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
-  addressRefusals,
+  ADO_ROW_TIPS,
+  addressFromUrl,
   adoRefusals,
-  adoReadingLine,
   adoUrlFor,
-  readAdoUrl,
+  assignmentLevelBelow,
   tokenNotice
 } from "./lib/ado.mjs";
 import {
@@ -2423,10 +2423,15 @@ function field(term, valueNode) {
   return row;
 }
 
-function formRow(label, control) {
+// A form row: the label that names the control and the control itself, laid out
+// by the stylesheet's label column. A row whose label explains itself carries
+// its explanation as the native title - the delay a block's title has, and
+// nothing added to the panel.
+function formRow(label, control, tip) {
   var row = el("div", "form__row");
   var span = el("span");
   span.textContent = label;
+  if (tip) span.setAttribute("title", tip);
   row.appendChild(span);
   row.appendChild(control);
   return row;
@@ -6665,6 +6670,11 @@ function openPlanFilePanel(trigger) {
  * types the instance itself reports, and the token is typed here and written by
  * the server to this machine's config - it is never read back into the browser.
  *
+ * One URL is the panel's whole address: the pair it yields is the plan's to
+ * store and is never echoed back as two fields, so a mis-pasted URL is caught
+ * at Test connection, which reports the project it read. Each of the three
+ * slots is named after the PACT thing it produces and explains itself on hover.
+ *
  * Every call to ADO is caused by a press: opening this panel (which loads the
  * types once, because the slots are chosen from them), Test connection, and
  * Save mapping. There is no status light, no timer and no polling - closing the
@@ -6683,10 +6693,9 @@ function openAdoPanel(trigger) {
 
     var form = el("form", "form");
 
-    // One URL field, because a URL is what a person has to hand. What it is read
-    // as is shown below it, and the two values the plan stores stay editable:
-    // a reading that is wrong is corrected by hand, and a shape nobody foresaw
-    // is still reachable.
+    // One URL field, because a URL is what a person has to hand. The pair it
+    // yields is read at Test connection and at Save mapping and stored; it is
+    // never shown as two fields, so there is no second spelling to disagree.
     var urlInput = input(adoUrlFor(mapping));
     urlInput.id = "ado-url";
     urlInput.spellcheck = false;
@@ -6694,40 +6703,24 @@ function openAdoPanel(trigger) {
     urlInput.setAttribute("placeholder", "https://dev.azure.com/<organisation>/<project>");
     form.appendChild(formRow("URL", urlInput));
 
-    // What the URL was read as, in one line, so a wrong reading is visible
-    // before anything is saved. Quiet until there is something to say.
-    var readLine = el("p", "panel__sub ado__read");
-    readLine.id = "ado-read";
-    readLine.setAttribute("role", "status");
-    readLine.hidden = true;
-    form.appendChild(readLine);
-
-    var orgInput = input(mapping.organizationUrl || "");
-    orgInput.id = "ado-org";
-    orgInput.spellcheck = false;
-    orgInput.setAttribute("aria-label", "Organisation address");
-    form.appendChild(formRow("Organisation", orgInput));
-    var projectInput = input(mapping.project || "");
-    projectInput.id = "ado-project";
-    projectInput.spellcheck = false;
-    projectInput.setAttribute("aria-label", "ADO project");
-    form.appendChild(formRow("Project", projectInput));
-
-    // The three slots. The Project and Assignment slots are backlog levels the
-    // instance ranks, so they are offered from those; the Tag slot may be any
-    // type the instance reports, or nothing at all.
+    // The three slots, each named for the PACT thing it produces and explained
+    // on hover rather than on screen. The Project and Assignment slots are
+    // backlog levels the instance ranks, so they are offered from those; the Tag
+    // slot may be any type the instance reports, or nothing at all. Every slot
+    // starts empty and an empty one is a choice, so no pair that the rank rule
+    // refuses is ever opened by default.
     var projectLevel = typeSelect();
     projectLevel.id = "ado-project-level";
-    fillTypeSelect(projectLevel, [], mapping.projectLevel);
-    form.appendChild(formRow("Project type", projectLevel));
+    fillTypeSelect(projectLevel, [], mapping.projectLevel, { blank: CHOOSE_TYPE });
+    form.appendChild(formRow("Project", projectLevel, ADO_ROW_TIPS.project));
     var assignmentLevel = typeSelect();
     assignmentLevel.id = "ado-assignment-level";
-    fillTypeSelect(assignmentLevel, [], mapping.assignmentLevel);
-    form.appendChild(formRow("Assignment type", assignmentLevel));
+    fillTypeSelect(assignmentLevel, [], mapping.assignmentLevel, { blank: CHOOSE_TYPE });
+    form.appendChild(formRow("Assignment", assignmentLevel, ADO_ROW_TIPS.assignment));
     var tagLevel = typeSelect();
     tagLevel.id = "ado-tag-level";
-    fillTypeSelect(tagLevel, [], mapping.tagLevel || "", { allowNone: true });
-    form.appendChild(formRow("Tag type", tagLevel));
+    fillTypeSelect(tagLevel, [], mapping.tagLevel || "", { blank: "None" });
+    form.appendChild(formRow("Tag", tagLevel, ADO_ROW_TIPS.tag));
 
     // The token: typed, saved and replaced here, and never shown again. Clear
     // deletes the file, so a revoked token leaves nothing behind.
@@ -6818,65 +6811,49 @@ function openAdoPanel(trigger) {
       return select.value !== "" ? select.value : (fallback || "");
     }
 
-    /*
-     * Read the URL field into the two stored values, and say what was read. A
-     * refusal names the shapes PACT accepts and leaves both values as they are,
-     * so a mistyped URL never costs a value someone typed. A URL carrying no
-     * project fills the organisation and asks for the project without emptying
-     * the field - the focus goes there when the URL arrived as a paste.
-     */
-    function applyUrl(pasted) {
-      var url = urlInput.value.trim();
-      if (url === "") {
-        readLine.textContent = "";
-        readLine.hidden = true;
-        return;
-      }
-      var reading = readAdoUrl(url);
-      if (reading.refusal) {
-        readLine.textContent = "";
-        readLine.hidden = true;
-        error.set(reading.refusal);
-        return;
-      }
-      error.clear();
-      orgInput.value = reading.organizationUrl;
-      if (reading.project !== "") projectInput.value = reading.project;
-      readLine.textContent = adoReadingLine(reading);
-      readLine.hidden = false;
-      if (pasted && reading.project === "") projectInput.focus();
+    // The address pair a press needs, read out of the one URL field. A refusal
+    // is the parser's own sentence, so the panel cannot word a second set of
+    // accepted shapes that drifts from the ones the reading accepts.
+    function address() {
+      return addressFromUrl(urlInput.value);
     }
 
-    // A paste is one act, so it may move the focus; a typed URL is only read
-    // when the field is left, so typing is never interrupted mid-address.
-    urlInput.addEventListener("paste", function () {
-      setTimeout(function () { applyUrl(true); }, 0);
-    });
-    urlInput.addEventListener("change", function () { applyUrl(false); });
+    /*
+     * Once the instance's ranks are known, the Assignment slot is kept on a
+     * level the rank rule would accept: the type already chosen where it sits
+     * below the project's, and otherwise the level immediately below it. A
+     * project with nothing below it leaves the slot as the person left it.
+     */
+    function syncAssignment() {
+      if (!instance || projectLevel.value === "") return;
+      assignmentLevel.value = assignmentLevelBelow(instance.types || [], projectLevel.value, assignmentLevel.value);
+    }
+
+    projectLevel.addEventListener("change", syncAssignment);
 
     function applyInstance(result) {
       instance = result;
       var ranked = (result.types || []).map(function (type) { return type.name; });
-      fillTypeSelect(projectLevel, ranked, currentOr(projectLevel, mapping.projectLevel));
-      fillTypeSelect(assignmentLevel, ranked, currentOr(assignmentLevel, mapping.assignmentLevel));
-      fillTypeSelect(tagLevel, result.reported || [], currentOr(tagLevel, mapping.tagLevel || ""), { allowNone: true });
+      fillTypeSelect(projectLevel, ranked, currentOr(projectLevel, mapping.projectLevel), { blank: CHOOSE_TYPE });
+      fillTypeSelect(assignmentLevel, ranked, currentOr(assignmentLevel, mapping.assignmentLevel), { blank: CHOOSE_TYPE });
+      fillTypeSelect(tagLevel, result.reported || [], currentOr(tagLevel, mapping.tagLevel || ""), { blank: "None" });
+      syncAssignment();
       saveButtonEl.disabled = false;
     }
 
     function runTest() {
-      var payload = {
-        organizationUrl: orgInput.value.trim(),
-        project: projectInput.value.trim()
-      };
-      var refusals = addressRefusals(payload);
-      if (refusals.length) {
-        error.set(refusals.join(" "));
+      var reading = address();
+      if (reading.refusal) {
+        error.set(reading.refusal);
         return;
       }
       error.clear();
       setStatus("Testing...");
       testButton.disabled = true;
-      api("POST", "/api/ado/test", payload).then(function (result) {
+      api("POST", "/api/ado/test", {
+        organizationUrl: reading.organizationUrl,
+        project: reading.project
+      }).then(function (result) {
         applyInstance(result);
         var ranks = (result.types || []).map(function (type) { return type.name + " " + type.rank; });
         setStatus("Connected to " + result.project.name + " (" + result.team + "): " + ranks.join(", ") + ".");
@@ -6889,9 +6866,14 @@ function openAdoPanel(trigger) {
     }
 
     function saveMapping() {
+      var reading = address();
+      if (reading.refusal) {
+        error.set(reading.refusal);
+        return;
+      }
       var payload = {
-        organizationUrl: orgInput.value.trim(),
-        project: projectInput.value.trim(),
+        organizationUrl: reading.organizationUrl,
+        project: reading.project,
         projectLevel: projectLevel.value,
         assignmentLevel: assignmentLevel.value
       };
@@ -6946,14 +6928,12 @@ function openAdoPanel(trigger) {
     form.addEventListener("submit", function (e) { e.preventDefault(); saveMapping(); });
 
     openPanel(node, trigger);
-    // A stored mapping opens as the one URL it is, read back by the same rules
-    // a paste goes through, so the two fields and the line agree from the start.
-    if (urlInput.value.trim() !== "") applyUrl(false);
     urlInput.focus();
     // Opening the panel is the press that loads the instance's own types: the
     // three slots are chosen from them, so the stored mapping's names can be
-    // confirmed rather than assumed. With no token there is nothing to ask.
-    if (token.present && (orgInput.value.trim() !== "" || projectInput.value.trim() !== "")) runTest();
+    // confirmed rather than assumed. With no token, or no stored address, there
+    // is nothing to ask.
+    if (token.present && adoUrlFor(mapping) !== "") runTest();
   });
 }
 
@@ -6964,14 +6944,21 @@ function typeSelect() {
   return select;
 }
 
+// What an empty choice in a mapping slot reads as: a slot left empty is a real
+// choice, and a pair the rank rule refuses is never opened by default.
+var CHOOSE_TYPE = "Choose one";
+
 /*
  * Fill a type select from the instance, keeping a stored name visible even when
  * the instance did not report it - a plan may arrive from another instance - so
  * the panel shows what the plan holds rather than silently dropping it. An
- * empty list means no test has answered yet.
+ * empty list means no test has answered yet. `blank` is the empty choice's own
+ * wording, and with it a slot with nothing chosen stays empty rather than
+ * taking the first type on offer.
  */
 function fillTypeSelect(select, names, current, opts) {
   var settings = opts || {};
+  var blank = settings.blank || "";
   var list = names.slice();
   select.innerHTML = "";
   // A stored name the instance did not report stays visible, so the panel shows
@@ -6985,10 +6972,10 @@ function fillTypeSelect(select, names, current, opts) {
     select.value = "";
     return;
   }
-  if (settings.allowNone) {
+  if (blank) {
     var none = document.createElement("option");
     none.value = "";
-    none.textContent = "None";
+    none.textContent = blank;
     select.appendChild(none);
   }
   list.forEach(function (name) {
@@ -6999,7 +6986,7 @@ function fillTypeSelect(select, names, current, opts) {
   });
   select.value = current && list.indexOf(current) !== -1
     ? current
-    : (settings.allowNone ? "" : list[0]);
+    : (blank ? "" : list[0]);
 }
 
 /* --- the help panel ------------------------------------------------------ */

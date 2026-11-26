@@ -75,7 +75,8 @@ function isNonEmptyText(value) {
  * {org}.visualstudio.com is refused rather than coerced into one.
  *
  * A URL carrying no project is not an error: the organisation is read and the
- * project is left for the person to type.
+ * project comes back empty, which `addressFromUrl` refuses - the panel asks for
+ * one URL, so the project has to be in it.
  */
 export const ADO_URL_SHAPES =
   "Paste https://dev.azure.com/<organisation>, https://dev.azure.com/<organisation>/<project>, " +
@@ -181,18 +182,42 @@ export function adoUrlFor(input) {
   return project === "" ? base : base + "/" + encodeURIComponent(project);
 }
 
+// What a URL with no project is refused with. The panel's one address field is
+// a URL, so an address too short to call anything is said here rather than
+// waiting for a round trip to ADO to fail on a missing project.
+export const ADO_PROJECT_IN_URL =
+  "The URL must name the project as well: https://dev.azure.com/<organisation>/<project>.";
+
 /*
- * What a read is shown as: the two values named in one line, so a wrong reading
- * is visible before anything is saved. A URL with no project says so rather
- * than leaving the line short and looking like a project named nothing.
+ * The URL read as the address pair every call needs, or the refusal. This is
+ * the panel's only address input, so a URL naming no project is refused here.
+ * A refusal from the parser is passed through untouched: one set of accepted
+ * shapes, worded once.
  */
-export function adoReadingLine(reading) {
-  const found = reading || {};
-  if (!found.organization) return "";
-  const project = found.project ? found.project : "not in this URL - type it";
-  return "organisation: " + found.organization + " \u00b7 project: " + project;
+export function addressFromUrl(text) {
+  const reading = readAdoUrl(text);
+  if (reading.refusal !== "") return reading;
+  if (reading.project === "") {
+    return { organizationUrl: reading.organizationUrl, organization: reading.organization, project: "", refusal: ADO_PROJECT_IN_URL };
+  }
+  return reading;
 }
 
+/*
+ * What the panel's three mapping rows say on hover, one sentence each. They are
+ * titles rather than on-screen lines because the panel's owner asked for the
+ * explanation to be on hover and the rows to be named after PACT's own things:
+ * each value is already an ADO work-item type name, so the label only has to
+ * say which PACT thing it produces.
+ */
+export const ADO_ROW_TIPS = {
+  project: "The ADO work-item type a PACT Project comes from; it must sit at a higher level " +
+    "than the assignment's type.",
+  assignment: "The ADO work-item type a PACT Assignment comes from - the level that carries a " +
+    "person and their time.",
+  tag: "The ADO work-item type whose name becomes a tag on the assignment; empty leaves " +
+    "nothing tagged."
+};
 /*
  * The address pair: what the panel's two text fields hold and what a test
  * connection needs before it can call anything. Returns the refusals as plain
@@ -286,6 +311,23 @@ export function reportedTypes(types) {
 export function levelRank(ranks, name) {
   const found = (ranks || []).filter(function (type) { return type && type.name === name; })[0];
   return found ? found.rank : null;
+}
+
+/*
+ * What the Assignment slot offers once a Project type is chosen: the type
+ * already chosen where it sits at a lower level, and otherwise the level
+ * immediately below the project's. Nothing is offered before the ranks are
+ * known, and nothing is offered that the rank rule would refuse, so the panel
+ * never opens - or drifts - into a pair that cannot be saved.
+ */
+export function assignmentLevelBelow(ranks, projectLevel, current) {
+  const list = ranks || [];
+  const project = levelRank(list, projectLevel);
+  if (project === null) return "";
+  const chosen = levelRank(list, current);
+  if (chosen !== null && chosen < project) return current;
+  const below = list.filter(function (type) { return type && type.rank < project; })[0];
+  return below ? below.name : "";
 }
 
 /*
