@@ -25,6 +25,10 @@
   --rule-strong: #B9C4C0;
   --off: #EDF0EE;
   --signal: #9E2B25;
+  /* The one good state: a muted green that reads on --canvas, beside --signal
+     so success and failure share a home. Both are explicit rather than mixed
+     from a project colour, because a status must not follow the palette. */
+  --ok: #2E6B45;
 
   /* Type --------------------------------------------------------------------- */
   --font: Archivo, "Helvetica Neue", Arial, system-ui, sans-serif;
@@ -2867,12 +2871,15 @@ down to the last row and no further. */
 
 /* What the panel says about the token and about the last press: a file path
    and a set of ranks, either of which can be long, so both wrap anywhere
-   rather than widening the panel. */
-.ado__status,
-.ado__tokenstate {
+   rather than widening the panel. A good line reads in --ok and a failed one
+   in --signal, neither colour written here. */
+.ado__line {
   margin-top: var(--sp-2);
   overflow-wrap: anywhere;
 }
+
+.ado__line.is-ok { color: var(--ok); }
+.ado__line.is-failed { color: var(--signal); }
 
 .planfile__path {
   display: block;

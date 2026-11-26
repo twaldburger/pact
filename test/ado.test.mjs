@@ -17,10 +17,12 @@ import { adoState, clearToken, readToken, tokenState, writeToken, resolveTokenFi
 import {
   ADO_PLACEHOLDER,
   adoRefusals,
+  connectionLine,
   defaultTokenFile,
   mappingRefusal,
   normalizeAdo,
   reportedTypes,
+  tokenLine,
   tokenNotice,
   typeRanks
 } from "../public/lib/ado.mjs";
@@ -319,4 +321,49 @@ test("the connection state reports the mapping and whether a token is set, and n
   assert.deepEqual(state.mapping, MAPPING);
   assert.equal(state.token.present, true);
   assert.equal(JSON.stringify(state).includes("a-real-token"), false);
+});
+
+/* --- the panel's two status lines ---------------------------------------- */
+
+// The panel draws the token's line always, and the connection's only once a
+// test has run. Each state is worded here rather than in the browser, so the
+// class that colours a good one green is held with the sentence it colours.
+
+test("the token line is green while a token is set and neutral while none is", () => {
+  const set = tokenLine({ present: true, path: "/home/tim/.config/pact/ado-pat" });
+  assert.equal(set.text, "A personal access token is set at /home/tim/.config/pact/ado-pat.");
+  assert.match(set.className, /\bis-ok\b/);
+  assert.equal(set.className.includes("is-failed"), false);
+
+  const absent = tokenLine({ present: false, path: "/home/tim/.config/pact/ado-pat" });
+  assert.match(absent.text, /^No token is set/);
+  assert.equal(/\bis-ok\b|\bis-failed\b/.test(absent.className), false, absent.className);
+});
+
+test("there is no connection line until a test has run", () => {
+  assert.equal(connectionLine(null), null);
+});
+
+test("a successful test is stated as the outcome, with its status in the title", () => {
+  const line = connectionLine({
+    ok: true,
+    project: "PACT",
+    organizationUrl: "https://dev.azure.com/timwaldburger",
+    status: 203
+  });
+  assert.equal(line.text, "Successfully connected to PACT at https://dev.azure.com/timwaldburger.");
+  assert.match(line.className, /\bis-ok\b/);
+  assert.equal(line.className.includes("is-failed"), false);
+  // The status code is the reader's clue if they are debugging a proxy, and
+  // nobody else's business: it is the title, never the words.
+  assert.match(line.title, /203/);
+  assert.equal(line.text.includes("203"), false);
+});
+
+test("a failed test keeps its own message, in the danger treatment", () => {
+  const line = connectionLine({ ok: false, message: "Azure DevOps rejected the token (401): it may be expired." });
+  assert.equal(line.text, "Azure DevOps rejected the token (401): it may be expired.");
+  assert.match(line.className, /\bis-failed\b/);
+  assert.equal(line.className.includes("is-ok"), false);
+  assert.equal(line.title, "");
 });

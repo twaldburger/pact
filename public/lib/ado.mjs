@@ -418,3 +418,47 @@ export function noTokenMessage(token) {
   return "No token is set. Save a personal access token in the ADO panel; PACT writes it to " +
     (state.path || "~/.config/pact/ado-pat") + " with mode 600.";
 }
+
+/* --- the panel's two status lines ---------------------------------------
+ *
+ * The panel draws two lines under its form: the token's state, always, and the
+ * connection's, once a test has run. They are the same paragraph in the same
+ * style, told apart only by a tone: a good one reads in --ok and a failed one
+ * in --signal. Both the words and the class that colours them are worded here,
+ * so a test holds each state to the line and the class it draws, and no
+ * component names either colour.
+ */
+const LINE_CLASS = "panel__sub ado__line";
+
+function line(kind, text, title, tone) {
+  return {
+    text: text,
+    title: title || "",
+    className: LINE_CLASS + " " + kind + (tone ? " is-" + tone : "")
+  };
+}
+
+// The token's line: green while a token is set, neutral while none is.
+export function tokenLine(token) {
+  const state = token || {};
+  return line("ado__tokenstate", tokenNotice(state), "", state.present ? "ok" : "");
+}
+
+/*
+ * The connection's line: nothing until a test has run, the outcome when it has.
+ * `test` is `null` before the first press, `{ ok: true, project,
+ * organizationUrl, status }` after a success and `{ ok: false, message }` after
+ * a failure. The status code is the line's `title` and never its words.
+ */
+export function connectionLine(test) {
+  if (!test) return null;
+  if (test.ok) {
+    return line(
+      "ado__connection",
+      "Successfully connected to " + test.project + " at " + test.organizationUrl + ".",
+      test.status ? "Azure DevOps answered " + test.status + "." : "",
+      "ok"
+    );
+  }
+  return line("ado__connection", test.message || "Could not connect to Azure DevOps.", "", "failed");
+}
