@@ -54,11 +54,15 @@ import {
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
 import {
   ADO_ROW_TIPS,
+  ADO_WORK_ITEM_SHAPES,
   addressFromUrl,
   adoRefusals,
   adoUrlFor,
   assignmentLevelBelow,
   connectionLine,
+  importLine,
+  linkLine,
+  readWorkItemId,
   tokenLine
 } from "./lib/ado.mjs";
 import {
@@ -2117,7 +2121,14 @@ function api(method, url, body) {
     throw new Error("PACT could not reach its server - is it still running?");
   }).then(function (res) {
     return res.json().catch(function () { return {}; }).then(function (payload) {
-      if (!res.ok) throw new Error(payload && payload.error ? payload.error : "the server refused the change");
+      if (!res.ok) {
+        var refused = new Error(payload && payload.error ? payload.error : "the server refused the change");
+        // The whole refusal travels, not only its sentence: an ADO import that
+        // cannot match an assignee answers with the offer the panel draws, and
+        // reading that out of the wording would be guessing.
+        refused.payload = payload || {};
+        throw refused;
+      }
       return payload;
     });
   }).then(function (payload) {
@@ -2927,12 +2938,25 @@ function colourPicker(initial) {
 
 function openPersonPanel(person, trigger) {
   var editing = !!person;
+  // A Person's email's explanation, on hover: it is one field with one job, and
+  // saying so on screen would be a sentence in every Person's way.
+  var PERSON_EMAIL_TIP = "The email an Azure DevOps work item is assigned to, which is what an import " +
+    "matches this Person by. Optional: a Person without one is never matched to imported work.";
   var node = panelShell(editing ? "Person" : "Add person",
     editing ? null : "Availability is set in steps of " + planStep + "%.");
   var form = el("form", "form");
 
   var nameInput = input(editing ? person.name : "");
   form.appendChild(formRow("Name", nameInput));
+
+  // A Person's email is how an Azure DevOps work item finds this row: the
+  // import matches AssignedTo's uniqueName against it, and nothing else. It is
+  // typed here by hand, like Location, and is not sent anywhere by itself.
+  var emailInput = input(editing ? person.email : "");
+  emailInput.id = "person-email";
+  emailInput.type = "email";
+  emailInput.spellcheck = false;
+  form.appendChild(formRow("Email", emailInput, PERSON_EMAIL_TIP));
 
   // A Person's Location is one free-text place, suggested from the Locations
   // already used on other People and the Locations the holidays configure.
@@ -2992,6 +3016,7 @@ function openPersonPanel(person, trigger) {
     if (!name) { error.set("A person needs a name."); nameInput.focus(); return; }
     var body = {
       name: name,
+      email: emailInput.value.trim(),
       location: location.input.value,
       availability: availability.value(),
       tags: tags.tags(),
@@ -3026,6 +3051,9 @@ function copyPerson(person) {
   var live = data.people.filter(function (p) { return !p.archived; })
     .map(function (p) { return p.name; });
   var name = copyName(person.name, live);
+  // The email is not copied: it is what an ADO work item matches a Person by,
+  // and two People carrying one email would make every import of that person's
+  // work ambiguous. A copy is somebody else, and gets their own.
   return api("POST", "/api/people", {
     name: name,
     location: person.location,
@@ -3165,6 +3193,16 @@ function openAssignmentPanel(a, trigger) {
   form.appendChild(formRow("Tags", tags.node));
   var noteInput = input(a.raw.note);
   form.appendChild(formRow("Note", noteInput));
+  // A linked Assignment says so, read-only: the link is ADO's, established by
+  // the import and changed there rather than retyped here. Whether its dates
+  // are assumed is part of what it says, because an assumed date is PACT's own
+  // guess and nothing writes it back to ADO.
+  if (a.raw.link) {
+    var linkText = el("span", "ado__link");
+    linkText.id = "assignment-ado-link";
+    linkText.textContent = linkLine(a.raw.link);
+    form.appendChild(formRow("ADO", linkText, ADO_LINK_TIP));
+  }
   node.appendChild(form);
   var error = errorLine(node);
 
@@ -6787,6 +6825,120 @@ function openAdoPanel(trigger) {
 
     syncTokenControls();
 
+    /*
+     * The import: one work item at a time, pasted as an id or as the browser's
+     * own work-item link. It sits below the connection's rows because it is
+     * what a connection is for, and it is deliberately one field and one press
+     * - a sweep of the board and an import of an item's children are not things
+     * this press does, and the hint under it says so rather than leaving it to
+     * be discovered.
+     *
+     * An assignee PACT cannot match is never created silently: that refusal
+     * arrives with an offer, and the offer is drawn here as its own press,
+     * naming the Person it would add. Only that press sends createPerson.
+     */
+    var importBlock = el("div", "ado__import");
+    var importInput = document.createElement("input");
+    importInput.type = "text";
+    importInput.id = "ado-import-id";
+    importInput.spellcheck = false;
+    importInput.setAttribute("aria-label", "Work item id or link");
+    importInput.setAttribute("placeholder", "12345 or a work item URL");
+    var importRow = el("div", "ado__import-row");
+    importRow.appendChild(importInput);
+    var importButton = button("btn-ghost", "Import", function () { runImport(false); });
+    importButton.id = "ado-import";
+    importRow.appendChild(importButton);
+    importBlock.appendChild(formRow("Import", importRow, ADO_IMPORT_TIP));
+    var importHint = el("p", "panel__sub");
+    importHint.textContent = "One work item at a time; its children are not imported.";
+    importBlock.appendChild(importHint);
+    var importStateLine = el("p", "");
+    importStateLine.id = "ado-import-line";
+    importStateLine.hidden = true;
+    importBlock.appendChild(importStateLine);
+    // The offer, drawn only by a refusal that came with one.
+    var offer = null;
+    var offerButton = button("btn-primary", "", function () { acceptOffer(); });
+    offerButton.id = "ado-import-offer";
+    offerButton.hidden = true;
+    importBlock.appendChild(offerButton);
+    // Inside the form, so the row lines up with the connection's rows and its
+    // field wears the same field styling; Enter in the field is caught above and
+    // never submits the form, which is the mapping's save.
+    form.appendChild(importBlock);
+
+    function clearOffer() {
+      offer = null;
+      offerButton.hidden = true;
+      offerButton.textContent = "";
+    }
+
+    function showOffer(next) {
+      offer = next || null;
+      offerButton.textContent = offer ? offer.label : "";
+      offerButton.hidden = !offer;
+    }
+
+    // One import press. The id or link is read here first, so a paste that is
+    // neither is refused before a round trip. A refusal that carries an offer
+    // says why nothing was imported and turns the offer into the press below
+    // it; every other refusal is the panel's error line.
+    function runImport(createPerson) {
+      var reading = readWorkItemId(importInput.value);
+      if (reading.refusal) {
+        error.set(reading.refusal);
+        importInput.focus();
+        return;
+      }
+      error.clear();
+      clearOffer();
+      drawLine(importStateLine, null);
+      importButton.disabled = true;
+      offerButton.disabled = true;
+      api("POST", "/api/ado/import", { id: reading.id, createPerson: createPerson === true })
+        .then(function (result) {
+          return refresh({ keepPanel: true }).then(function () {
+            drawLine(importStateLine, {
+              className: "ado__line ado__importstate is-ok",
+              text: importLine(result.facts),
+              title: ""
+            });
+            importInput.value = "";
+          });
+        })
+        .catch(function (err) {
+          var payload = err && err.payload ? err.payload : {};
+          if (payload.offer) {
+            showOffer(payload.offer);
+            drawLine(importStateLine, {
+              className: "ado__line ado__importstate",
+              text: err.message,
+              title: ""
+            });
+          } else {
+            error.set(err && err.message ? err.message : "Could not import that work item.");
+          }
+        })
+        .then(function () {
+          importButton.disabled = false;
+          offerButton.disabled = false;
+        });
+    }
+
+    function acceptOffer() {
+      if (offer) runImport(true);
+    }
+
+    importInput.addEventListener("keydown", function (event) {
+      // Enter in the field is the Import press. The form's own submit stays the
+      // mapping's save, so a stray Enter never rewrites a saved mapping.
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runImport(false);
+      }
+    });
+
     var status = el("p", "ado__line ado__status");
     status.setAttribute("role", "status");
     status.hidden = true;
@@ -6977,6 +7129,16 @@ function typeSelect() {
 // What an empty choice in a mapping slot reads as: a slot left empty is a real
 // choice, and a pair the rank rule refuses is never opened by default.
 var CHOOSE_TYPE = "Choose one";
+
+// The import row's explanation, on hover: the shapes a paste may take, and what
+// the press then does with it.
+var ADO_IMPORT_TIP = ADO_WORK_ITEM_SHAPES +
+  " PACT reads the item's title, its owner, the parents that decide the Project, and its dates.";
+
+// The linked Assignment's explanation, on hover: which way the link points.
+var ADO_LINK_TIP = "The Azure DevOps work item this Assignment was imported from, and the revision " +
+  "both sides last agreed. It is read-only here: an import establishes the link, and PACT does not " +
+  "write to ADO yet.";
 
 /*
  * Fill a type select from the instance, keeping a stored name visible even when

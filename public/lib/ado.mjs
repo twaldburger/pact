@@ -128,22 +128,40 @@ function projectFrom(segments) {
  * scheme may be left off - a URL copied out of a message often has it - and is
  * always stored as https, which is what ADO serves.
  */
-export function readAdoUrl(text) {
-  const raw = String(text === undefined || text === null ? "" : text).trim();
-  if (raw === "") return unreadable("Enter the URL of your Azure DevOps organisation or project.");
+/*
+ * A pasted ADO address, read once: the host, the decoded path segments and the
+ * query, or the refusal that says why PACT cannot read it. One definition of
+ * what an ADO address is, shared by the mapping's URL reader and the work-item
+ * reader, so a host the panel accepts for an organisation is a host it accepts
+ * for a work item.
+ */
+function adoAddress(raw) {
   let parsed;
   try {
     parsed = new URL(URL_SCHEME.test(raw) ? raw : "https://" + raw);
   } catch (_) {
-    return unreadable("That is not a URL.");
+    return { refusal: "That is not a URL." };
   }
   const host = parsed.hostname.toLowerCase();
-  const segments = pathSegments(parsed.pathname);
-
   // A host is letters, digits, dots and hyphens. Anything else - a sentence
   // with spaces in it, most of all - is prose that happened to parse, and is
   // refused as prose rather than quoted back as if it were a host.
-  if (!/^[a-z0-9.-]+$/.test(host)) return unreadable("That is not a URL.");
+  if (!/^[a-z0-9.-]+$/.test(host)) return { refusal: "That is not a URL." };
+  return {
+    host: host,
+    segments: pathSegments(parsed.pathname),
+    params: parsed.searchParams,
+    refusal: ""
+  };
+}
+
+export function readAdoUrl(text) {
+  const raw = String(text === undefined || text === null ? "" : text).trim();
+  if (raw === "") return unreadable("Enter the URL of your Azure DevOps organisation or project.");
+  const address = adoAddress(raw);
+  if (address.refusal) return unreadable(address.refusal);
+  const host = address.host;
+  const segments = address.segments;
 
   if (host === DEV_AZURE_HOST) {
     const organization = segments[0] || "";
@@ -465,4 +483,542 @@ export function connectionLine(test) {
     );
   }
   return line("ado__connection", test.message || "Could not connect to Azure DevOps.", "", "failed");
+}
+
+/*
+ * --- importing one work item ---------------------------------------------
+ *
+ * An import reads one work item and puts it on the grid: a Person's row from
+ * the item's AssignedTo, a Project from its parents through the mapping, an
+ * Assignment's dates from ADO's own or from the plan's rules, and a Link
+ * carrying the baseline that a later sync compares against.
+ *
+ * The rules live here rather than in the server so the same source decides
+ * them for the browser, the server and `node --test`: what a work-item link
+ * looks like, which date field a type carries, who an AssignedTo is, which
+ * ancestor is the Project, where a block goes when ADO has no dates, and the
+ * shape of the baseline. Nothing here makes a network call.
+ */
+
+/*
+ * The work-item fields an import reads, by their reference names rather than
+ * their captions: a process template may relabel a field, and the reference
+ * name is what survives that.
+ */
+export const ADO_FIELDS = Object.freeze({
+  title: "System.Title",
+  type: "System.WorkItemType",
+  state: "System.State",
+  assignedTo: "System.AssignedTo",
+  parent: "System.Parent",
+  iterationPath: "System.IterationPath",
+  rev: "System.Rev",
+  startDate: "Microsoft.VSTS.Scheduling.StartDate"
+});
+
+/*
+ * The end date is two different reference names on one instance, which is the
+ * spike's finding and the reason this is resolved per type rather than held as
+ * one constant: Epic and Feature end in a TargetDate, User Story and Task in a
+ * FinishDate, and a Bug carries neither. A type with no end field is not an
+ * error - it is an item with no dates, which the assumed rule already covers.
+ */
+export const END_DATE_FIELDS = Object.freeze({
+  Epic: "Microsoft.VSTS.Scheduling.TargetDate",
+  Feature: "Microsoft.VSTS.Scheduling.TargetDate",
+  "User Story": "Microsoft.VSTS.Scheduling.FinishDate",
+  Task: "Microsoft.VSTS.Scheduling.FinishDate"
+});
+
+// The two scheduling fields a work-item type carries: the start date every
+// type shares, and the end date its own type decides.
+export function schedulingFields(type) {
+  const name = String(type === undefined || type === null ? "" : type).trim();
+  return {
+    start: ADO_FIELDS.startDate,
+    end: Object.prototype.hasOwnProperty.call(END_DATE_FIELDS, name) ? END_DATE_FIELDS[name] : ""
+  };
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function isDateText(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(Date.UTC(+value.slice(0, 4), +value.slice(5, 7) - 1, +value.slice(8, 10)));
+  return date.getUTCFullYear() + "-" + pad2(date.getUTCMonth() + 1) + "-" + pad2(date.getUTCDate()) === value;
+}
+
+function dateFromISO(iso) {
+  return new Date(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)));
+}
+
+function isoFromDate(date) {
+  return date.getUTCFullYear() + "-" + pad2(date.getUTCMonth() + 1) + "-" + pad2(date.getUTCDate());
+}
+
+function addDays(iso, n) {
+  return isoFromDate(new Date(dateFromISO(iso).getTime() + n * 86400000));
+}
+
+// A month added or taken with the day clamped to the target month's length, so
+// moving a month back from the 31st lands on the 30th rather than sliding into
+// the month after it.
+function addMonths(iso, n) {
+  const date = dateFromISO(iso);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + n;
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return isoFromDate(new Date(Date.UTC(year, month, Math.min(date.getUTCDate(), last))));
+}
+
+/*
+ * The date part of a value ADO gave, read in UTC.
+ *
+ * ADO answers a date field as an instant, not as a day - `2026-01-05T00:00:00Z`,
+ * or whatever local midnight was sent - so PACT takes the date part in a stated
+ * zone rather than pretending the instant is a date. UTC is that zone, and it is
+ * the same rule the iteration dates are read by: formatting the instant in this
+ * machine's local time would move the day for any offset west of Greenwich and
+ * place the block in the wrong sprint.
+ */
+export function datePart(value) {
+  const text = String(value === undefined || value === null ? "" : value).trim();
+  const match = /^(\d{4}-\d{2}-\d{2})(?:$|[T ])/.exec(text);
+  if (!match || !isDateText(match[1])) return "";
+  return match[1];
+}
+
+/*
+ * The work item a paste means: its id, or the refusal that says what a paste
+ * may be. Two forms are read, because those are the two forms a person has to
+ * hand - the bare id from a chat message, and the browser's own work-item link.
+ *
+ *   ​12345
+ *   #12345
+ *   https://dev.azure.com/{org}/{project}/_workitems/edit/12345
+ *   https://{org}.visualstudio.com/DefaultCollection/{project}/_workitems/edit/12345
+ *   https://{org}.visualstudio.com/{project}/_workitems?workitem=12345
+ *
+ * The host rule is the address reader's own, so a link from a host PACT does
+ * not read is refused with the same sentence it would get for an organisation
+ * address. `_workitems` is ADO's own page name, always written with a leading
+ * underscore, so no project name is ever mistaken for it.
+ */
+export const ADO_WORK_ITEM_SHAPES =
+  "Paste a work-item id such as 12345, or a work-item link such as " +
+  "https://dev.azure.com/<organisation>/<project>/_workitems/edit/12345.";
+
+function workItemRefusal(reason) {
+  return { id: 0, refusal: reason + " " + ADO_WORK_ITEM_SHAPES };
+}
+
+export function readWorkItemId(text) {
+  const raw = String(text === undefined || text === null ? "" : text).trim();
+  if (raw === "") return workItemRefusal("Enter a work item id or link.");
+  const bare = /^#?(\d{1,9})$/.exec(raw);
+  if (bare) {
+    const id = Number(bare[1]);
+    // Zero is no id at all, and ADO numbers its work items from one.
+    return id > 0 ? { id: id, refusal: "" } : workItemRefusal("A work item id starts at 1.");
+  }
+  const address = adoAddress(raw);
+  if (address.refusal) return workItemRefusal("That is not a work item id or link.");
+  if (address.host !== DEV_AZURE_HOST && !address.host.endsWith(VISUAL_STUDIO_SUFFIX)) {
+    return {
+      id: 0,
+      refusal: "PACT reads 'dev.azure.com' and '<organisation>.visualstudio.com' work-item links, and '" +
+        address.host + "' is neither."
+    };
+  }
+  const at = address.segments.findIndex(function (segment) {
+    return segment.toLowerCase().indexOf("_workitems") === 0;
+  });
+  if (at !== -1) {
+    // Below `_workitems`, the id is the one number-segment there is: the page
+    // name `edit` sits between them on a work-item link and not on the query
+    // form, so a segment of digits is looked for rather than a fixed offset.
+    const digits = address.segments.slice(at + 1).filter(function (segment) {
+      return segment.toLowerCase() !== "edit";
+    }).filter(function (segment) {
+      return /^\d{1,9}$/.test(segment);
+    })[0];
+    if (digits) return { id: Number(digits), refusal: "" };
+  }
+  // The older link shape keeps the id in the query string.
+  const fromQuery = address.params ? (address.params.get("workitem") || address.params.get("id") || "").trim() : "";
+  if (/^\d{1,9}$/.test(fromQuery) && Number(fromQuery) > 0) return { id: Number(fromQuery), refusal: "" };
+  return workItemRefusal("That link names no work item.");
+}
+
+/*
+ * Who the item is assigned to, as the three answers PACT can act on.
+ *
+ * A Person is matched by email - ADO's `uniqueName` - and never by display
+ * name: "Anna Meier" and "Meier, Anna (EXT)" are one person and no string
+ * comparison can know that, while the email is the instance's own identifier
+ * for them. An identity with no email is a group (or an answer too old to carry
+ * the mailbox), and there is nothing to match; an absent one is work nobody
+ * owns, which also cannot be placed.
+ */
+export function assignedIdentity(fields) {
+  const value = (fields || {})[ADO_FIELDS.assignedTo];
+  if (value === undefined || value === null || value === "") {
+    return { kind: "unassigned", name: "", email: "" };
+  }
+  if (typeof value === "string") {
+    return { kind: "group", name: value.trim(), email: "" };
+  }
+  const name = typeof value.displayName === "string" ? value.displayName.trim() : "";
+  const email = typeof value.uniqueName === "string" ? value.uniqueName.trim() : "";
+  if (email === "") return { kind: "group", name: name, email: "" };
+  return { kind: "person", name: name, email: email };
+}
+
+// The live Person carrying an email, or null. Archived People are not matched:
+// work does not land on somebody the plan has put away. Email is compared
+// without case, because a mailbox is not case-sensitive.
+export function personForEmail(people, email) {
+  const wanted = String(email === undefined || email === null ? "" : email).trim().toLowerCase();
+  if (wanted === "") return null;
+  return (people || []).filter(function (person) {
+    return person && !person.archived && typeof person.email === "string" &&
+      person.email.trim().toLowerCase() === wanted;
+  })[0] || null;
+}
+
+// The live Project with a name, matched without case and without surrounding
+// spaces: the ADO title is copied as it reads, and a trailing space in a title
+// is no reason to refuse an import.
+export function projectForTitle(projects, title) {
+  const wanted = String(title === undefined || title === null ? "" : title).trim().toLowerCase();
+  if (wanted === "") return null;
+  return (projects || []).filter(function (project) {
+    return project && !project.archived && String(project.name || "").trim().toLowerCase() === wanted;
+  })[0] || null;
+}
+
+// The parent a work item points at: the `System.Parent` field, or, where the
+// template does not carry it, the hierarchy-reverse relation ADO also answers
+// with. Zero means the item sits at the top of its tree.
+export function parentIdOf(item) {
+  const fields = (item && item.fields) || {};
+  const direct = Number(fields[ADO_FIELDS.parent]);
+  if (Number.isInteger(direct) && direct > 0) return direct;
+  const relations = Array.isArray(item && item.relations) ? item.relations : [];
+  const up = relations.filter(function (relation) {
+    return relation && relation.rel === "System.LinkTypes.Hierarchy-Reverse" &&
+      typeof relation.url === "string";
+  })[0];
+  if (!up) return 0;
+  const match = /\/(\d+)\/?$/.exec(up.url);
+  return match ? Number(match[1]) : 0;
+}
+
+function chainSummary(chain) {
+  return chain.map(function (entry) {
+    return String(entry.type || "").trim() + " '" + String(entry.title || "").trim() + "'";
+  }).join(", ");
+}
+
+/*
+ * The Project's name, from the chain of ancestors above the item.
+ *
+ * The mapping says which work-item type a PACT Project comes from, and the
+ * position of a type in the hierarchy is its level, so the Project is the first
+ * ancestor whose type is that level - never the item itself, which is what
+ * makes an item sitting at the project level a refusal rather than a Project
+ * with no parent. A chain that reaches no such ancestor refuses, naming every
+ * level it walked and the level it was looking for: an import that guessed a
+ * Project would put real work in the wrong place.
+ */
+export function projectFromChain(chain, projectLevel) {
+  const level = String(projectLevel === undefined || projectLevel === null ? "" : projectLevel).trim();
+  const walked = (Array.isArray(chain) ? chain : []).filter(function (entry) {
+    return entry && typeof entry === "object";
+  });
+  const found = walked.filter(function (entry) {
+    return String(entry.type || "").trim() === level && String(entry.title || "").trim() !== "";
+  })[0];
+  if (found) return { title: String(found.title).trim(), id: found.id || 0, refusal: "" };
+  if (walked.length === 0) {
+    return {
+      title: "",
+      id: 0,
+      refusal: "The work item has no parent, so nothing above it is a '" + level +
+        "', the project level the mapping names: an import needs one there to give the Assignment a Project."
+    };
+  }
+  return {
+    title: "",
+    id: 0,
+    refusal: "The work item's parents are " + chainSummary(walked) + "; none is a '" + level +
+      "', the project level the mapping names, so the import has no Project to place the work under."
+  };
+}
+
+// The start date of the iteration a path names, as a date, or empty when the
+// instance reports no such iteration - an item in the backlog has no path at
+// all, and a path the team settings do not list has no dates either way.
+export function iterationStartFor(iterations, path) {
+  const wanted = String(path === undefined || path === null ? "" : path).trim();
+  if (wanted === "") return "";
+  const found = (iterations || []).filter(function (iteration) {
+    return iteration && String(iteration.path || "").trim() === wanted;
+  })[0];
+  if (!found) return "";
+  return datePart(found.attributes && found.attributes.startDate);
+}
+
+// The PACT sprint whose dates contain a day, or null. String comparison on ISO
+// dates is date order, and both ends are inclusive: a sprint ending on the 14th
+// contains the 14th.
+export function sprintForDate(date, sprints) {
+  const iso = isDateText(date) ? date : datePart(date);
+  if (iso === "") return null;
+  return (sprints || []).filter(function (sprint) {
+    return sprint && typeof sprint.start === "string" && typeof sprint.end === "string" &&
+      sprint.start <= iso && iso <= sprint.end;
+  })[0] || null;
+}
+
+/*
+ * The block an item with no dates gets: one month, kept inside the plan period
+ * rather than landing off-screen.
+ *
+ * Today is where it wants to be. When today falls before the period the block
+ * starts at the period's start and still runs a month; when it falls after the
+ * period the block ends at the period's end and reaches a month back. A period
+ * shorter than a month holds what it can: the block is clamped to the period and
+ * never refused for being longer than it.
+ */
+export function assumedWindow(today, period) {
+  const start = String(period && period.start || "").trim();
+  const end = String(period && period.end || "").trim();
+  if (!isDateText(start) || !isDateText(end)) return { start: "", end: "" };
+  let from = isDateText(today) ? today : start;
+  if (from < start) from = start;
+  let to = addDays(addMonths(from, 1), -1);
+  if (from > end) {
+    to = end;
+    from = addDays(addMonths(end, -1), 1);
+  }
+  if (from < start) from = start;
+  if (to > end) to = end;
+  if (to < from) { from = start; to = end; }
+  return { start: from, end: to };
+}
+
+/*
+ * Where an imported block goes, and whether its dates are ADO's or PACT's.
+ *
+ * 1. ADO's own dates win whenever it has both, and are recorded as not assumed.
+ *    One date alone is not a span, so a item carrying only a start is treated
+ *    as having no dates rather than given an invented end.
+ * 2. Otherwise the item's iteration decides: an iteration whose start date falls
+ *    in a PACT sprint places the block on that sprint's dates - the sprint's
+ *    start where the sprint began before the plan period, its end where it runs
+ *    past it.
+ * 3. Otherwise the block is the assumed month, and `source` says which of the
+ *    two fallbacks it was so the panel can say so: an iteration outside every
+ *    sprint reads differently from an item with no iteration at all.
+ *
+ * Every date that is not ADO's is assumed, and an assumed date is never written
+ * back to ADO until a person confirms it.
+ */
+export function importPlacement(input) {
+  const settings = input || {};
+  const period = settings.period || {};
+  const adoStart = datePart(settings.adoStart);
+  const adoEnd = datePart(settings.adoEnd);
+  if (adoStart !== "" && adoEnd !== "") {
+    return { start: adoStart, end: adoEnd, datesAssumed: false, source: "ado", sprint: null, iterationStart: "" };
+  }
+  const iterationStart = datePart(settings.iterationStart);
+  const sprint = sprintForDate(iterationStart, settings.sprints);
+  if (sprint) {
+    const start = isDateText(period.start) && sprint.start < period.start ? period.start : sprint.start;
+    const end = isDateText(period.end) && sprint.end > period.end ? period.end : sprint.end;
+    return {
+      start: start,
+      end: end,
+      datesAssumed: true,
+      source: "sprint",
+      sprint: { index: sprint.index, name: sprint.name, start: sprint.start, end: sprint.end },
+      iterationStart: iterationStart
+    };
+  }
+  const window = assumedWindow(datePart(settings.today), period);
+  return {
+    start: window.start,
+    end: window.end,
+    datesAssumed: true,
+    source: "assumed",
+    sprint: null,
+    iterationStart: iterationStart
+  };
+}
+
+/*
+ * The Link: what an imported Assignment carries so a later sync knows what both
+ * sides agreed, in which field, at which revision.
+ *
+ * It sits in the plan beside the Assignment, because the plan is what travels.
+ * The four facts are the work item's id, the revision both sides last agreed,
+ * the values both sides agreed (`values`), and whether the dates are PACT's own
+ * guess rather than ADO's answer (`datesAssumed`). A type name may appear beside
+ * them - it is what resolves the date field on the next read - and an address
+ * may not, nor anything shaped like a credential: a plan is a file people share,
+ * and a key shaped like a secret is refused here exactly as it is inside the
+ * mapping.
+ */
+export const LINK_KEYS = Object.freeze(["workItemId", "rev", "workItemType", "values", "datesAssumed"]);
+export const LINK_VALUE_KEYS = Object.freeze(["title", "personEmail", "project", "start", "end", "iterationPath"]);
+
+export function linkRefusals(link) {
+  if (!link || typeof link !== "object" || Array.isArray(link)) return ["link must be an object"];
+  const errors = [];
+  Object.keys(link).forEach(function (key) {
+    if (isCredentialKey(key)) {
+      errors.push("the link must never carry a credential: remove link." + key);
+    } else if (!LINK_KEYS.includes(key)) {
+      errors.push("link has an unknown field '" + key + "'");
+    }
+  });
+  if (!Number.isInteger(link.workItemId) || link.workItemId <= 0) {
+    errors.push("link.workItemId must be a work item id");
+  }
+  if (!Number.isInteger(link.rev) || link.rev < 0) {
+    errors.push("link.rev must be the work item's revision, a whole number from 0");
+  }
+  if (typeof link.datesAssumed !== "boolean") errors.push("link.datesAssumed must be a boolean");
+  if (link.workItemType !== undefined && !isNonEmptyText(link.workItemType)) {
+    errors.push("link.workItemType must be a work-item type name when it is given");
+  }
+  const values = link.values;
+  if (!values || typeof values !== "object" || Array.isArray(values)) {
+    errors.push("link.values must be an object");
+    return errors;
+  }
+  Object.keys(values).forEach(function (key) {
+    if (isCredentialKey(key)) {
+      errors.push("the link must never carry a credential: remove link.values." + key);
+    } else if (!LINK_VALUE_KEYS.includes(key)) {
+      errors.push("link.values has an unknown field '" + key + "'");
+    }
+  });
+  ["title", "personEmail", "project"].forEach(function (key) {
+    if (!isNonEmptyText(values[key])) errors.push("link.values." + key + " must be a non-empty string");
+  });
+  ["start", "end"].forEach(function (key) {
+    if (values[key] !== null && !isDateText(values[key])) {
+      errors.push("link.values." + key + " must be a YYYY-MM-DD date or null");
+    }
+  });
+  if (values.iterationPath !== null && typeof values.iterationPath !== "string") {
+    errors.push("link.values.iterationPath must be an iteration path or null");
+  }
+  return errors;
+}
+
+// The link as it is stored: the texts trimmed, an absent date kept as null
+// rather than left out, and an unset type name or iteration path left out
+// rather than stored as an empty string.
+export function normalizeLink(link) {
+  const values = (link && link.values) || {};
+  const start = values.start === undefined || values.start === null || values.start === "" ? null : String(values.start);
+  const end = values.end === undefined || values.end === null || values.end === "" ? null : String(values.end);
+  const path = values.iterationPath === undefined || values.iterationPath === null
+    ? ""
+    : String(values.iterationPath).trim();
+  const normalized = {
+    workItemId: Number(link.workItemId),
+    rev: Number(link.rev),
+    values: {
+      title: String(values.title === undefined || values.title === null ? "" : values.title).trim(),
+      personEmail: String(values.personEmail === undefined || values.personEmail === null ? "" : values.personEmail).trim(),
+      project: String(values.project === undefined || values.project === null ? "" : values.project).trim(),
+      start: start,
+      end: end,
+      iterationPath: path === "" ? null : path
+    },
+    datesAssumed: !!link.datesAssumed
+  };
+  const type = link.workItemType === undefined || link.workItemType === null
+    ? ""
+    : String(link.workItemType).trim();
+  if (type !== "") normalized.workItemType = type;
+  return normalized;
+}
+
+/*
+ * The offer an assignee PACT cannot match comes with, and the refusal it is
+ * worded as. Creating a Person is never silent: the panel draws this as its own
+ * press, naming the person it would add, and the import happens only when that
+ * press is made. The ADO display name is taken verbatim and the email as
+ * stored, because the email is what matches next time.
+ */
+export function unmatchedAssigneeOffer(identity) {
+  const name = String(identity && identity.name || "").trim();
+  const email = String(identity && identity.email || "").trim();
+  return {
+    kind: "create-person",
+    name: name,
+    email: email,
+    label: "Create " + (name === "" ? email : name) + " and import",
+    message: "No live Person carries the email " + email + ", which is what this work item is assigned to. " +
+      "PACT can add a Person named \"" + name + "\" with that email, and you can edit them afterwards - " +
+      "or set another Person's email in their panel to match this item."
+  };
+}
+
+/*
+ * What a finished import reads as, in the panel's own line: the item, the
+ * Assignment's name, the Person, the Project and the dates, then which of the
+ * date rules placed the block. A created Person is named too, because an import
+ * that added one should not leave it to be discovered on the grid.
+ */
+export function importLine(facts) {
+  const result = facts || {};
+  const person = result.person || {};
+  const type = String(result.workItemType || "").trim();
+  let text = "Imported " + (type === "" ? "" : type + " ") + "#" + result.workItemId + " as \"" +
+    result.assignmentName + "\": " + person.name + " on " + result.projectName + ", " +
+    result.start + " to " + result.end + ".";
+  if (person.created) {
+    text += " " + person.name + " was added as a Person with " + person.email +
+      " and can be edited afterwards.";
+  }
+  if (!result.datesAssumed) {
+    text += " The dates are the work item's own.";
+  } else if (result.source === "sprint") {
+    const sprint = result.sprint || {};
+    text += " The dates are assumed: the work item has none, and the block sits at " + sprint.name +
+      " (" + sprint.start + " to " + sprint.end + ").";
+  } else if (result.iterationStart) {
+    text += " The dates are assumed: the work item has none, and its iteration starts on " +
+      result.iterationStart + ", which is in no PACT sprint, so the block is one month long, " +
+      "placed inside the plan period.";
+  } else {
+    text += " The dates are assumed: the work item has none, so the block is one month long, " +
+      "placed inside the plan period.";
+  }
+  return text;
+}
+
+/*
+ * What a linked Assignment's read-only line says: the work item it came from,
+ * the revision both sides last agreed, and the assumed marker when its dates are
+ * PACT's own guess rather than ADO's answer. The marker is part of the line
+ * because an assumed date is never written back to ADO until a person confirms
+ * it, and a reader looking at the block should be able to see which it is.
+ */
+export function linkLine(link) {
+  const facts = link || {};
+  const type = String(facts.workItemType === undefined || facts.workItemType === null ? "" : facts.workItemType).trim();
+  let text = (type === "" ? "Work item " : type + " ") + "#" + facts.workItemId +
+    ", revision " + facts.rev;
+  if (facts.datesAssumed) text += " - its dates are assumed";
+  return text + ".";
 }

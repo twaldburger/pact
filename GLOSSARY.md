@@ -5,7 +5,7 @@ People Allocation & Capacity Tracker: a local plan of who works on what, for how
 ## Language
 
 **Person**:
-Someone whose time the plan schedules, identified by a name and carrying an optional Location, an Availability, any number of Person tags, and an optional note. The individual; the Timeline's row-header column that holds them is headed People.
+Someone whose time the plan schedules, identified by a name and carrying an optional Location, an optional email, an Availability, any number of Person tags, and an optional note. The individual; the Timeline's row-header column that holds them is headed People.
 _Avoid_: resource, user, employee, staff member
 
 **Availability**:
@@ -117,6 +117,14 @@ _Avoid_: integration, sync, account, login, credential
 **Mapping**:
 The `ado` block in the plan: the Azure DevOps organisation's address, the project's name, and the work-item type that a Project, an Assignment and optionally a tag are drawn from. It holds type names and an address and never a secret, and a credential-shaped key inside it is refused so a shared plan cannot carry one. Its slots are checked against the instance's own backlog ranks - the project type above the assignment type, and a tag type the instance reports - when the mapping is saved. A plan without one behaves exactly as it did before there was a connection.
 _Avoid_: schema, field map, binding, metadata
+
+**Link**:
+What ties an Assignment to the Azure DevOps work item it was imported from: the work item's id, the type it was read as, its [Baseline](#baseline), and whether the Assignment's dates are the item's own or PACT's guess. It sits in the plan beside the Assignment, because the plan is what travels, and it is optional everywhere - an Assignment typed onto the grid has none, and a plan without links behaves exactly as it did before there was an import. Type names and an address may appear in it; a token never does, and a credential-shaped key inside it is refused when the plan is read or written. A linked Assignment is an ordinary Assignment in every other way: same panels, same figures, same rules, with the link shown read-only.
+_Avoid_: reference, attachment, foreign key, pointer, sync record
+
+**Baseline**:
+The values both sides last agreed, kept inside a [Link](#link) so a later sync can tell what changed, on which side and in which field, rather than comparing two records that run on independent clocks. It holds the work item's revision and the agreed values - the title, the owner's email, the Project's work-item title, the start and end dates ADO holds (which are empty when it holds none), and the iteration path - beside a marker saying whether the dates are assumed. ADO's revision is what a conditional write is checked against; the marker is what keeps an assumed date from being published as if a person had decided it.
+_Avoid_: snapshot, sync state, checkpoint, watermark
 
 **View setting**:
 One of the display choices kept in the Config beside the plan path and restored on each load: the Zoom and its Grid spacing, the Row height, the weekend band, the holiday band, the Milestone rules, the availability lines, whether the assignment blocks are drawn, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, what a [Block label](#block-label) names, whether the Stack is collapsed, the report's own zoom level and which of its views is showing, and the two sort orders. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press, leaving the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's default on its own.

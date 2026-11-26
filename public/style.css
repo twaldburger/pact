@@ -2866,6 +2866,34 @@ down to the last row and no further. */
 
 .ado__token input { flex: 1 1 100%; }
 
+/* The import row: one field and one press, wrapping the same way the token row
+   does so a long work-item link never squeezes the field into a column. The
+   block sits below the connection's rows, with the hint that says one item at a
+   time and the line the last import left. */
+.ado__import {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--rule);
+}
+
+.ado__import-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ado__import-row input { flex: 1 1 8rem; min-width: 0; }
+
+/* A linked Assignment's read-only line: an id and a revision, short, but with
+   room to wrap rather than widen the panel. */
+.ado__link {
+  overflow-wrap: anywhere;
+}
+
 .ado__select { min-width: 0; }
 .ado__select:disabled { color: var(--ink-soft); }
 

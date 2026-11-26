@@ -15,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createStore, todayISO, ValidationError, NotFoundError, PlanFileError } from "./lib/plan.mjs";
 import { resolvePlanFile, readView, writeView, writePlanFile } from "./lib/config.mjs";
-import { AdoError, adoState, clearToken, saveMapping, testConnection, writeToken } from "./lib/ado.mjs";
+import { AdoError, adoState, clearToken, importWorkItem, saveMapping, testConnection, writeToken } from "./lib/ado.mjs";
 import { addressRefusals } from "./public/lib/ado.mjs";
 import { resolvePlanPath, withPlanSuffix } from "./public/lib/plan-file.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
@@ -363,6 +363,20 @@ export function createServer(store, options) {
               });
             });
           }
+          // The import: one work item, by id or link, read from ADO and written
+          // to the plan in one commit. `createPerson` is set only by the press
+          // that accepts the offer an unmatched assignee comes with, so a Person
+          // is never created behind the panel's back.
+          if (pathname === "/api/ado/import") {
+            if (req.method !== "POST") return sendError(res, 405, "method not allowed");
+            return readBody(req).then((body) => {
+              const input = body || {};
+              return importWorkItem(Object.assign({}, ado, {
+                id: input.id,
+                createPerson: input.createPerson === true
+              })).then((result) => sendJSON(res, 200, result));
+            });
+          }
           return sendError(res, 404, "no such endpoint");
         }
         const route = matchApi(pathname);
@@ -371,7 +385,12 @@ export function createServer(store, options) {
         return serveStatic(res, publicDir, pathname);
       })
       .catch((err) => {
-        if (err instanceof AdoError) return sendError(res, err.status, err.message);
+        if (err instanceof AdoError) {
+          // A refusal that carries an offer carries it as a field too: the panel
+          // draws the choice, and never parses it out of the sentence.
+          if (err.offer) return sendJSON(res, err.status, { error: err.message, offer: err.offer });
+          return sendError(res, err.status, err.message);
+        }
         if (err instanceof PlanFileError) return sendError(res, err.status || 400, err.message);
         if (err instanceof ValidationError) return sendError(res, 400, err.message);
         if (err instanceof NotFoundError) return sendError(res, 404, err.message);
