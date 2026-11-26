@@ -52,7 +52,14 @@ import {
   chartMilestoneRules
 } from "./lib/chart.mjs";
 import { planFileItem, planFileView, withPlanSuffix } from "./lib/plan-file.mjs";
-import { addressRefusals, adoRefusals, tokenNotice } from "./lib/ado.mjs";
+import {
+  addressRefusals,
+  adoRefusals,
+  adoReadingLine,
+  adoUrlFor,
+  readAdoUrl,
+  tokenNotice
+} from "./lib/ado.mjs";
 import {
   HELP_DOCUMENTS,
   HELP_DOCUMENT_DEFAULT,
@@ -6670,10 +6677,31 @@ function openAdoPanel(trigger) {
     var instance = null;
 
     var node = panelShell("Azure DevOps",
-      "The plan carries the mapping, this machine's config carries the token, and the browser never sees it.");
+      "Paste the organisation's URL and PACT reads the project out of it. The plan carries the " +
+      "mapping, this machine's config carries the token, and the browser never sees it.");
     node.classList.add("panel--ado");
 
     var form = el("form", "form");
+
+    // One URL field, because a URL is what a person has to hand. What it is read
+    // as is shown below it, and the two values the plan stores stay editable:
+    // a reading that is wrong is corrected by hand, and a shape nobody foresaw
+    // is still reachable.
+    var urlInput = input(adoUrlFor(mapping));
+    urlInput.id = "ado-url";
+    urlInput.spellcheck = false;
+    urlInput.setAttribute("aria-label", "Azure DevOps URL");
+    urlInput.setAttribute("placeholder", "https://dev.azure.com/<organisation>/<project>");
+    form.appendChild(formRow("URL", urlInput));
+
+    // What the URL was read as, in one line, so a wrong reading is visible
+    // before anything is saved. Quiet until there is something to say.
+    var readLine = el("p", "panel__sub ado__read");
+    readLine.id = "ado-read";
+    readLine.setAttribute("role", "status");
+    readLine.hidden = true;
+    form.appendChild(readLine);
+
     var orgInput = input(mapping.organizationUrl || "");
     orgInput.id = "ado-org";
     orgInput.spellcheck = false;
@@ -6790,6 +6818,42 @@ function openAdoPanel(trigger) {
       return select.value !== "" ? select.value : (fallback || "");
     }
 
+    /*
+     * Read the URL field into the two stored values, and say what was read. A
+     * refusal names the shapes PACT accepts and leaves both values as they are,
+     * so a mistyped URL never costs a value someone typed. A URL carrying no
+     * project fills the organisation and asks for the project without emptying
+     * the field - the focus goes there when the URL arrived as a paste.
+     */
+    function applyUrl(pasted) {
+      var url = urlInput.value.trim();
+      if (url === "") {
+        readLine.textContent = "";
+        readLine.hidden = true;
+        return;
+      }
+      var reading = readAdoUrl(url);
+      if (reading.refusal) {
+        readLine.textContent = "";
+        readLine.hidden = true;
+        error.set(reading.refusal);
+        return;
+      }
+      error.clear();
+      orgInput.value = reading.organizationUrl;
+      if (reading.project !== "") projectInput.value = reading.project;
+      readLine.textContent = adoReadingLine(reading);
+      readLine.hidden = false;
+      if (pasted && reading.project === "") projectInput.focus();
+    }
+
+    // A paste is one act, so it may move the focus; a typed URL is only read
+    // when the field is left, so typing is never interrupted mid-address.
+    urlInput.addEventListener("paste", function () {
+      setTimeout(function () { applyUrl(true); }, 0);
+    });
+    urlInput.addEventListener("change", function () { applyUrl(false); });
+
     function applyInstance(result) {
       instance = result;
       var ranked = (result.types || []).map(function (type) { return type.name; });
@@ -6882,7 +6946,10 @@ function openAdoPanel(trigger) {
     form.addEventListener("submit", function (e) { e.preventDefault(); saveMapping(); });
 
     openPanel(node, trigger);
-    orgInput.focus();
+    // A stored mapping opens as the one URL it is, read back by the same rules
+    // a paste goes through, so the two fields and the line agree from the start.
+    if (urlInput.value.trim() !== "") applyUrl(false);
+    urlInput.focus();
     // Opening the panel is the press that loads the instance's own types: the
     // three slots are chosen from them, so the stored mapping's names can be
     // confirmed rather than assumed. With no token there is nothing to ask.
