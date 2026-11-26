@@ -318,7 +318,7 @@ test("the menu reads as five groups in order: the help, what is drawn, what is i
     ["weekends", "holidays", "milestones", "availabilityLines", "assignments", "dividers", "minimap", "marker", "palette", "blockLabel", "reset-view"],
     ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
-    ["plan-file"]
+    ["plan-file", "ado"]
   ]);
   // The Block label follows the palette directly: both are display choices
   // about how a block is drawn, and neither is one of the overlay toggles.

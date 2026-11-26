@@ -27,6 +27,13 @@ That seed is convenience data for the design, and so is the plan behind the
 screenshots in this repository's issues and pull requests: neither uses anyone's
 real colleagues, clients or engagements.
 
+PACT is local by default, and stays that way. The one thing that can reach the
+network is an [ADO connection](docs/features.md#the-ado-panel), and it does so
+only in answer to a press - Test connection, Save mapping, or a token action -
+never on a timer and never in the background. The token it uses stays on the
+server, and the plan behaves exactly as it always has whether the connection is
+missing, or Azure DevOps is unreachable.
+
 ## What it does
 
 The board is the plan. People run down the left, the days of the plan run across,

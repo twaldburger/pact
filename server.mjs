@@ -15,6 +15,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createStore, todayISO, ValidationError, NotFoundError, PlanFileError } from "./lib/plan.mjs";
 import { resolvePlanFile, readView, writeView, writePlanFile } from "./lib/config.mjs";
+import { AdoError, adoState, clearToken, saveMapping, testConnection, writeToken } from "./lib/ado.mjs";
+import { addressRefusals } from "./public/lib/ado.mjs";
 import { resolvePlanPath, withPlanSuffix } from "./public/lib/plan-file.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
 import { normalizeStep } from "./public/lib/panels.mjs";
@@ -173,6 +175,15 @@ export function createServer(store, options) {
   const publicDir = (options && options.publicDir) || path.join(HERE, "public");
   const configPath = options && options.configPath;
   const home = (options && options.home) || os.homedir();
+  // The one door to Azure DevOps. A test passes its own fetch here, so the
+  // suite never calls the owner's instance; the running app uses the global.
+  const adoFetch = options && options.fetchImpl;
+  // The platform and environment the token path is derived from, as arguments
+  // so a test can stand in for Windows.
+  const adoRuntime = {
+    platform: (options && options.platform) || process.platform,
+    env: (options && options.env) || process.env
+  };
   const envLocked = !!(options && options.envLocked);
   // What the plan-file panel reads: the active file, where that choice came
   // from, whether PACT_DATA fixes it, and any one-time report such as a move.
@@ -310,12 +321,57 @@ export function createServer(store, options) {
           }
           return sendJSON(res, 200, { key: doc.key, label: doc.label, path: doc.path, markdown: markdown });
         }
+        // The Azure DevOps connection. GET reads the plan's mapping and whether
+        // a token is set; the three POSTs and the DELETE act on a press and are
+        // the only routes that can reach the network. No reply here carries the
+        // token, and every refusal is worded by lib/ado.mjs.
+        if (pathname === "/api/ado" || pathname.startsWith("/api/ado/")) {
+          const ado = { configPath: configPath, home: home, runtime: adoRuntime, fetchImpl: adoFetch, store: store };
+          if (pathname === "/api/ado") {
+            if (req.method !== "GET") return sendError(res, 405, "method not allowed");
+            return sendJSON(res, 200, adoState(store, ado));
+          }
+          if (pathname === "/api/ado/token") {
+            if (req.method === "POST") {
+              return readBody(req).then((body) => {
+                writeToken(configPath, home, body && body.token, adoRuntime);
+                return sendJSON(res, 200, adoState(store, ado));
+              });
+            }
+            if (req.method === "DELETE") {
+              clearToken(configPath, home, adoRuntime);
+              return sendJSON(res, 200, adoState(store, ado));
+            }
+            return sendError(res, 405, "method not allowed");
+          }
+          if (pathname === "/api/ado/test" || pathname === "/api/ado/mapping") {
+            if (req.method !== "POST") return sendError(res, 405, "method not allowed");
+            return readBody(req).then((body) => {
+              const input = body || {};
+              if (pathname === "/api/ado/test") {
+                const refusals = addressRefusals(input);
+                if (refusals.length) return sendError(res, 400, refusals.join("; "));
+                return testConnection(Object.assign({}, ado, {
+                  organizationUrl: input.organizationUrl,
+                  project: input.project
+                })).then((result) => sendJSON(res, 200, result));
+              }
+              return saveMapping(Object.assign({}, ado, { mapping: input })).then((result) => {
+                // The client refreshes the plan from /api/ado after a save, so
+                // one reply carries both what was stored and the token state.
+                return sendJSON(res, 200, Object.assign(adoState(store, ado), result));
+              });
+            });
+          }
+          return sendError(res, 404, "no such endpoint");
+        }
         const route = matchApi(pathname);
         if (route) return handleApi(req, res, store, route);
         if (pathname.startsWith("/api/")) return sendError(res, 404, "no such endpoint");
         return serveStatic(res, publicDir, pathname);
       })
       .catch((err) => {
+        if (err instanceof AdoError) return sendError(res, err.status, err.message);
         if (err instanceof PlanFileError) return sendError(res, err.status || 400, err.message);
         if (err instanceof ValidationError) return sendError(res, 400, err.message);
         if (err instanceof NotFoundError) return sendError(res, 404, err.message);

@@ -210,6 +210,10 @@ at, and what to say when neither happened.
 - Change a plan with the app closed, or change a plan the app is not holding.
 - Change the plan period, the Step or the sprint cadence, or set a View key it
   does not name. The refusal says which control in the app does.
+- Reach Azure DevOps. The tool reads the plan file and calls the app; it never
+  calls ADO, never reads the connection's token, and never reads the plan's
+  [Mapping](../GLOSSARY.md#mapping) beyond passing the plan along. The
+  connection is set up and tested in the app, from `Options` then `ADO...`.
 - Tell you what the screen looks like. Only measuring it or looking at it does.
 
 ## The commands, in full

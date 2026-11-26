@@ -887,6 +887,59 @@ and Milestone panels; `Options` then `Tags...`, whose detail counts the
 keys and colours set, opens the panel: a `Projects`, `People` and `Assignments`
 select for the key, then the values grouped by key with their swatches.
 
+## The ADO panel
+
+PACT can be told how an Azure DevOps project maps onto the plan. A
+[connection](../GLOSSARY.md#connection) is two halves that travel differently: a
+[Mapping](../GLOSSARY.md#mapping), which is plan data and is written into the
+plan file, and a personal access token, which is a secret and never is.
+
+The mapping is the plan's `ado` block: the organisation's address, the ADO
+project's name, and three work-item type names - the type a Project is drawn
+from, the type an Assignment is drawn from, and, optionally, the type a tag is
+drawn from. Nothing else is in it. A credential-shaped key (`token`, `pat`,
+`password` and the like) inside the block is refused when the plan is read or
+written, so a plan can be shared, versioned and diffed with no secret in it, and
+a plan without an `ado` block loads and behaves exactly as it did before there
+was a connection.
+
+The three slots are checked against the instance's own backlog ranks - the
+number ADO gives each backlog level, higher meaning a higher level - not against
+a fixed list of type names. The Project type must sit above the Assignment type,
+so an Epic-over-Feature instance and a Feature-over-User-Story configuration both
+work, while an equal or inverted pair is refused with both ranks named. The Tag
+type, when set, must be a type the instance reports, and it may be left unset.
+Because the ranks belong to the instance, a mapping is saved only after a
+successful Test connection: the check needs the instance, and nothing is written
+when it cannot be read.
+
+The token is a personal access token pasted into the panel. The server writes it
+to this machine's config directory - `$XDG_CONFIG_HOME/pact/ado-pat` or
+`~/.config/pact/ado-pat` on Linux and macOS, `%LOCALAPPDATA%\pact\ado-pat` on
+Windows, and never `%APPDATA%`, which roams between machines - with mode 600 and
+its directory 700 on POSIX. `ado.tokenFile` in the app's config may name another
+path; the plan may not. The browser never sees the token: it reads back only
+whether one is set, and offers Replace and Clear, where Clear deletes the file.
+A file still holding the placeholder text reads as no token, so a fresh checkout
+says "not set" rather than failing against ADO with a 401.
+
+Test connection is the call that reads the instance, and it reports what came
+back: the project, its team, and each backlog type with its rank. Every ADO call
+is the direct result of a press - opening this panel (which loads the types once,
+because the slots are chosen from them), Test connection, Save mapping, or a
+token action. There is no status light, no timer and no polling: with ADO
+unreachable the plan keeps working exactly as it does today, and the panel says
+why the last press failed. Saving the mapping is one plan write, so it is one
+Undo step back, like any other change.
+
+The panel holds the organisation address and the project, the three type
+selections - offered from the instance once Test connection has answered - and
+the token field with its Save and Clear actions. A plan carrying a mapping and no
+token keeps the panel and says where the token file goes.
+
+**Where the controls are.** `Options` then `ADO...`, whose detail says
+`Not configured` or names the mapped ADO project.
+
 ## Reset view
 
 `Reset view` returns every view setting to the default the app ships with, in

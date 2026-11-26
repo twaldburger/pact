@@ -46,7 +46,8 @@ import {
   sprintsItem,
   holidaysItem,
   tagsItem,
-  milestonesItem
+  milestonesItem,
+  adoItem
 } from "../public/lib/options.mjs";
 import { REPORT_VIEWS } from "../public/lib/report-views.mjs";
 import { helpAnchors } from "../public/lib/help.mjs";
@@ -95,7 +96,8 @@ function menuCapabilities() {
     sprintsItem(),
     holidaysItem(),
     tagsItem(),
-    milestonesItem()
+    milestonesItem(),
+    adoItem()
   ].map((item) => ({ key: item.key, label: item.label }));
 }
 

@@ -73,7 +73,7 @@ export function optionGroups(items) {
     view,
     ["archived"],
     ["range", "step", "sprints", "holidays", "tags", "milestones"],
-    ["plan-file"]
+    ["plan-file", "ado"]
   ];
 }
 
@@ -212,6 +212,24 @@ export function milestonesItem(milestones) {
     key: "milestones",
     label: "Milestones...",
     detail: count === 0 ? "None yet" : count + (count === 1 ? " milestone" : " milestones")
+  };
+}
+
+/*
+ * The ADO entry in the Options menu. Like the panel entries above it an action,
+ * not a checked state: opening it opens the Azure DevOps panel, which is where
+ * a connection is set up - so the row is always there rather than appearing
+ * once a mapping exists, which would leave no way to make the first one. The
+ * detail states whether a mapping is configured, and names its ADO project when
+ * one is. The mapping is plan data; whether a token is set is not, so a plan
+ * with no mapping says so even when a token sits on this machine.
+ */
+export function adoItem(mapping) {
+  const project = mapping && typeof mapping.project === "string" ? mapping.project.trim() : "";
+  return {
+    key: "ado",
+    label: "ADO...",
+    detail: project === "" ? "Not configured" : project
   };
 }
 
