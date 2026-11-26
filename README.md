@@ -29,8 +29,8 @@ real colleagues, clients or engagements.
 
 PACT is local by default, and stays that way. The one thing that can reach the
 network is an [ADO connection](docs/features.md#the-ado-panel), and it does so
-only in answer to a press - Test connection, Save mapping, or a token action -
-never on a timer and never in the background. The token it uses stays on the
+only in answer to a press - Test connection, Save mapping, an import, or a token
+action - never on a timer and never in the background. The token it uses stays on the
 server, and the plan behaves exactly as it always has whether the connection is
 missing, or Azure DevOps is unreachable.
 

@@ -990,8 +990,85 @@ assignment, so the panel never sits on a pair the rank rule refuses. It opens
 with a stored mapping shown as the one URL it is. A plan carrying a mapping and
 no token keeps the panel and says where the token file goes.
 
+**The import.** Below the connection's rows the panel holds one field and one
+press: paste a work-item id - `12345`, or `#12345` - or the browser's link to it, and press
+`Import`. The link may be any of the shapes ADO writes, such as
+`https://dev.azure.com/{org}/{project}/_workitems/edit/12345`, the same page
+under `https://{org}.visualstudio.com/DefaultCollection/{project}`, or the older
+form that keeps the id in the query string; a host that is neither
+`dev.azure.com` nor `{org}.visualstudio.com` is refused with the shapes that are
+read. **One work item per press, and its children are not imported** - the hint
+under the field says so, rather than leaving it to be discovered.
+
+What the import needs from ADO is a title, an owner with an email, and the
+parents that reach the project level. **Dates are not required.** The title
+becomes the Assignment's own Name. The owner is matched
+to a Person **by email and never by name** - the instance's own `uniqueName`,
+compared without case against each live Person's email - because "Anna Meier"
+and "Meier, Anna (EXT)" are one person and no string comparison can know that. An
+email matching no Person is refused **with an offer**: the panel draws a press
+that creates the Person with ADO's display name verbatim and that email, which
+can then be edited like any other. Nothing is created before that press, so a
+Person never appears on the plan unasked. An item assigned to nobody, or to a
+group - an identity with no email - is refused, and the refusal names which.
+
+**The parents decide the Project.** The import walks up from the item to the
+first ancestor whose work-item type is the mapping's project level, and that
+ancestor's title names the Project: `Invoices` for an Epic of that name, matched
+against the live Projects without case. A chain that reaches no such ancestor is
+refused, naming every level it walked and the project level it was looking for,
+and so is a project level whose title matches no Project - **an import never
+invents a Project**, because a wrong Project puts real work in the wrong place.
+The mapping's `Tag` row is not applied by an import yet: nothing is tagged from
+ADO.
+
+**The dates follow three rules, in order.** ADO's own win whenever the item's
+type carries both, and are recorded as not assumed; the end field is resolved per
+type, because it is a `TargetDate` on an Epic or a Feature and a `FinishDate` on
+a User Story or a Task, and a Bug carries none. One date alone is not a span, so
+it is treated as no dates rather than given an invented end. Otherwise the item's
+iteration decides: an iteration whose start date falls inside a PACT sprint puts
+the block on that sprint's dates, matched **by containment of a date and never by
+name or ordinal**, with the iteration dates read in UTC and the sprint's end
+inclusive. Otherwise the block is **one month long from today, marked assumed**,
+and a today outside the plan period is clamped inside it rather than landing
+off-screen - a month back from the period's end when today is past it. A plan
+with no sprint cadence, or an iteration in no PACT sprint, takes the assumed
+month, and the line says which of the three rules placed the block.
+
+Every date that is not ADO's is assumed, and the assumed marker is stored rather
+than inferred: nothing writes an assumed date back to ADO until a person confirms
+it. A Person created by an import is full time, and the block takes one step of
+the plan's granularity as its Share, because ADO has no notion of "40% of Anna" -
+that number is PACT's own and the person sets it afterwards.
+
+The import records a [Link](../GLOSSARY.md#link) beside the Assignment:
+`{ workItemId, rev, workItemType, values, datesAssumed }`, where `values` are the
+fields both sides agreed - the title, the owner's email, the project-level item's
+title, ADO's start and end (null when it holds none) and the iteration path. That
+[Baseline](../GLOSSARY.md#baseline) is what a later sync compares field by field,
+so an empty start means "PACT moved this", not "both agree on today". A
+credential-shaped key inside the link is refused when the plan is read or
+written, exactly as one inside the mapping is. The link is optional throughout: a
+plan without one loads, validates and behaves as it did before, and a linked
+Assignment is an ordinary Assignment afterwards - same panels, same figures, same
+rules - with the link shown read-only in its panel, naming the work item, the
+revision and whether its dates are assumed.
+
+**The import is one write and one Undo step.** The Person it creates - when the
+offer was taken - and the Assignment land in a single write through the plan's
+store, so the validation, the atomic write and the changed-underneath guard cover
+both together. A refusal writes nothing at all and records no history, so an
+import that cannot be finished leaves nothing behind rather than a Person with no
+work. Re-importing a work item that a live Assignment already carries is refused,
+naming that Assignment; archive it first if a second block of the same work is
+what was meant. ADO's own dates outside the plan period are refused by the plan's
+rule rather than moved, and widening the period or archiving is the answer.
+
 **Where the controls are.** `Options` then `ADO...`, whose detail says
-`Not configured` or names the mapped ADO project.
+`Not configured` or names the mapped ADO project. The panel holds the URL, the
+mapping's three rows, the token field with its Save and Clear actions, and the
+import row with its field and its `Import` press.
 
 ## Reset view
 
