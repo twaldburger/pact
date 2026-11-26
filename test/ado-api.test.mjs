@@ -45,27 +45,49 @@ const TYPES = {
   value: [{ name: "Bug" }, { name: "Epic" }, { name: "Feature" }, { name: "Task" }, { name: "User Story" }, { name: "Test Case" }]
 };
 
-// Azure DevOps, stubbed: the four reads this slice makes, and the two ways a
-// real instance can say no. `calls` records what the server sent, so the test
-// can see the credential travel in a header and never in a URL.
+// The sign-in page Azure DevOps redirects an unaccepted request to: a 2xx whose
+// body is HTML, not the project.
+const SIGN_IN_HTML = "<html><head><title>Sign in to your account</title></head>" +
+  "<body><form action=\"/_signin\">Sign in</form></body></html>";
+
+// Azure DevOps, stubbed: the four reads this slice makes, and the ways a real
+// instance can say no - an unreachable host, a refused token, a redirect to its
+// sign-in page, an answer carrying no body, and a 2xx that is not 200.
+// `calls` records what the server sent, so the test can see the credential
+// travel in a header and never in a URL.
 function adoStub(mode) {
   const calls = [];
-  const reply = (status, body) => ({
-    status: status,
-    text: async () => (body === undefined ? "" : JSON.stringify(body))
-  });
+  const reply = (status, body, headers) => {
+    const sent = headers || {};
+    return {
+      status: status,
+      headers: { get: (name) => sent[String(name).toLowerCase()] || null },
+      text: async () => (body === undefined || body === null ? "" : typeof body === "string" ? body : JSON.stringify(body))
+    };
+  };
+  const route = (url, status) => {
+    const pathname = new URL(url).pathname.replace(/^\/example/, "");
+    if (pathname === "/_apis/projects/PACT") return reply(status, { id: "proj-1", name: "PACT" });
+    if (pathname === "/_apis/projects/proj-1/teams") {
+      return reply(status, { count: 1, value: [{ id: "team-1", name: "PACT Team" }] });
+    }
+    if (pathname === "/PACT/PACT%20Team/_apis/work/backlogs") return reply(status, BACKLOGS);
+    if (pathname === "/PACT/_apis/wit/workitemtypes") return reply(status, TYPES);
+    return reply(404, {});
+  };
   const fetchImpl = async (url, init) => {
     calls.push({ url: url, init: init || {} });
     if (mode === "unreachable") throw new TypeError("fetch failed");
-    if (mode === "401") return reply(401, {});
-    const pathname = new URL(url).pathname.replace(/^\/example/, "");
-    if (pathname === "/_apis/projects/PACT") return reply(200, { id: "proj-1", name: "PACT" });
-    if (pathname === "/_apis/projects/proj-1/teams") {
-      return reply(200, { count: 1, value: [{ id: "team-1", name: "PACT Team" }] });
-    }
-    if (pathname === "/PACT/PACT%20Team/_apis/work/backlogs") return reply(200, BACKLOGS);
-    if (pathname === "/PACT/_apis/wit/workitemtypes") return reply(200, TYPES);
-    return reply(404, {});
+    // The sign-in page the redirect lands on: a 2xx full of HTML.
+    if (mode === "signin") return reply(203, SIGN_IN_HTML, { "content-type": "text/html; charset=utf-8" });
+    // The redirect itself, seen with a fetch that does not follow it.
+    if (mode === "redirect") return reply(302, "", { location: "https://login.microsoftonline.com/_signin?x=1" });
+    if (mode === "empty") return reply(204, null, { "content-type": "application/json" });
+    // A named or numeric status: a 2xx answers with the four bodies, anything
+    // else refuses at the first call.
+    const status = /^\d{3}$/.test(mode || "") ? Number(mode) : 200;
+    if (status < 200 || status >= 300) return reply(status, {});
+    return route(url, status);
   };
   return { fetchImpl: fetchImpl, calls: calls };
 }
@@ -271,6 +293,93 @@ test("test connection reports the project, the types and their ranks from the in
     );
   });
   assert.ok(res.json);
+});
+
+test("a 203 whose body is JSON is the instance answering, and the connection is connected", async () => {
+  // A proxy between this machine and ADO can rewrite a response and answer 203
+  // Non-Authoritative Information. It carried the project, so it is a success.
+  const app = await start("203");
+  await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
+  const res = await withConsole(() => call(app.base, "POST", "/api/ado/test", {
+    organizationUrl: MAPPING.organizationUrl,
+    project: "PACT"
+  }));
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.project.name, "PACT");
+  assert.equal(res.json.team, "PACT Team");
+  assert.deepEqual(res.json.types.map((type) => type.name), ["Epic", "Feature", "User Story", "Bug", "Task"]);
+  // The status travels for the panel's title; it is not the line's words.
+  assert.equal(res.json.status, 203);
+  assertNoToken(res, "POST /api/ado/test on a 203");
+});
+
+test("a 2xx that is the sign-in page is a token refusal, never a connection", async () => {
+  // The request ADO did not accept is redirected to its sign-in page, which
+  // answers 203 with an HTML login form. Reading that as the project would
+  // report a connection over a form.
+  const app = await start("signin");
+  await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
+  const res = await withConsole(() => call(app.base, "POST", "/api/ado/test", {
+    organizationUrl: MAPPING.organizationUrl,
+    project: "PACT"
+  }));
+  assert.equal(res.status, 502);
+  assert.match(res.json.error, /did not accept the token/);
+  assert.match(res.json.error, /sign-in page/);
+  // Both causes and both scopes: the owner's failing token had Work Items but
+  // no Project and Team, so blaming the token alone would miss the actual fix.
+  assert.match(res.json.error, /wrong for this organisation, expired or revoked, or missing a scope/);
+  assert.match(res.json.error, /Work Items \(read\)/);
+  assert.match(res.json.error, /Project and Team \(read\)/);
+  assert.doesNotMatch(res.json.error, /answered 203/);
+  assert.doesNotMatch(res.text, /PACT Team/);
+  assertNoToken(res, "a sign-in page");
+});
+
+test("a redirect toward the sign-in page is the same refusal, not a status report", async () => {
+  const app = await start("redirect");
+  await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
+  const res = await withConsole(() => call(app.base, "POST", "/api/ado/test", {
+    organizationUrl: MAPPING.organizationUrl,
+    project: "PACT"
+  }));
+  assert.equal(res.status, 502);
+  assert.match(res.json.error, /did not accept the token/);
+  assert.match(res.json.error, /sign-in page/);
+  assert.doesNotMatch(res.json.error, /answered 302/);
+  assertNoToken(res, "a redirect to the sign-in page");
+});
+
+test("a 204 reads as an answer with no content, not as a connection", async () => {
+  const app = await start("empty");
+  await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
+  const res = await withConsole(() => call(app.base, "POST", "/api/ado/test", {
+    organizationUrl: MAPPING.organizationUrl,
+    project: "PACT"
+  }));
+  assert.equal(res.status, 502);
+  assert.match(res.json.error, /answered 204 for the project 'PACT' .* with no content/);
+  assertNoToken(res, "a 204");
+});
+
+// Everything that is not 2xx keeps the sentence it had, 401 included - the one
+// above covers that one, and these are the rest.
+[
+  [403, 502, /refused this token the project 'PACT' at https:\/\/dev.azure.com\/example \(403\).*Work Items \(read\) scope/],
+  [404, 404, /has no project 'PACT' at https:\/\/dev.azure.com\/example \(404\)/],
+  [500, 502, /answered 500 for the project 'PACT' at https:\/\/dev.azure.com\/example/]
+].forEach(([status, expected, pattern]) => {
+  test("a " + status + " keeps its own sentence", async () => {
+    const app = await start(String(status));
+    await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
+    const res = await withConsole(() => call(app.base, "POST", "/api/ado/test", {
+      organizationUrl: MAPPING.organizationUrl,
+      project: "PACT"
+    }));
+    assert.equal(res.status, expected, res.text);
+    assert.match(res.json.error, pattern);
+    assertNoToken(res, "a " + status);
+  });
 });
 
 test("an unreachable instance and a rejected token are sentences, with the token in neither", async () => {

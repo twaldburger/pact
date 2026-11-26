@@ -905,3 +905,33 @@ test("the milestone band grows the axis rather than overhanging the rows", () =>
   assert.match(STYLE, /\[data-zoom="month"\][^{]*\{[^}]*--axis-h:\s*calc\(var\(--band-month-h\) \+ var\(--axis-extra\)\)/);
   assert.match(STYLE, /\.is-milestones\s*\{[^}]*--axis-extra:\s*var\(--band-day-h\)/);
 });
+
+/* --- the ADO panel's two status lines ------------------------------------ */
+
+// A good state had no colour of its own: --signal was the only status colour,
+// so a successful Test connection was drawn in the same red as a failure. --ok
+// is a second status colour, a token of its own rather than a mix of a project
+// colour, because the palette follows a Project and a status must not.
+test("--ok is a palette token beside --signal, not a colour invented at a use", () => {
+  assert.match(STYLE, /--signal:\s*#[0-9A-Fa-f]{6};\s*\n(?:\s*\/\*[\s\S]*?\*\/\s*\n)?\s*--ok:\s*#[0-9A-Fa-f]{6};/,
+    "--ok does not sit beside --signal in the palette block");
+  // A literal hex, so swapping the palette cannot move a status colour.
+  tokenHex("--ok");
+});
+
+test("--ok reads on --canvas at body-text contrast", () => {
+  const ok = tokenHex("--ok");
+  const canvas = tokenHex("--canvas");
+  const ratio = contrast(ok, canvas);
+  assert.ok(ratio >= 4.5, "--ok on --canvas reads at " + ratio.toFixed(2) + ", below 4.5");
+});
+
+test("the panel's status lines take their colours from --ok and --signal", () => {
+  const lines = STYLE.match(/\.ado__line\.is-ok\s*\{([^}]*)\}[^}]*\.ado__line\.is-failed\s*\{([^}]*)\}/);
+  assert.ok(lines, "the ADO status lines have no tone rules");
+  assert.equal(declaration(lines[1], "color"), "var(--ok)");
+  assert.equal(declaration(lines[2], "color"), "var(--signal)");
+  // Nothing hard-codes a colour of either kind on the line itself.
+  assert.doesNotMatch(lines[1], /#[0-9A-Fa-f]{3,6}/);
+  assert.doesNotMatch(lines[2], /#[0-9A-Fa-f]{3,6}/);
+});

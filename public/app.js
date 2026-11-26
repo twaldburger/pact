@@ -58,7 +58,8 @@ import {
   adoRefusals,
   adoUrlFor,
   assignmentLevelBelow,
-  tokenNotice
+  connectionLine,
+  tokenLine
 } from "./lib/ado.mjs";
 import {
   HELP_DOCUMENTS,
@@ -6741,9 +6742,27 @@ function openAdoPanel(trigger) {
     form.appendChild(formRow("Token", tokenWrap));
     node.appendChild(form);
 
-    var tokenStateLine = el("p", "panel__sub ado__tokenstate");
-    tokenStateLine.textContent = tokenNotice(token);
+    var tokenStateLine = el("p", "");
+    tokenStateLine.id = "ado-token-line";
     node.appendChild(tokenStateLine);
+
+    // Directly under it, the connection's own line: nothing at all until a test
+    // has run, the outcome in the same style once one has. The words and the
+    // tone class are the shared rules'.
+    var connectionStateLine = el("p", "");
+    connectionStateLine.id = "ado-connection-line";
+    connectionStateLine.hidden = true;
+    node.appendChild(connectionStateLine);
+
+    function drawLine(node, line) {
+      node.hidden = !line;
+      node.className = line ? line.className : "";
+      node.textContent = line ? line.text : "";
+      if (line && line.title) node.title = line.title;
+      else node.removeAttribute("title");
+    }
+
+    drawLine(tokenStateLine, tokenLine(token));
 
     // A token that is set is shown as set, not as a masked field that invites
     // an edit: the field appears only when Replace is pressed, and the server
@@ -6768,7 +6787,7 @@ function openAdoPanel(trigger) {
 
     syncTokenControls();
 
-    var status = el("p", "ado__status");
+    var status = el("p", "ado__line ado__status");
     status.setAttribute("role", "status");
     status.hidden = true;
     node.appendChild(status);
@@ -6802,7 +6821,7 @@ function openAdoPanel(trigger) {
       adoState = next;
       updateAdoItem();
       token = next.token || {};
-      tokenStateLine.textContent = tokenNotice(token);
+      drawLine(tokenStateLine, tokenLine(token));
       replacing = false;
       syncTokenControls();
     }
@@ -6855,13 +6874,24 @@ function openAdoPanel(trigger) {
         project: reading.project
       }).then(function (result) {
         applyInstance(result);
-        var ranks = (result.types || []).map(function (type) { return type.name + " " + type.rank; });
-        setStatus("Connected to " + result.project.name + " (" + result.team + "): " + ranks.join(", ") + ".");
+        drawLine(connectionStateLine, connectionLine({
+          ok: true,
+          project: result.project.name,
+          team: result.team,
+          types: result.types,
+          status: result.status
+        }));
+        // The connection's line is the whole report of a test; the press line
+        // has nothing left to add.
+        setStatus("");
       }).catch(function (err) {
         instance = null;
         saveButtonEl.disabled = true;
         setStatus("");
-        error.set(errorText(err, "Could not reach Azure DevOps."));
+        drawLine(connectionStateLine, connectionLine({
+          ok: false,
+          message: errorText(err, "Could not reach Azure DevOps.")
+        }));
       }).then(function () { testButton.disabled = false; });
     }
 
