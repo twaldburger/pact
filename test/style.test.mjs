@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { PALETTES, labelInkFor } from "../public/lib/palette.mjs";
 import { GRID_SPACING_MIN } from "../public/lib/timeline.mjs";
 import { milestoneAxisSlots } from "../public/lib/milestones.mjs";
+import { topbarMarkup } from "../public/lib/topbar.mjs";
 
 // The interface's one stylesheet and the script that feeds it the per-block
 // tokens. Both are read here so a colour token that is referenced but no longer
@@ -1096,4 +1097,85 @@ test("a disabled ghost keeps its frame, drawn through the same opacity", () => {
     selectorsOf(candidate).includes(".ghost") && declared(candidate.body, "border"));
   assert.ok(ghost, "the ghost has no border to fade");
   assert.equal(declared(ghost.body, "border"), "1px solid var(--rule)");
+});
+
+/* --- the bar's one box height, and the one label it lifts ----------------- */
+
+// Every control in the bar sits on one line, and the boxes have to agree before
+// any of the ink can. Measured in the running app at 1280x800, device scale 1,
+// with the plan's seeded data:
+//
+//   control                box top..bottom   height   centre
+//   ADO (ghost)             9.5 .. 37.5        28      23.5
+//   Today (ghost)           9.5 .. 37.5        28      23.5
+//   the four groups         9.5 .. 37.5        28      23.5
+//   their buttons          10.5 .. 36.5        26      23.5   (the group minus its frame)
+//   undo, redo and the steppers' ink        16.5 .. 30.5   14   23.5
+//
+// So the boxes agree - the history group is the bar's own height, not `100%` of
+// a parent with none - and the ink of every glyph already sits on 23.5. The
+// suite has no browser and no DOM, so it cannot measure ink: what it pins here
+// is the declaration those boxes come from, one --control-h for every group in
+// the bar, and the one rule that corrects the caps that sit above it.
+const BAR_BOXES = [".zoom", ".rowheight", ".spacing", ".history", ".ghost", ".viewswitch", ".filter"];
+const BAR_LEAVES = [".zoom__btn", ".rowheight__btn", ".spacing__btn", ".history__btn"];
+
+// Every height the stylesheet declares for one selector, wherever it declares
+// it - so one place per control, and the value the browser resolves.
+function heightsOf(selector) {
+  return cssRules(STYLE)
+    .filter((rule) => selectorsOf(rule).includes(selector))
+    .map((rule) => declared(rule.body, "height"))
+    .filter(Boolean);
+}
+
+test("every control in the bar takes the one --control-h, in one place", () => {
+  for (const control of BAR_BOXES) {
+    assert.deepEqual(heightsOf(control), ["var(--control-h)"],
+      control + " does not resolve to the bar's one height, from the one rule that sets it");
+  }
+  // The history group is in that rule, so the pair's buttons take 100% of a box
+  // that has a height rather than of one that has its content's.
+  const shared = cssRules(STYLE).find((rule) =>
+    selectorsOf(rule).includes(".history") && declared(rule.body, "height") === "var(--control-h)");
+  assert.ok(shared, "the history group is not covered by the bar's height rule");
+  for (const group of [".zoom", ".rowheight", ".spacing", ".ghost"]) {
+    assert.ok(selectorsOf(shared).includes(group), group + " is left out of the bar's height rule");
+  }
+});
+
+test("a button inside a group takes the group's box, so both centre on one line", () => {
+  for (const leaf of BAR_LEAVES) {
+    assert.deepEqual(heightsOf(leaf), ["100%"],
+      leaf + " sets a height of its own instead of taking the group's content box");
+  }
+});
+
+test("the one optical correction in the bar is one token, on the all-caps label", () => {
+  const caps = cssRules(STYLE).filter((rule) => selectorsOf(rule).includes(".ghost__caps"));
+  assert.equal(caps.length, 1, "the caps label is not given one rule of its own");
+  // A span is inline until it is given a box, and a box is what a transform moves.
+  assert.equal(declared(caps[0].body, "display"), "block");
+  assert.equal(declared(caps[0].body, "transform"), "translateY(var(--optical-caps))",
+    "the caps label is not moved by the bar's optical token");
+
+  const token = STYLE.match(/--optical-caps:\s*([^;]+);/);
+  assert.ok(token, "--optical-caps is not defined");
+  const value = token[1].trim();
+  assert.match(value, /^[0-9.]+rem$/, "--optical-caps is not a rem length, so text zoom would not move it with the label");
+  // Positive, because an all-caps word in a centred line box sits high: the
+  // token moves it down onto the line the glyphs beside it are on.
+  assert.ok(Number.parseFloat(value) > 0, "--optical-caps lifts the caps label, which is the way it is already wrong");
+
+  // One reference, in that one rule: the correction is a token the bar owns, not
+  // a pixel each control tunes for itself.
+  const users = cssRules(STYLE).filter((rule) => rule.body.includes("var(--optical-caps)"));
+  assert.deepEqual(users.map((rule) => selectorsOf(rule)), [[".ghost__caps"]]);
+
+  // And it is worn by the ADO label alone.
+  const html = topbarMarkup("plan");
+  assert.match(html, /id="ado-operations"[^>]*><span class="ghost__caps">ADO<\/span><\/button>/,
+    "the ADO button's word is not in the span the correction moves");
+  assert.equal((html.match(/ghost__caps/g) ?? []).length, 1,
+    "more than one control in the bar wears the caps correction");
 });
