@@ -27,8 +27,17 @@ const TOKEN = "pact-test-token-0123456789abcdefghijKL";
 const MAPPING = {
   organizationUrl: "https://dev.azure.com/example",
   project: "PACT",
-  projectLevel: "Epic",
-  assignmentLevel: "Feature"
+  projectLevels: ["Epic"],
+  assignmentLevels: ["Feature"]
+};
+
+// The mapping that makes the two lists earn their keep: an Initiative and an
+// Epic both become Projects, a Feature and a User Story both become Assignments.
+const TWO_LEVELS = {
+  organizationUrl: "https://dev.azure.com/example",
+  project: "PACT",
+  projectLevels: ["Initiative", "Epic"],
+  assignmentLevels: ["Feature", "User Story"]
 };
 
 /* --- the plan the import lands in ---------------------------------------- */
@@ -465,7 +474,7 @@ test("a parent chain that reaches no project level refuses, naming the levels it
   const res = await importOf(app, { id: 1001 });
   assert.equal(res.status, 409);
   assert.match(res.json.error, /Initiative 'Billing'/);
-  assert.match(res.json.error, /none is a 'Epic'/);
+  assert.match(res.json.error, /none is at the project levels the mapping names \('Epic'\)/);
   assert.deepEqual(app.store.get(), before);
 });
 
@@ -642,7 +651,7 @@ test("an archived Project is not offered, and the import creates a live one", as
   assert.equal("link" in plan.projects.filter((project) => project.id === "old-epic")[0], false);
 });
 
-/* --- the tag level, and below the level that carries time --------------- */
+/* --- a type in neither list -------------------------------------------- */
 
 const BACKLOGS = [
   { rank: 4, name: "Epics", workItemTypes: [{ name: "Epic" }] },
@@ -651,9 +660,8 @@ const BACKLOGS = [
   { rank: 1, name: "Tasks", workItemTypes: [{ name: "Task" }] }
 ];
 
-test("a tag-level item is refused for what a tag is for, and blames nobody", async () => {
+test("a type in neither list is refused, naming both lists, and blames nobody", async () => {
   const app = await start({
-    plan: (plan) => { plan.ado = Object.assign({}, plan.ado, { tagLevel: "Bug" }); },
     items: {
       2000: {
         rev: 1,
@@ -669,13 +677,16 @@ test("a tag-level item is refused for what a tag is for, and blames nobody", asy
   const res = await importOf(app, { id: 2000 });
   assert.equal(res.status, 409);
   assert.match(res.json.error, /Work item 2000 \("Login is slow"\) is Bug/);
-  assert.match(res.json.error, /a tag has no record of its own/);
+  assert.match(res.json.error, /your project levels are Epic/);
+  assert.match(res.json.error, /your assignment levels are Feature/);
   assert.doesNotMatch(res.json.error, /assigned to anybody|no owner|give it an owner/);
   assert.deepEqual(app.store.get(), before);
   assert.equal(app.store.canUndo(), false);
 });
 
-test("an item below the assignment level is refused for its level, not for its owner", async () => {
+test("a Task is in neither list either, and its rank does not make it an Assignment", async () => {
+  // The ranks are there - a Task sits below a Feature - and they no longer
+  // decide anything: the lists do, so the refusal is the same one.
   const app = await start({
     backlogs: BACKLOGS,
     items: {
@@ -693,24 +704,181 @@ test("an item below the assignment level is refused for its level, not for its o
   const res = await importOf(app, { id: 2000 });
   assert.equal(res.status, 409);
   assert.match(res.json.error, /Work item 2000 \("Wire the export"\) is Task/);
-  assert.match(res.json.error, /below the level that carries a person's time/);
-  // The mapping's own names, so the refusal says which level to import instead.
-  assert.match(res.json.error, /Feature/);
+  assert.match(res.json.error, /in neither of the mapping's lists/);
+  assert.match(res.json.error, /your assignment levels are Feature/);
   assert.doesNotMatch(res.json.error, /assigned to anybody|give it an owner/);
   assert.deepEqual(app.store.get(), before);
+  // No rank was read to reach that answer: the type itself was enough.
+  assert.equal(app.stub.calls.some((url) => url.includes("/_apis/work/backlogs")), false);
 });
 
-test("an unnamed type whose rank the instance does not answer keeps the assignment path", async () => {
-  // No backlog fixture, so the ranks read answers 404: an import must not
-  // refuse work for want of a rank it never needed before.
+/* --- the two lists, routing each level ---------------------------------- */
+
+test("each list routes its own types: two project levels and two assignment levels", async () => {
   const app = await start({
-    items: { 1000: EPIC, 1001: feature({ "System.WorkItemType": "User Story" }) }
+    plan: (plan) => { plan.ado = TWO_LEVELS; },
+    items: {
+      // An Initiative and an Epic: both are project levels, so both become
+      // Projects, and neither reads an owner.
+      3000: { rev: 1, fields: { "System.Title": "Billing", "System.WorkItemType": "Initiative" } },
+      3001: { rev: 1, fields: { "System.Title": "Platform", "System.WorkItemType": "Epic" } },
+      // A Feature under the Epic: an assignment level, so it becomes an
+      // Assignment on the Project the Epic became.
+      3002: feature({ "System.Title": "PDF export", "System.WorkItemType": "Feature", "System.Parent": 3001 }),
+      // A User Story under that Feature: the nearest project level above it is
+      // still the Epic, because a Feature is an assignment level now.
+      3003: feature({ "System.Title": "Export one invoice", "System.WorkItemType": "User Story", "System.Parent": 3002 })
+    }
   });
-  const res = await importOf(app, { id: 1001 });
+
+  const initiative = await importOf(app, { id: 3000 });
+  assert.equal(initiative.status, 200, initiative.text);
+  assert.equal(initiative.json.kind, "project");
+  assert.equal(initiative.json.facts.projectName, "Billing");
+
+  const epic = await importOf(app, { id: 3001 });
+  assert.equal(epic.status, 200, epic.text);
+  assert.equal(epic.json.kind, "project");
+  assert.equal(epic.json.facts.projectName, "Platform");
+  const platform = app.store.get().projects.filter((project) => project.name === "Platform" && !project.archived)[0];
+  assert.ok(platform, "the Epic did not become a Project");
+  assert.equal(platform.link.workItemId, 3001);
+
+  // Importing the Feature under the Epic that just became a Project is the
+  // overlap the warning exists for, and taking the press places it anyway.
+  const featureRes = await importOf(app, { id: 3002, confirmNesting: true });
+  assert.equal(featureRes.status, 200, featureRes.text);
+  assert.equal(featureRes.json.kind, "assignment");
+  assert.equal(featureRes.json.facts.projectName, "Platform");
+
+  // The User Story's nearest project level is still the Epic, and its parent
+  // Feature is on the plan now, so it warns once more and lands the same way.
+  const storyRes = await importOf(app, { id: 3003, confirmNesting: true });
+  assert.equal(storyRes.status, 200, storyRes.text);
+  assert.equal(storyRes.json.kind, "assignment");
+  assert.equal(storyRes.json.facts.projectName, "Platform");
+  assert.equal(storyRes.json.facts.assignmentName, "Export one invoice");
+  // A Project was never made of a Feature.
+  assert.equal(app.store.get().projects.some((project) => project.name === "PDF export"), false);
+});
+
+test("the nearest project-level ancestor decides the Project, not the highest", async () => {
+  const app = await start({
+    plan: (plan) => {
+      plan.ado = TWO_LEVELS;
+      plan.projects.push({ id: "billing", name: "Billing", colour: 2, notes: "", tags: [] });
+    },
+    items: {
+      4000: { rev: 1, fields: { "System.Title": "Billing", "System.WorkItemType": "Initiative" } },
+      4001: { rev: 1, fields: { "System.Title": "Invoices", "System.WorkItemType": "Epic", "System.Parent": 4000 } },
+      4002: feature({ "System.Title": "PDF export", "System.WorkItemType": "Feature", "System.Parent": 4001 })
+    }
+  });
+  const res = await importOf(app, { id: 4002 });
   assert.equal(res.status, 200, res.text);
-  const created = app.store.get().assignments.slice(-1)[0];
-  assert.equal(created.name, "PDF export");
-  assert.equal(created.link.workItemType, "User Story");
+  // Both ancestors are mapped project types; the Epic is nearer, so it wins.
+  assert.equal(res.json.facts.projectName, "Invoices");
+  assert.notEqual(res.json.facts.projectName, "Billing");
+});
+
+/* --- nesting: a warning with a press behind it -------------------------- */
+
+const projectLink = (workItemId) => ({
+  workItemId: workItemId,
+  rev: 1,
+  workItemType: "Epic",
+  datesAssumed: false,
+  values: { title: "Invoices", project: "Invoices", start: null, end: null, iterationPath: null }
+});
+
+const assignmentLink = (workItemId) => ({
+  workItemId: workItemId,
+  rev: 1,
+  workItemType: "User Story",
+  datesAssumed: true,
+  values: {
+    title: "Export one invoice",
+    personEmail: "anna@example.com",
+    project: "Invoices",
+    start: null,
+    end: null,
+    iterationPath: null
+  }
+});
+
+const linkProjectFixture = (plan, workItemId) => {
+  plan.projects.filter((project) => project.id === "invoices")[0].link = projectLink(workItemId);
+};
+
+const linkAssignmentFixture = (plan, workItemId) => {
+  plan.assignments.push({
+    id: "linked-story",
+    projectId: "invoices",
+    personId: plan.people[0].id,
+    start: day(1),
+    end: day(10),
+    share: 100,
+    name: "Export one invoice",
+    tags: [],
+    note: "",
+    link: assignmentLink(workItemId)
+  });
+};
+
+test("a linked ancestor warns that the work would be planned twice, and imports when the warning is taken", async () => {
+  const app = await start({
+    plan: (plan) => { linkProjectFixture(plan, 1000); },
+    items: { 1000: EPIC, 1001: feature({ "System.Parent": 1000 }) }
+  });
+  const before = app.store.get();
+  const warned = await importOf(app, { id: 1001 });
+  assert.equal(warned.status, 409);
+  assert.equal(warned.json.offer.kind, "nesting");
+  assert.equal(warned.json.offer.label, "Import anyway");
+  assert.match(warned.json.error, /Epic #1000 "Invoices" is already on the plan as a Project and sits above it/);
+  assert.match(warned.json.error, /would plan the same work twice/);
+  // Nothing was written before the press.
+  assert.deepEqual(app.store.get(), before);
+  assert.equal(app.store.canUndo(), false);
+
+  const pressed = await importOf(app, { id: 1001, confirmNesting: true });
+  assert.equal(pressed.status, 200, pressed.text);
+  assert.equal(pressed.json.kind, "assignment");
+  assert.equal(app.store.get().assignments.slice(-1)[0].name, "PDF export");
+});
+
+test("a linked descendant warns too, and a deeper one is found through its parent", async () => {
+  const app = await start({
+    plan: (plan) => {
+      plan.ado = TWO_LEVELS;
+      linkAssignmentFixture(plan, 5002);
+    },
+    items: {
+      5000: {
+        rev: 1,
+        fields: { "System.Title": "Billing", "System.WorkItemType": "Initiative" },
+        relations: [{ rel: "System.LinkTypes.Hierarchy-Forward", url: "https://dev.azure.com/example/PACT/_apis/wit/workItems/5001" }]
+      },
+      5001: {
+        rev: 1,
+        fields: { "System.Title": "Invoices", "System.WorkItemType": "Epic", "System.Parent": 5000 },
+        relations: [{ rel: "System.LinkTypes.Hierarchy-Forward", url: "https://dev.azure.com/example/PACT/_apis/wit/workItems/5002" }]
+      },
+      5002: feature({ "System.Title": "Export one invoice", "System.WorkItemType": "User Story", "System.Parent": 5001 })
+    }
+  });
+  const warned = await importOf(app, { id: 5000 });
+  assert.equal(warned.status, 409);
+  assert.equal(warned.json.offer.kind, "nesting");
+  // The linked record is a grandchild: the warning names it, so the walk went
+  // past the Epic that sits directly below.
+  assert.match(warned.json.error, /User Story #5002 "Export one invoice"/);
+  assert.match(warned.json.error, /sits below it/);
+
+  const pressed = await importOf(app, { id: 5000, confirmNesting: true });
+  assert.equal(pressed.status, 200, pressed.text);
+  assert.equal(pressed.json.kind, "project");
+  assert.equal(pressed.json.facts.projectName, "Billing");
 });
 
 /* --- the ways ADO says no ----------------------------------------------- */

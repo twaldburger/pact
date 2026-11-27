@@ -40,9 +40,8 @@ const tempFile = () => path.join(tempDir(), "pact.json");
 const MAPPING = {
   organizationUrl: "https://dev.azure.com/timwaldburger",
   project: "PACT",
-  projectLevel: "Epic",
-  assignmentLevel: "Feature",
-  tagLevel: "User Story"
+  projectLevels: ["Initiative", "Epic"],
+  assignmentLevels: ["Feature", "User Story"]
 };
 
 test("a plan without an ADO block is valid, exactly as it was", () => {
@@ -50,12 +49,46 @@ test("a plan without an ADO block is valid, exactly as it was", () => {
   assert.equal("ado" in seedPlan(), false);
 });
 
-test("a plan accepts an ADO block of two addresses and three type names", () => {
+test("a plan accepts an ADO block of two addresses and two lists of type names", () => {
   const plan = Object.assign(seedPlan(), { ado: MAPPING });
   assert.deepEqual(validatePlan(plan), []);
-  // The tag slot may be absent, which is a mapping with no tag level at all.
-  const partial = Object.assign(seedPlan(), { ado: { organizationUrl: MAPPING.organizationUrl, project: "PACT", projectLevel: "Epic", assignmentLevel: "Feature" } });
-  assert.deepEqual(validatePlan(partial), []);
+  // One type in a list is a list like any other.
+  const single = Object.assign(seedPlan(), {
+    ado: Object.assign({}, MAPPING, { projectLevels: ["Epic"], assignmentLevels: ["Feature"] })
+  });
+  assert.deepEqual(validatePlan(single), []);
+});
+
+test("a plan written before the lists is read as one-item lists, without a migration", () => {
+  const legacy = Object.assign(seedPlan(), {
+    ado: {
+      organizationUrl: MAPPING.organizationUrl,
+      project: "PACT",
+      projectLevel: "Epic",
+      assignmentLevel: "Feature",
+      tagLevel: "User Story"
+    }
+  });
+  // It loads: the singular keys are accepted as the lists of one they mean, and
+  // the tag level is accepted rather than merely tolerated.
+  assert.deepEqual(validatePlan(legacy), []);
+  assert.deepEqual(normalizeAdo(legacy.ado), {
+    organizationUrl: MAPPING.organizationUrl,
+    project: "PACT",
+    projectLevels: ["Epic"],
+    assignmentLevels: ["Feature"]
+  });
+  // Read through the store, the plan carries the new shape and the tag level is
+  // gone; the file itself still holds what it held until the plan is next
+  // written, and that write stores the new shape.
+  const file = tempFile();
+  fs.writeFileSync(file, JSON.stringify(legacy, null, 2) + "\n");
+  const store = createStore(file);
+  assert.deepEqual(store.get().ado, normalizeAdo(legacy.ado));
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).ado.tagLevel, "User Story");
+  store.setAdo({ ado: store.get().ado });
+  assert.equal("tagLevel" in JSON.parse(fs.readFileSync(file, "utf8")).ado, false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).ado.projectLevels, ["Epic"]);
 });
 
 test("the plan refuses a credential-shaped key inside its ADO block", () => {
@@ -68,27 +101,45 @@ test("the plan refuses a credential-shaped key inside its ADO block", () => {
   });
 });
 
-test("the block's shape is checked: the address pair, the two required slots, no stray key", () => {
+test("the block's shape is checked: the address pair, a non-empty list for each role, no stray key", () => {
   assert.match(adoRefusals(null)[0], /must be an object/);
   assert.match(adoRefusals({}).join(" "), /organisation address is required/);
   assert.match(adoRefusals(Object.assign({}, MAPPING, { organizationUrl: "dev.azure.com/x" })).join(" "), /start http:\/\/ or https:\/\//);
-  assert.match(adoRefusals({ organizationUrl: MAPPING.organizationUrl, project: "PACT" }).join(" "), /projectLevel/);
   assert.match(adoRefusals(Object.assign({}, MAPPING, { owner: "tim" })).join(" "), /unknown field 'owner'/);
-  assert.match(adoRefusals(Object.assign({}, MAPPING, { tagLevel: "  " })).join(" "), /tagLevel/);
+  // Both lists are required, on a block that carries an address.
+  const addressed = { organizationUrl: MAPPING.organizationUrl, project: "PACT" };
+  assert.match(adoRefusals(addressed).join(" "), /projectLevels must name at least one work-item type/);
+  assert.match(adoRefusals(addressed).join(" "), /assignmentLevels must name at least one work-item type/);
+  // And an empty list is refused for what it is for, not for being empty.
+  const emptyProject = Object.assign({}, MAPPING, { projectLevels: [] });
+  assert.match(adoRefusals(emptyProject).join(" "), /the ADO types whose items become PACT Projects/);
+  const emptyAssignment = Object.assign({}, MAPPING, { assignmentLevels: [] });
+  assert.match(adoRefusals(emptyAssignment).join(" "), /the ADO types whose items become PACT Assignments/);
+  // A list is a list: a bare name is refused in the plural key, and so is a
+  // blank entry.
+  assert.match(adoRefusals(Object.assign({}, MAPPING, { projectLevels: "Epic" })).join(" "),
+    /ado\.projectLevels must be a list of work-item type names/);
+  assert.match(adoRefusals(Object.assign({}, MAPPING, { assignmentLevels: ["Feature", "  "] })).join(" "),
+    /must hold work-item type names, and nothing blank/);
+  // A tag level is no longer part of the mapping: it is accepted, whatever it
+  // holds, and left out of what is stored.
+  assert.deepEqual(adoRefusals(Object.assign({}, MAPPING, { tagLevel: "  " })), []);
+  assert.deepEqual(adoRefusals(Object.assign({}, MAPPING, { tagLevel: 42 })), []);
+  assert.equal("tagLevel" in normalizeAdo(Object.assign({}, MAPPING, { tagLevel: "User Story" })), false);
 });
 
-test("the block is stored trimmed, with a trailing slash off the address", () => {
+test("the block is stored trimmed, with a trailing slash off the address, and a repeated name once", () => {
   assert.deepEqual(normalizeAdo({
     organizationUrl: " https://dev.azure.com/timwaldburger/ ",
     project: " PACT ",
-    projectLevel: " Epic ",
-    assignmentLevel: "Feature",
+    projectLevels: [" Epic ", "Initiative", "Epic"],
+    assignmentLevels: ["Feature"],
     tagLevel: null
   }), {
     organizationUrl: "https://dev.azure.com/timwaldburger",
     project: "PACT",
-    projectLevel: "Epic",
-    assignmentLevel: "Feature"
+    projectLevels: ["Epic", "Initiative"],
+    assignmentLevels: ["Feature"]
   });
 });
 
@@ -133,37 +184,43 @@ test("the instance's backlog levels become one rank per type, highest first", ()
 
 const INSTANCE = { ranks: typeRanks(BACKLOGS), reported: reportedTypes(TYPES) };
 
-test("the project slot above the assignment slot passes", () => {
+test("two project levels and two assignment levels pass when every assignment ranks below every project", () => {
+  assert.equal(mappingRefusal({ projectLevels: ["Epic"], assignmentLevels: ["Feature"] }, INSTANCE), null);
+  assert.equal(mappingRefusal({ projectLevels: ["Epic"], assignmentLevels: ["User Story"] }, INSTANCE), null);
+  assert.equal(mappingRefusal({ projectLevels: ["Epic", "Feature"], assignmentLevels: ["User Story"], }, INSTANCE), null);
+  // A singular block is the same one-item list, so it is checked the same way.
   assert.equal(mappingRefusal({ projectLevel: "Epic", assignmentLevel: "Feature" }, INSTANCE), null);
-  assert.equal(mappingRefusal({ projectLevel: "Epic", assignmentLevel: "User Story" }, INSTANCE), null);
-  assert.equal(mappingRefusal({ projectLevel: "Epic", assignmentLevel: "Feature", tagLevel: "User Story" }, INSTANCE), null);
 });
 
-test("equal or inverted ranks refuse, naming both ranks", () => {
-  const equal = mappingRefusal({ projectLevel: "Feature", assignmentLevel: "Feature" }, INSTANCE);
+test("an equal or inverted pair refuses, naming both ranks", () => {
+  const equal = mappingRefusal({ projectLevels: ["Feature"], assignmentLevels: ["Feature"] }, INSTANCE);
   assert.match(equal, /'Feature' \(rank 3\)/);
   assert.equal((equal.match(/rank 3/g) || []).length, 2);
 
-  const inverted = mappingRefusal({ projectLevel: "Feature", assignmentLevel: "Epic" }, INSTANCE);
+  const inverted = mappingRefusal({ projectLevels: ["Feature"], assignmentLevels: ["Epic"] }, INSTANCE);
   assert.match(inverted, /'Feature' \(rank 3\)/);
   assert.match(inverted, /'Epic' \(rank 4\)/);
   assert.match(inverted, /must be a higher level/);
+
+  // One list is only as good as its worst pair: the lowest project type against
+  // the highest assignment type is the pair that collides.
+  const overlapping = mappingRefusal({
+    projectLevels: ["Epic", "Feature"],
+    assignmentLevels: ["User Story", "Feature"]
+  }, INSTANCE);
+  assert.match(overlapping, /The project type 'Feature' \(rank 3\)/);
+  assert.match(overlapping, /the assignment type 'Feature' \(rank 3\)/);
+  assert.match(overlapping, /every assignment type has to rank below every project type/);
 });
 
-test("a type with no backlog level cannot fill either ranked slot", () => {
+test("a type with no backlog level cannot sit in either list", () => {
   const noRank = { ranks: typeRanks(BACKLOGS), reported: reportedTypes(TYPES).concat("Test Case") };
-  assert.match(mappingRefusal({ projectLevel: "Test Case", assignmentLevel: "Feature" }, noRank),
+  assert.match(mappingRefusal({ projectLevels: ["Test Case"], assignmentLevels: ["Feature"] }, noRank),
     /no backlog level to the project type 'Test Case'/);
-  assert.match(mappingRefusal({ projectLevel: "Epic", assignmentLevel: "Test Case" }, noRank),
+  assert.match(mappingRefusal({ projectLevels: ["Epic", "Test Case"], assignmentLevels: ["Feature"] }, noRank),
+    /no backlog level to the project type 'Test Case'/);
+  assert.match(mappingRefusal({ projectLevels: ["Epic"], assignmentLevels: ["Test Case"] }, noRank),
     /no backlog level to the assignment type 'Test Case'/);
-});
-
-test("a tag slot must be a type the instance reports, and may be absent", () => {
-  assert.match(
-    mappingRefusal({ projectLevel: "Epic", assignmentLevel: "Feature", tagLevel: "Test Case" }, INSTANCE),
-    /does not report a type called 'Test Case'/
-  );
-  assert.equal(mappingRefusal({ projectLevel: "Epic", assignmentLevel: "Feature", tagLevel: "" }, INSTANCE), null);
 });
 
 /* --- where the token lives ------------------------------------------------ */
@@ -294,23 +351,26 @@ test("the settings are always an entry in the Options menu's last group, after P
 const COMPLETE = {
   organizationUrl: "https://dev.azure.com/timwaldburger",
   project: "PACT",
-  projectLevel: "Epic",
-  assignmentLevel: "Feature"
+  projectLevels: ["Epic"],
+  assignmentLevels: ["Feature"]
 };
 
-test("a mapping is in the plan only when both of its levels and its address are", () => {
+test("a mapping is in the plan only when both of its lists and its address are", () => {
   assert.equal(adoMappingInPlan(null), false);
   assert.equal(adoMappingInPlan({}), false);
   assert.equal(adoMappingInPlan(COMPLETE), true);
-  // The tag level is optional in the plan, so it is optional here too.
-  assert.equal(adoMappingInPlan(Object.assign({ tagLevel: "User Story" }, COMPLETE)), true);
+  // A list with nothing in it produces no record, so it is not a mapping.
+  assert.equal(adoMappingInPlan(Object.assign({}, COMPLETE, { projectLevels: [] })), false);
+  assert.equal(adoMappingInPlan(Object.assign({}, COMPLETE, { assignmentLevels: [] })), false);
   // A half-made mapping is not one: an operation reading it would fail.
-  ["organizationUrl", "project", "projectLevel", "assignmentLevel"].forEach((key) => {
+  ["organizationUrl", "project", "projectLevels", "assignmentLevels"].forEach((key) => {
     const short = Object.assign({}, COMPLETE);
     delete short[key];
     assert.equal(adoMappingInPlan(short), false, key);
   });
-  // And a mapping the store itself would refuse never counts as configured.
+  // A tag level is no longer part of the mapping, so it does not stop one being
+  // recognised; a credential-shaped key still does.
+  assert.equal(adoMappingInPlan(Object.assign({ tagLevel: "Initiative" }, COMPLETE)), true);
   assert.equal(adoMappingInPlan(Object.assign({ pat: "a-secret" }, COMPLETE)), false);
 });
 

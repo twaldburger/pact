@@ -39,7 +39,7 @@ function sourceFrom(startMarker, endMarker) {
 
 const SETTINGS = sourceFrom("function openAdoSettingsPanel(", "\n/* --- the Azure DevOps operations panel");
 const OPERATIONS = sourceFrom("function openAdoOperationsPanel(", "\n/* --- the bar's ADO button");
-const BAR = sourceFrom("/* --- the bar's ADO button", "\n// A type slot's select");
+const BAR = sourceFrom("/* --- the bar's ADO button", "\n/*\n * A mapping list: one ticked box per type");
 const OPTIONS_ROW = sourceFrom("function buildAdoItem(", "\nfunction updateAdoItem(");
 
 // Every element id a panel gives one of its own controls, in source order.
@@ -54,9 +54,8 @@ test("the settings hold configuration, and every control of it", () => {
   // two lines that report the token's state and the last test connection.
   assert.deepEqual(idsOf(SETTINGS), [
     "ado-url",
-    "ado-project-level",
-    "ado-assignment-level",
-    "ado-tag-level",
+    "ado-project-levels",
+    "ado-assignment-levels",
     "ado-token",
     "ado-token-save",
     "ado-token-clear",
@@ -82,6 +81,15 @@ test("no import control survives in the settings panel", () => {
 });
 
 /* --- the operations panel ------------------------------------------------ */
+
+test("the settings hold two lists, and the tag row is gone entirely", () => {
+  assert.equal((SETTINGS.match(/levelTicks\(\)/g) || []).length, 2, "the panel does not draw exactly two lists");
+  assert.match(SETTINGS, /form\.appendChild\(formRow\("Project", projectLevels\.node, ADO_ROW_TIPS\.project\)\);/);
+  assert.match(SETTINGS, /form\.appendChild\(formRow\("Assignment", assignmentLevels\.node, ADO_ROW_TIPS\.assignment\)\);/);
+  // No tag slot in the settings: no control, no id, no explanation.
+  assert.doesNotMatch(SETTINGS, /tagLevel|tag-level|ADO_ROW_TIPS\.tag/);
+  assert.doesNotMatch(SETTINGS, /formRow\("Tag"/);
+});
 
 test("the operations hold the import, and every part of it", () => {
   assert.deepEqual(idsOf(OPERATIONS), [

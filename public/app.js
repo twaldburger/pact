@@ -59,10 +59,10 @@ import {
   adoOperationState,
   adoRefusals,
   adoUrlFor,
-  assignmentLevelBelow,
   connectionLine,
   importLine,
   linkRow,
+  listWords,
   projectImportLine,
   readWorkItemId,
   tokenLine
@@ -6757,14 +6757,14 @@ function drawLine(node, line) {
 /*
  * The settings door: the connection PACT uses for Azure DevOps, and nothing
  * that uses it. The organisation address and the project are written into the
- * plan, the three type slots are chosen from the types the instance itself
+ * plan, the two lists of types are chosen from the types the instance itself
  * reports, and the token is typed here and written by the server to this
  * machine's config - it is never read back into the browser.
  *
  * One URL is the panel's whole address: the pair it yields is the plan's to
  * store and is never echoed back as two fields, so a mis-pasted URL is caught
- * at Test connection, which reports the project it read. Each of the three
- * slots is named after the PACT thing it produces and explains itself on hover.
+ * at Test connection, which reports the project it read. Each of the two rows
+ * is named after the PACT thing its types produce and explains itself on hover.
  *
  * Importing is not here. An operation is not a setting, and the two are read in
  * different moods: configuration is visited rarely and carefully, an import in
@@ -6773,7 +6773,7 @@ function drawLine(node, line) {
  * the other's room.
  *
  * Every call to ADO is caused by a press: opening this panel (which loads the
- * types once, because the slots are chosen from them), Test connection, and
+ * types once, because the lists are chosen from them), Test connection, and
  * Save mapping. There is no status light, no timer and no polling - closing the
  * panel is the end of it, even when ADO is unreachable.
  */
@@ -6800,24 +6800,19 @@ function openAdoSettingsPanel(trigger) {
     urlInput.setAttribute("placeholder", "https://dev.azure.com/<organisation>/<project>");
     form.appendChild(formRow("URL", urlInput));
 
-    // The three slots, each named for the PACT thing it produces and explained
-    // on hover rather than on screen. The Project and Assignment slots are
-    // backlog levels the instance ranks, so they are offered from those; the Tag
-    // slot may be any type the instance reports, or nothing at all. Every slot
-    // starts empty and an empty one is a choice, so no pair that the rank rule
-    // refuses is ever opened by default.
-    var projectLevel = typeSelect();
-    projectLevel.id = "ado-project-level";
-    fillTypeSelect(projectLevel, [], mapping.projectLevel, { blank: CHOOSE_TYPE });
-    form.appendChild(formRow("Project", projectLevel, ADO_ROW_TIPS.project));
-    var assignmentLevel = typeSelect();
-    assignmentLevel.id = "ado-assignment-level";
-    fillTypeSelect(assignmentLevel, [], mapping.assignmentLevel, { blank: CHOOSE_TYPE });
-    form.appendChild(formRow("Assignment", assignmentLevel, ADO_ROW_TIPS.assignment));
-    var tagLevel = typeSelect();
-    tagLevel.id = "ado-tag-level";
-    fillTypeSelect(tagLevel, [], mapping.tagLevel || "", { blank: "None" });
-    form.appendChild(formRow("Tag", tagLevel, ADO_ROW_TIPS.tag));
+    // The two lists, each named for the PACT thing its types produce and
+    // explained on hover rather than on screen. Both are tick lists over the
+    // types the instance ranks, so a plan that draws Projects from Epics and
+    // Initiatives says both with two ticks. Nothing is ticked before Test
+    // connection has answered, and a stored list is what opens ticked.
+    var projectLevels = levelTicks();
+    projectLevels.node.id = "ado-project-levels";
+    projectLevels.fill([], mapping.projectLevels || []);
+    form.appendChild(formRow("Project", projectLevels.node, ADO_ROW_TIPS.project));
+    var assignmentLevels = levelTicks();
+    assignmentLevels.node.id = "ado-assignment-levels";
+    assignmentLevels.fill([], mapping.assignmentLevels || []);
+    form.appendChild(formRow("Assignment", assignmentLevels.node, ADO_ROW_TIPS.assignment));
 
     // The token: typed, saved and replaced here, and never shown again. Clear
     // deletes the file, so a revoked token leaves nothing behind.
@@ -6915,8 +6910,9 @@ function openAdoSettingsPanel(trigger) {
       syncTokenControls();
     }
 
-    function currentOr(select, fallback) {
-      return select.value !== "" ? select.value : (fallback || "");
+    function currentOr(ticks, fallback) {
+      var chosen = ticks.chosen();
+      return chosen.length ? chosen : (fallback || []);
     }
 
     // The address pair a press needs, read out of the one URL field. A refusal
@@ -6926,26 +6922,14 @@ function openAdoSettingsPanel(trigger) {
       return addressFromUrl(urlInput.value);
     }
 
-    /*
-     * Once the instance's ranks are known, the Assignment slot is kept on a
-     * level the rank rule would accept: the type already chosen where it sits
-     * below the project's, and otherwise the level immediately below it. A
-     * project with nothing below it leaves the slot as the person left it.
-     */
-    function syncAssignment() {
-      if (!instance || projectLevel.value === "") return;
-      assignmentLevel.value = assignmentLevelBelow(instance.types || [], projectLevel.value, assignmentLevel.value);
-    }
-
-    projectLevel.addEventListener("change", syncAssignment);
-
+    // What the instance reported fills both rows, each keeping what is ticked
+    // and falling back to the plan's stored list. The rank rule decides whether
+    // the pair may be saved; the panel does not pre-tick a guess.
     function applyInstance(result) {
       instance = result;
       var ranked = (result.types || []).map(function (type) { return type.name; });
-      fillTypeSelect(projectLevel, ranked, currentOr(projectLevel, mapping.projectLevel), { blank: CHOOSE_TYPE });
-      fillTypeSelect(assignmentLevel, ranked, currentOr(assignmentLevel, mapping.assignmentLevel), { blank: CHOOSE_TYPE });
-      fillTypeSelect(tagLevel, result.reported || [], currentOr(tagLevel, mapping.tagLevel || ""), { blank: "None" });
-      syncAssignment();
+      projectLevels.fill(ranked, currentOr(projectLevels, mapping.projectLevels));
+      assignmentLevels.fill(ranked, currentOr(assignmentLevels, mapping.assignmentLevels));
       saveButtonEl.disabled = false;
     }
 
@@ -6993,10 +6977,9 @@ function openAdoSettingsPanel(trigger) {
       var payload = {
         organizationUrl: reading.organizationUrl,
         project: reading.project,
-        projectLevel: projectLevel.value,
-        assignmentLevel: assignmentLevel.value
+        projectLevels: projectLevels.chosen(),
+        assignmentLevels: assignmentLevels.chosen()
       };
-      if (tagLevel.value !== "") payload.tagLevel = tagLevel.value;
       var refusals = adoRefusals(payload);
       if (refusals.length) {
         error.set(refusals.join(" "));
@@ -7008,8 +6991,8 @@ function openAdoSettingsPanel(trigger) {
         return refresh({ keepPanel: true }).then(function () {
           applyState(saved);
           var stored = saved.mapping || payload;
-          setStatus("Mapping saved: " + stored.projectLevel + " for projects, " + stored.assignmentLevel +
-            " for assignments" + (stored.tagLevel ? ", tags from " + stored.tagLevel : "") + ".");
+          setStatus("Mapping saved: projects from " + listWords(stored.projectLevels) +
+            ", assignments from " + listWords(stored.assignmentLevels) + ".");
         });
       }).catch(function (err) {
         error.set(errorText(err, "Could not save the mapping."));
@@ -7049,7 +7032,7 @@ function openAdoSettingsPanel(trigger) {
     openPanel(node, trigger);
     urlInput.focus();
     // Opening the panel is the press that loads the instance's own types: the
-    // three slots are chosen from them, so the stored mapping's names can be
+    // two lists are chosen from them, so the stored mapping's names can be
     // confirmed rather than assumed. With no token, or no stored address, there
     // is nothing to ask.
     if (token.present && adoUrlFor(mapping) !== "") runTest();
@@ -7152,8 +7135,9 @@ function openAdoOperationsPanel(trigger) {
   // neither is refused before a round trip. A refusal that carries an offer
   // says why nothing was imported and turns the offer into the presses below
   // it; every other refusal is this panel's error line. `presses` is what the
-  // offer's own press adds to the request: the Person it would create, or the
-  // Project it would use or copy. The Import press sends none of them.
+  // offer's own press adds to the request: the Person it would create, the
+  // Project it would use or copy, or the nesting it would accept. The Import
+  // press sends none of them.
   function runImport(presses) {
     var choice = presses || {};
     var reading = readWorkItemId(importInput.value);
@@ -7172,7 +7156,8 @@ function openAdoOperationsPanel(trigger) {
       id: reading.id,
       createPerson: choice.createPerson === true,
       useProject: choice.useProject === true,
-      copyProject: choice.copyProject === true
+      copyProject: choice.copyProject === true,
+      confirmNesting: choice.confirmNesting === true
     })
       .then(function (result) {
         return refresh({ keepPanel: true }).then(function () {
@@ -7204,13 +7189,14 @@ function openAdoOperationsPanel(trigger) {
       });
   }
 
-  // The offer's primary press: create the Person it names, or use the Project
-  // already on the plan. Its second press exists only where the offer carries
-  // one, and is always the copy.
+  // The offer's primary press: create the Person it names, use the Project
+  // already on the plan, or accept a nesting the import warned about. Its second
+  // press exists only where the offer carries one, and is always the copy.
   function acceptOffer(asCopy) {
     if (!offer) return;
     if (asCopy) return runImport({ copyProject: true });
     if (offer.kind === "use-project") return runImport({ useProject: true });
+    if (offer.kind === "nesting") return runImport({ confirmNesting: true });
     runImport({ createPerson: true });
   }
 
@@ -7271,62 +7257,64 @@ function updateAdoOperationsButton() {
   adoOperationsButton.classList.toggle("is-disabled", !state.enabled);
   adoOperationsButton.title = state.title;
 }
-// A type slot's select, empty until the instance answers.
-function typeSelect() {
-  var select = document.createElement("select");
-  select.className = "ado__select";
-  return select;
+/*
+ * A mapping list: one ticked box per type, in the box its row draws. Two lists
+ * of types, not a picker per role, because a plan that draws Projects from Epics
+ * and Initiatives has to say both - and the rank rule, not the control, is what
+ * decides whether the two lists may sit where they are. `chosen` is what a save
+ * sends, `fill` redraws the boxes once the instance's types are known, and a
+ * name the plan stores that the instance did not report stays visible rather
+ * than being dropped behind the person's back.
+ */
+function levelTicks() {
+  var wrap = el("div", "ado__levels");
+  var boxes = [];
+
+  function chosen() {
+    return boxes.filter(function (box) { return box.checked; })
+      .map(function (box) { return box.value; });
+  }
+
+  function fill(names, selected) {
+    var listed = (names || []).slice();
+    (selected || []).forEach(function (name) {
+      if (listed.indexOf(name) === -1) listed.push(name);
+    });
+    boxes = [];
+    wrap.textContent = "";
+    if (listed.length === 0) {
+      var waiting = el("span", "ado__levels-empty");
+      waiting.textContent = LEVELS_WAITING;
+      wrap.appendChild(waiting);
+      return;
+    }
+    listed.forEach(function (name) {
+      var label = el("label", "ado__level");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.className = "ado__level-box";
+      box.value = name;
+      // The box is the control and its label names it, so a reader hears the
+      // type rather than "checkbox" read out of the markup.
+      box.checked = (selected || []).indexOf(name) !== -1;
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(name));
+      wrap.appendChild(label);
+      boxes.push(box);
+    });
+  }
+
+  return { node: wrap, chosen: chosen, fill: fill };
 }
 
-// What an empty choice in a mapping slot reads as: a slot left empty is a real
-// choice, and a pair the rank rule refuses is never opened by default.
-var CHOOSE_TYPE = "Choose one";
+// What a list with no types in it reads as: the panel has not asked the
+// instance yet, and says so rather than showing an empty box.
+var LEVELS_WAITING = "Test the connection to list the instance's types.";
 
 // The import row's explanation, on hover: the shapes a paste may take, and what
 // the press then does with it.
 var ADO_IMPORT_TIP = ADO_WORK_ITEM_SHAPES +
   " PACT reads the item's title, its owner, the parents that decide the Project, and its dates.";
-
-/*
- * Fill a type select from the instance, keeping a stored name visible even when
- * the instance did not report it - a plan may arrive from another instance - so
- * the panel shows what the plan holds rather than silently dropping it. An
- * empty list means no test has answered yet. `blank` is the empty choice's own
- * wording, and with it a slot with nothing chosen stays empty rather than
- * taking the first type on offer.
- */
-function fillTypeSelect(select, names, current, opts) {
-  var settings = opts || {};
-  var blank = settings.blank || "";
-  var list = names.slice();
-  select.innerHTML = "";
-  // A stored name the instance did not report stays visible, so the panel shows
-  // what the plan holds rather than silently dropping it.
-  if (current && list.indexOf(current) === -1) list.unshift(current);
-  if (list.length === 0) {
-    var waiting = document.createElement("option");
-    waiting.value = "";
-    waiting.textContent = "Test connection first";
-    select.appendChild(waiting);
-    select.value = "";
-    return;
-  }
-  if (blank) {
-    var none = document.createElement("option");
-    none.value = "";
-    none.textContent = blank;
-    select.appendChild(none);
-  }
-  list.forEach(function (name) {
-    var option = document.createElement("option");
-    option.value = name;
-    option.textContent = name;
-    select.appendChild(option);
-  });
-  select.value = current && list.indexOf(current) !== -1
-    ? current
-    : (blank ? "" : list[0]);
-}
 
 /* --- the help panel ------------------------------------------------------ */
 

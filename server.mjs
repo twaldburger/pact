@@ -365,10 +365,12 @@ export function createServer(store, options) {
           }
           // The import: one work item, by id or link, read from ADO and written
           // to the plan in one commit. `createPerson` is set only by the press
-          // that accepts the offer an unmatched assignee comes with, and
+          // that accepts the offer an unmatched assignee comes with;
           // `useProject` / `copyProject` only by the two presses a project-level
-          // item's name clash offers - so neither a Person nor a Project is ever
-          // created behind the panel's back.
+          // item's name clash offers; and `confirmNesting` only by the press the
+          // nesting warning carries - so no Person or Project is created behind
+          // the panel's back, and no overlapping work is planned without a
+          // second confirmation.
           if (pathname === "/api/ado/import") {
             if (req.method !== "POST") return sendError(res, 405, "method not allowed");
             return readBody(req).then((body) => {
@@ -377,7 +379,8 @@ export function createServer(store, options) {
                 id: input.id,
                 createPerson: input.createPerson === true,
                 useExisting: input.useProject === true,
-                copyProject: input.copyProject === true
+                copyProject: input.copyProject === true,
+                confirmNesting: input.confirmNesting === true
               })).then((result) => sendJSON(res, 200, result));
             });
           }

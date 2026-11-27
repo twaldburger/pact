@@ -6,9 +6,9 @@
  * browser does.
  *
  * Nothing here makes a network call or reads a secret. The plan's block holds
- * two addresses and three type names, and a credential is refused rather than
- * stored; the token itself lives in the app's own config directory and is only
- * ever handled by lib/ado.mjs on the server.
+ * two addresses and two lists of type names, and a credential is refused rather
+ * than stored; the token itself lives in the app's own config directory and is
+ * only ever handled by lib/ado.mjs on the server.
  */
 
 // What a token file holds before a real token is pasted into it. A file still
@@ -16,10 +16,17 @@
 export const ADO_PLACEHOLDER = "PASTE_YOUR_AZURE_DEVOPS_PAT_HERE";
 
 // The block the plan carries, exactly these keys. The first two are the
-// address, the rest are ADO work-item type names.
+// address, the two lists are ADO work-item type names, and the singular keys
+// are the shape the build before the lists wrote: a plan carrying them is read
+// as one-item lists, so no plan needs migrating.
 export const ADO_ADDRESS_KEYS = ["organizationUrl", "project"];
-export const ADO_LEVEL_SLOTS = ["projectLevel", "assignmentLevel", "tagLevel"];
-export const ADO_KEYS = ADO_ADDRESS_KEYS.concat(ADO_LEVEL_SLOTS);
+export const ADO_LEVEL_LISTS = ["projectLevels", "assignmentLevels"];
+export const ADO_LEGACY_LEVEL_KEYS = ["projectLevel", "assignmentLevel"];
+// A tag level is no longer part of the mapping. An older plan may still carry
+// one; it is accepted and left out of the block as it is stored, so a plan
+// written here is never broken by a key this build has stopped using.
+export const ADO_DROPPED_KEYS = ["tagLevel"];
+export const ADO_KEYS = ADO_ADDRESS_KEYS.concat(ADO_LEVEL_LISTS, ADO_LEGACY_LEVEL_KEYS, ADO_DROPPED_KEYS);
 
 // A key shaped like a secret. A plan is a file people share, so one of these
 // inside the block is refused by name rather than quietly stored.
@@ -222,19 +229,17 @@ export function addressFromUrl(text) {
 }
 
 /*
- * What the panel's three mapping rows say on hover, one sentence each. They are
+ * What the panel's two mapping rows say on hover, one sentence each. They are
  * titles rather than on-screen lines because the panel's owner asked for the
  * explanation to be on hover and the rows to be named after PACT's own things:
- * each value is already an ADO work-item type name, so the label only has to
- * say which PACT thing it produces.
+ * each value is a list of ADO work-item type names, so the label only has to
+ * say which PACT thing they produce.
  */
 export const ADO_ROW_TIPS = {
-  project: "The ADO work-item type a PACT Project comes from; it must sit at a higher level " +
-    "than the assignment's type.",
-  assignment: "The ADO work-item type a PACT Assignment comes from - the level that carries a " +
-    "person and their time.",
-  tag: "The ADO work-item type whose name becomes a tag on the assignment; empty leaves " +
-    "nothing tagged."
+  project: "The ADO work-item types that become PACT Projects; every type here must rank " +
+    "above every type on the Assignment row.",
+  assignment: "The ADO work-item types that become PACT Assignments - the levels that carry a " +
+    "person and their time."
 };
 /*
  * The address pair: what the panel's two text fields hold and what a test
@@ -254,10 +259,58 @@ export function addressRefusals(input) {
 }
 
 /*
+ * One list of the mapping, read from the plural key the plan stores now or from
+ * the singular key the build before it wrote. A mapping names ADO work-item
+ * types, so a list is trimmed, a blank name is dropped and a repeated name is
+ * kept once - and a bare string is read as the one-item list it means, which is
+ * what lets a legacy block travel through the same rules.
+ */
+function levelNames(block, listKey, slotKey) {
+  const source = block || {};
+  const given = source[listKey] !== undefined && source[listKey] !== null
+    ? source[listKey]
+    : source[slotKey];
+  const list = given === undefined || given === null ? [] : Array.isArray(given) ? given : [given];
+  const names = [];
+  list.forEach(function (name) {
+    const text = isNonEmptyText(name) ? name.trim() : "";
+    if (text !== "" && !names.includes(text)) names.push(text);
+  });
+  return names;
+}
+
+// What a list of the mapping is for, said in the sentence an empty one is
+// refused with: a list is refused for having nothing in it, and the reason is
+// what its types produce on the plan, not that a field is empty.
+export function emptyListRefusal(listKey) {
+  if (listKey === "projectLevels") {
+    return "ado.projectLevels must name at least one work-item type: the ADO types whose " +
+      "items become PACT Projects.";
+  }
+  return "ado.assignmentLevels must name at least one work-item type: the ADO types whose " +
+    "items become PACT Assignments.";
+}
+
+// The names as prose, the way a refusal and a status line say them: 'Epic',
+// 'Epic and Initiative', 'Epic, Initiative and Feature'.
+export function listWords(names) {
+  const list = (Array.isArray(names) ? names : []).filter(function (name) {
+    return isNonEmptyText(name);
+  });
+  if (list.length === 0) return "none";
+  if (list.length === 1) return list[0];
+  return list.slice(0, -1).join(", ") + " and " + list[list.length - 1];
+}
+
+/*
  * The plan's `ado` block, checked for shape. Optional in a plan: a plan without
- * one is a plan without a connection. What this cannot check is the type names'
- * ranks, which only the instance knows - `mappingRefusal` does that against
- * what a test connection read.
+ * one is a plan without a connection. Both lists are required and neither may
+ * be empty, because a mapping that names no type produces no record; a singular
+ * slot from an older plan is read as the one-item list it means; and a tag
+ * level is no longer validated at all - it is accepted and left out when the
+ * block is stored. What this cannot check is the type names' ranks, which only
+ * the instance knows - `mappingRefusal` does that against what a test
+ * connection read.
  */
 export function adoRefusals(block) {
   if (!block || typeof block !== "object" || Array.isArray(block)) return ["ado must be an object"];
@@ -271,27 +324,45 @@ export function adoRefusals(block) {
     }
   });
   addressRefusals(block).forEach(function (message) { errors.push(message); });
-  ["projectLevel", "assignmentLevel"].forEach(function (slot) {
-    if (!isNonEmptyText(block[slot])) errors.push("ado." + slot + " must be a work-item type name");
+  [
+    { listKey: "projectLevels", slotKey: "projectLevel" },
+    { listKey: "assignmentLevels", slotKey: "assignmentLevel" }
+  ].forEach(function (setting) {    const given = block[setting.listKey];
+    if (given === undefined || given === null) {
+      // No plural key: an older block's singular one is a list of one, and a
+      // block with neither has an empty list and is refused for it.
+      if (levelNames(block, setting.listKey, setting.slotKey).length === 0) {
+        errors.push(emptyListRefusal(setting.listKey));
+      }
+      return;
+    }
+    if (!Array.isArray(given)) {
+      errors.push("ado." + setting.listKey + " must be a list of work-item type names");
+    } else if (given.length === 0) {
+      errors.push(emptyListRefusal(setting.listKey));
+    } else if (given.some(function (name) { return !isNonEmptyText(name); })) {
+      errors.push("ado." + setting.listKey + " must hold work-item type names, and nothing blank");
+    }
   });
-  if (block.tagLevel !== undefined && block.tagLevel !== null && !isNonEmptyText(block.tagLevel)) {
-    errors.push("ado.tagLevel must be a work-item type name when it is given");
-  }
   return errors;
 }
 
-// The block as it is stored: the address trimmed, the type names trimmed, and
-// an unset tag level left out rather than stored as null.
+// The block as it is stored: the address trimmed, each list trimmed and deduped
+// in the order it was given, and a singular slot read as the list of one it
+// means. A tag level - the key this build no longer uses - is not carried.
 export function normalizeAdo(block) {
-  const mapping = {
+  return {
     organizationUrl: trimOrganizationUrl(block.organizationUrl),
     project: String(block.project).trim(),
-    projectLevel: String(block.projectLevel).trim(),
-    assignmentLevel: String(block.assignmentLevel).trim()
+    projectLevels: levelNames(block, "projectLevels", "projectLevel"),
+    assignmentLevels: levelNames(block, "assignmentLevels", "assignmentLevel")
   };
-  const tag = block.tagLevel === undefined || block.tagLevel === null ? "" : String(block.tagLevel).trim();
-  if (tag !== "") mapping.tagLevel = tag;
-  return mapping;
+}
+
+// The two lists of a mapping, whatever shape it was handed in.
+export function mappingLevels(mapping, listKey) {
+  const slotKey = listKey === "projectLevels" ? "projectLevel" : "assignmentLevel";
+  return levelNames(mapping, listKey, slotKey);
 }
 
 /*
@@ -318,7 +389,7 @@ export function typeRanks(backlogs) {
 }
 
 // The type names `GET .../_apis/wit/workitemtypes` reports, in the order it
-// reports them. The tag slot may be any of these, ranked or not.
+// reports them: what the panel's lists may offer, ranked or not.
 export function reportedTypes(types) {
   const list = Array.isArray(types && types.value) ? types.value : [];
   return list
@@ -332,49 +403,43 @@ export function levelRank(ranks, name) {
 }
 
 /*
- * What the Assignment slot offers once a Project type is chosen: the type
- * already chosen where it sits at a lower level, and otherwise the level
- * immediately below the project's. Nothing is offered before the ranks are
- * known, and nothing is offered that the rank rule would refuse, so the panel
- * never opens - or drifts - into a pair that cannot be saved.
- */
-export function assignmentLevelBelow(ranks, projectLevel, current) {
-  const list = ranks || [];
-  const project = levelRank(list, projectLevel);
-  if (project === null) return "";
-  const chosen = levelRank(list, current);
-  if (chosen !== null && chosen < project) return current;
-  const below = list.filter(function (type) { return type && type.rank < project; })[0];
-  return below ? below.name : "";
-}
-
-/*
- * The one rule the slots are checked by, against what the instance reported:
- * the Project slot must sit on a higher backlog level than the Assignment
- * slot, and the Tag slot, when it is set, must be a type the instance reports.
- * The refusal names both ranks, because "not allowed" alone leaves a reader
- * guessing which of the two to change.
+ * The one rule the lists are checked by, against what the instance reported:
+ * every name in each list must be a type the instance ranks, and every
+ * assignment type must rank below every project type - `min(project ranks) >
+ * max(assignment ranks)`. The refusal names the offending pair with both of
+ * their ranks, because "not allowed" alone leaves a reader guessing which of
+ * the names to change.
  */
 export function mappingRefusal(mapping, instance) {
   const ranks = (instance && instance.ranks) || [];
-  const reported = (instance && instance.reported) || [];
-  const projectRank = levelRank(ranks, mapping.projectLevel);
-  if (projectRank === null) {
-    return "This instance gives no backlog level to the project type '" + mapping.projectLevel +
-      "'; choose a type the instance ranks.";
+  const projects = mappingLevels(mapping, "projectLevels");
+  const assignments = mappingLevels(mapping, "assignmentLevels");
+  for (const name of projects) {
+    if (levelRank(ranks, name) === null) {
+      return "This instance gives no backlog level to the project type '" + name +
+        "'; choose a type the instance ranks.";
+    }
   }
-  const assignmentRank = levelRank(ranks, mapping.assignmentLevel);
-  if (assignmentRank === null) {
-    return "This instance gives no backlog level to the assignment type '" + mapping.assignmentLevel +
-      "'; choose a type the instance ranks.";
+  for (const name of assignments) {
+    if (levelRank(ranks, name) === null) {
+      return "This instance gives no backlog level to the assignment type '" + name +
+        "'; choose a type the instance ranks.";
+    }
   }
-  if (projectRank <= assignmentRank) {
-    return "The project type '" + mapping.projectLevel + "' (rank " + projectRank +
-      ") must be a higher level than the assignment type '" + mapping.assignmentLevel +
-      "' (rank " + assignmentRank + ").";
-  }
-  if (mapping.tagLevel && !reported.includes(mapping.tagLevel)) {
-    return "This instance does not report a type called '" + mapping.tagLevel + "' for the tag slot.";
+  // An empty list is refused by shape before a save gets here; the guard keeps
+  // the arithmetic below honest for a caller that skipped that check.
+  if (projects.length === 0 || assignments.length === 0) return null;
+  const lowestProject = projects
+    .map(function (name) { return { name: name, rank: levelRank(ranks, name) }; })
+    .reduce(function (low, entry) { return entry.rank < low.rank ? entry : low; });
+  const highestAssignment = assignments
+    .map(function (name) { return { name: name, rank: levelRank(ranks, name) }; })
+    .reduce(function (high, entry) { return entry.rank > high.rank ? entry : high; });
+  if (lowestProject.rank <= highestAssignment.rank) {
+    return "The project type '" + lowestProject.name + "' (rank " + lowestProject.rank +
+      ") must be a higher level than the assignment type '" + highestAssignment.name +
+      "' (rank " + highestAssignment.rank + "): every assignment type has to rank below every " +
+      "project type.";
   }
   return null;
 }
@@ -440,7 +505,7 @@ export function noTokenMessage(token) {
 /* --- the two doors -------------------------------------------------------
  *
  * The connection has two surfaces, and each holds one kind of thing: the
- * settings - the URL, the mapping's three rows and the token - live under
+ * settings - the URL, the mapping's two lists and the token - live under
  * Options, and the operations - the import now, the sync later - open from a
  * button in the top bar. The button is always in the bar, so it is always
  * found, and it is withheld until an operation could actually work: a mapping
@@ -778,93 +843,133 @@ function chainSummary(chain) {
 /*
  * The Project's name, from the chain of ancestors above the item.
  *
- * The mapping says which work-item type a PACT Project comes from, and the
- * position of a type in the hierarchy is its level, so the Project is the first
- * ancestor whose type is that level - never the item itself, because a record
- * cannot be its own container. An item whose own type is the project level does
- * not reach here at all: `importLevel` sends it down the path that makes it a
- * Project of its own. A chain that reaches no such ancestor refuses, naming
- * every level it walked and the level it was looking for: an import that
- * guessed a Project would put real work in the wrong place.
+ * The mapping lists the work-item types a PACT Project comes from, and the
+ * position of a type in the hierarchy is its level, so the Project is the
+ * **nearest** ancestor whose type is in that list - never the item itself,
+ * because a record cannot be its own container. An item whose own type is one
+ * of the project levels does not reach here at all: `importLevel` sends it down
+ * the path that makes it a Project of its own. A chain that reaches no such
+ * ancestor refuses, naming every level it walked and the levels it was looking
+ * for: an import that guessed a Project would put real work in the wrong place.
  */
-export function projectFromChain(chain, projectLevel) {
-  const level = String(projectLevel === undefined || projectLevel === null ? "" : projectLevel).trim();
+export function projectFromChain(chain, projectLevels) {
+  const levels = mappingLevels({ projectLevels: projectLevels }, "projectLevels");
   const walked = (Array.isArray(chain) ? chain : []).filter(function (entry) {
     return entry && typeof entry === "object";
   });
   const found = walked.filter(function (entry) {
-    return String(entry.type || "").trim() === level && String(entry.title || "").trim() !== "";
+    return levels.includes(String(entry.type || "").trim()) && String(entry.title || "").trim() !== "";
   })[0];
-  if (found) return { title: String(found.title).trim(), id: found.id || 0, refusal: "" };
+  if (found) {
+    return { title: String(found.title).trim(), id: found.id || 0, type: String(found.type || "").trim(), refusal: "" };
+  }
+  const named = "the project levels the mapping names (" +
+    listWords(levels.map(function (name) { return "'" + name + "'"; })) + ")";
   if (walked.length === 0) {
     return {
       title: "",
       id: 0,
-      refusal: "The work item has no parent, so nothing above it is a '" + level +
-        "', the project level the mapping names: an import needs one there to give the Assignment a Project."
+      type: "",
+      refusal: "The work item has no parent, so nothing above it is at " + named +
+        ": an import needs one there to give the Assignment a Project."
     };
   }
   return {
     title: "",
     id: 0,
-    refusal: "The work item's parents are " + chainSummary(walked) + "; none is a '" + level +
-      "', the project level the mapping names, so the import has no Project to place the work under."
+    type: "",
+    refusal: "The work item's parents are " + chainSummary(walked) + "; none is at " + named +
+      ", so the import has no Project to place the work under."
   };
 }
 
 /*
- * Which record an item's type becomes, decided before any Person is
- * considered: the level its type sits at against the mapping's own three
- * slots, and then, for a type the mapping does not name, its rank against the
- * assignment level.
+ * Which record an item's type becomes, decided before any Person or ancestor is
+ * considered:
  *
- *   "project"    - the type the mapping draws Projects from
- *   "tag"       - the type the mapping names as the tag level
- *   "below"     - a ranked type lower than the assignment level
- *   "assignment" - the existing path: the assignment level itself, a level
- *                  between it and the project level, or a type whose rank the
- *                  instance did not answer for (an import must not refuse work
- *                  it cannot place for want of a rank)
+ *   "project"    - the item's own type is in the mapping's project levels
+ *   "assignment" - it is in the mapping's assignment levels
+ *   "neither"    - it is in neither list, and refusing names both of them
  *
- * An item is never its own container, so a project-level type is the item's
- * own type here and nowhere else: `projectFromChain` still refuses to read the
- * item itself as the Project it sits under.
+ * The two lists say where the line is, so nothing here consults the instance's
+ * ranks: an import reads what the mapping says and never guesses a level.
+ *
+ * An item is never its own container, so a project-level type is the item's own
+ * type here and nowhere else: `projectFromChain` still refuses to read the item
+ * itself as the Project it sits under.
  */
-export function importLevel(ranks, mapping, type) {
-  const block = mapping || {};
+export function importLevel(mapping, type) {
   const name = String(type === undefined || type === null ? "" : type).trim();
-  const named = (value) => String(value === undefined || value === null ? "" : value).trim();
-  if (name !== "" && name === named(block.projectLevel)) return "project";
-  if (name !== "" && name === named(block.tagLevel)) return "tag";
-  if (name !== "" && name === named(block.assignmentLevel)) return "assignment";
-  const assignment = levelRank(ranks, named(block.assignmentLevel));
-  const rank = levelRank(ranks, name);
-  if (assignment !== null && rank !== null && rank < assignment) return "below";
-  return "assignment";
+  if (name === "") return "neither";
+  if (mappingLevels(mapping, "projectLevels").includes(name)) return "project";
+  if (mappingLevels(mapping, "assignmentLevels").includes(name)) return "assignment";
+  return "neither";
 }
 
 /*
- * The refusal a tag-level or below-the-assignment-level item gets. Each names
- * what that level is for rather than what the item lacks, so an owner reading
- * it is not told to go and assign an owner to work that needs none.
+ * The refusal an item whose type is in neither list gets: it names both lists
+ * and the raw item, so the reader can see which list the type belongs in
+ * without being told to go and find an owner for work that needs none.
  */
-export function importLevelRefusal(level, facts) {
+export function importLevelRefusal(facts) {
   const result = facts || {};
   const mapping = result.mapping || {};
   const type = String(result.workItemType || "").trim();
   const id = result.workItemId;
   const title = String(result.title || "").trim();
   const item = "Work item " + id + " (\"" + title + "\") is " + (type === "" ? "of a type" : type);
-  const projectLevel = String(mapping.projectLevel || "").trim();
-  const assignmentLevel = String(mapping.assignmentLevel || "").trim();
-  if (level === "tag") {
-    return item + ", the type the mapping names as the tag level: a tag has no record of its own, " +
-      "so an import of one would put nothing on the plan. Import an item at the project level (" +
-      projectLevel + ") or at the level that carries a person's time (" + assignmentLevel + ").";
-  }
-  return item + ", which sits below " + assignmentLevel + ", the assignment level the mapping names: " +
-    "this is below the level that carries a person's time, so an import of it has no record to become. " +
-    "Import the " + assignmentLevel + " that carries the time, or the " + projectLevel + " above it.";
+  const projects = mappingLevels(mapping, "projectLevels");
+  const assignments = mappingLevels(mapping, "assignmentLevels");
+  return item + ", which is in neither of the mapping's lists: your project levels are " +
+    listWords(projects) + " and your assignment levels are " + listWords(assignments) +
+    ". A type at a project level becomes a Project and one at an assignment level becomes an " +
+    "Assignment, so add " + (type === "" ? "this type" : "'" + type + "'") +
+    " to one of the lists in the settings to import it.";
+}
+
+/*
+ * The work items below an item, from the hierarchy's forward relations of a
+ * read made with `$expand=relations`. The same relation-reading rule as
+ * `parentIdOf`, pointing the other way.
+ */
+export function childIdsOf(item) {
+  const relations = Array.isArray(item && item.relations) ? item.relations : [];
+  return relations
+    .filter(function (relation) {
+      return relation && relation.rel === "System.LinkTypes.Hierarchy-Forward" &&
+        typeof relation.url === "string";
+    })
+    .map(function (relation) {
+      const match = /\/(\d+)\/?$/.exec(relation.url);
+      return match ? Number(match[1]) : 0;
+    })
+    .filter(function (id) { return id > 0; });
+}
+
+/*
+ * The warning an import that would nest gets: a work item above or below it is
+ * already linked on the plan, so the same work would be planned twice. It is a
+ * warning with a press and not a refusal, because the two lists make planning
+ * an item *and* something inside it a legitimate choice - what must be said is
+ * that the two records' figures overlap, so the report adds them together.
+ */
+export function nestingOffer(facts) {
+  const result = facts || {};
+  const relative = result.relative || {};
+  const item = String(result.workItemType || "work item").trim() + " #" + result.workItemId;
+  const linked = (String(relative.type || "").trim() === "" ? "work item" : String(relative.type).trim()) +
+    " #" + relative.id + " \"" + String(relative.title || "").trim() + "\"";
+  const side = result.relation === "ancestor" ? "above it" : "below it";
+  const place = String(relative.place || "record").trim();
+  const article = /^[aeiou]/i.test(place) ? "an" : "a";
+  return {
+    kind: "nesting",
+    label: "Import anyway",
+    relation: result.relation === "ancestor" ? "ancestor" : "descendant",
+    message: linked + " is already on the plan as " + article + " " + place + " and sits " + side +
+      ". Importing " + item + " would plan the same work twice: the two records' figures overlap, " +
+      "so the report adds them together. Press Import anyway to place it as well."
+  };
 }
 
 /*

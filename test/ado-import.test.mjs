@@ -22,6 +22,7 @@ import {
   ADO_FIELDS,
   assignedIdentity,
   assumedWindow,
+  childIdsOf,
   datePart,
   existingProjectOffer,
   importLevel,
@@ -34,6 +35,7 @@ import {
   linkRefusals,
   linkRow,
   linkType,
+  nestingOffer,
   normalizeLink,
   parentIdOf,
   personForEmail,
@@ -182,23 +184,29 @@ const epic = { id: 1000, type: "Epic", title: "Invoices" };
 const feature = { id: 1001, type: "Feature", title: "PDF export" };
 const story = { id: 1002, type: "User Story", title: "Export one invoice" };
 
-test("the Project is the first ancestor at the mapped project level, and never the item", () => {
-  assert.deepEqual(projectFromChain([feature, epic], "Epic"),
-    { title: "Invoices", id: 1000, refusal: "" });
+test("the Project is the nearest ancestor whose type is in the project levels, and never the item", () => {
+  assert.deepEqual(projectFromChain([feature, epic], ["Epic"]),
+    { title: "Invoices", id: 1000, type: "Epic", refusal: "" });
   // Deeper chains still find the level: the order walked is nearest-parent
   // first, so a Feature under an Epic under anything else answers the Epic.
-  assert.equal(projectFromChain([story, feature, epic], "Epic").title, "Invoices");
-  // At an assignment level of User Story, the Feature is the Project.
-  assert.equal(projectFromChain([story, feature, epic], "Feature").title, "PDF export");
+  assert.equal(projectFromChain([story, feature, epic], ["Epic"]).title, "Invoices");
+  // Two project levels: whichever ancestor comes first wins, so a chain with an
+  // Initiative above an Epic answers the Epic.
+  assert.equal(projectFromChain([story, feature, epic], ["Initiative", "Epic"]).title, "Invoices");
+  // With a Feature in the project levels too, the Feature is nearer than the
+  // Epic and is the Project.
+  assert.equal(projectFromChain([story, feature, epic], ["Feature", "Epic"]).title, "PDF export");
 });
 
 test("a chain that reaches no project level refuses, naming every level it walked", () => {
-  const refusal = projectFromChain([story, feature], "Epic").refusal;
+  const refusal = projectFromChain([story, feature], ["Epic"]).refusal;
   assert.match(refusal, /User Story 'Export one invoice'/);
   assert.match(refusal, /Feature 'PDF export'/);
-  assert.match(refusal, /none is a 'Epic'/);
+  assert.match(refusal, /none is at the project levels the mapping names \('Epic'\)/);
+  // Both mapped project levels are named, because either would have done.
+  assert.match(projectFromChain([story], ["Initiative", "Epic"]).refusal, /'Initiative' and 'Epic'/);
   // An item with no parent at all says that instead of listing nothing.
-  const parentless = projectFromChain([], "Epic").refusal;
+  const parentless = projectFromChain([], ["Epic"]).refusal;
   assert.match(parentless, /no parent/);
   assert.match(parentless, /'Epic'/);
 });
@@ -357,8 +365,8 @@ test("the sprint chain a plan derives is what the placement is matched against",
 const MAPPING = {
   organizationUrl: "https://dev.azure.com/example",
   project: "PACT",
-  projectLevel: "Epic",
-  assignmentLevel: "Feature"
+  projectLevels: ["Epic"],
+  assignmentLevels: ["Feature"]
 };
 
 const LINK = {
@@ -600,55 +608,84 @@ test("the import's line states what it made and which date rule placed it", () =
 
 /* --- which level the item is -------------------------------------------- */
 
-const RANKS = [
-  { name: "Epic", rank: 4 },
-  { name: "Feature", rank: 3 },
-  { name: "User Story", rank: 2 },
-  { name: "Task", rank: 1 }
-];
-const LEVELS = { projectLevel: "Epic", assignmentLevel: "Feature" };
+const TWO_LEVELS = {
+  projectLevels: ["Initiative", "Epic"],
+  assignmentLevels: ["Feature", "User Story"]
+};
 
-test("the item's own level against the mapping decides what it becomes", () => {
-  // The type the mapping draws Projects from is the item's own type at the
-  // project level - no parent walk, and no owner.
-  assert.equal(importLevel(RANKS, LEVELS, "Epic"), "project");
-  // The type mapping as the assignment level, and a level between it and the
-  // project's, keep the assignment path.
-  assert.equal(importLevel(RANKS, LEVELS, "Feature"), "assignment");
-  assert.equal(importLevel(RANKS, Object.assign({}, LEVELS, { assignmentLevel: "User Story" }), "Feature"),
-    "assignment");
-  // Below the assignment level is a refusal, decided by the ranks.
-  assert.equal(importLevel(RANKS, Object.assign({}, LEVELS, { assignmentLevel: "User Story" }), "Task"),
-    "below");
-  // The tag slot's own type is a refusal whatever its rank.
-  assert.equal(importLevel(RANKS, Object.assign({}, LEVELS, { tagLevel: "Task" }), "Task"), "tag");
-  // Ranks the instance never answered leave an unnamed type where it has always
-  // been: an import must not refuse work for want of a rank.
-  assert.equal(importLevel([], LEVELS, "Task"), "assignment");
-  assert.equal(importLevel(null, LEVELS, "Bug"), "assignment");
+test("the item's own type against the two lists decides what it becomes", () => {
+  // Each list's types route as that list says, at either level.
+  assert.equal(importLevel(TWO_LEVELS, "Initiative"), "project");
+  assert.equal(importLevel(TWO_LEVELS, "Epic"), "project");
+  assert.equal(importLevel(TWO_LEVELS, "Feature"), "assignment");
+  assert.equal(importLevel(TWO_LEVELS, "User Story"), "assignment");
+  // A type in neither list is neither: the refusal below says so, naming both.
+  assert.equal(importLevel(TWO_LEVELS, "Task"), "neither");
+  assert.equal(importLevel(TWO_LEVELS, "Bug"), "neither");
+  // A type between the two roles is no longer quietly read as an Assignment:
+  // the lists say where the line is, and a Feature with no Feature in either
+  // list has no level.
+  assert.equal(importLevel({ projectLevels: ["Initiative"], assignmentLevels: ["User Story"] }, "Feature"), "neither");
   // A type with no name at all is not a level.
-  assert.equal(importLevel(RANKS, LEVELS, ""), "assignment");
+  assert.equal(importLevel(TWO_LEVELS, ""), "neither");
+  assert.equal(importLevel(TWO_LEVELS, undefined), "neither");
 });
 
-test("a tag-level and a below-assignment refusal each name what that level is for", () => {
-  const facts = {
+test("a type in neither list is refused, naming both lists", () => {
+  const refusal = importLevelRefusal({
     workItemId: 2000,
     title: "Login is slow",
     workItemType: "Bug",
-    mapping: LEVELS
-  };
-  const tag = importLevelRefusal("tag", facts);
-  assert.match(tag, /Work item 2000 \("Login is slow"\) is Bug/);
-  assert.match(tag, /a tag has no record of its own/);
-  assert.match(tag, /Epic/);
-  assert.match(tag, /Feature/);
+    mapping: TWO_LEVELS
+  });
+  assert.match(refusal, /Work item 2000 \("Login is slow"\) is Bug/);
+  assert.match(refusal, /in neither of the mapping's lists/);
+  assert.match(refusal, /your project levels are Initiative and Epic/);
+  assert.match(refusal, /your assignment levels are Feature and User Story/);
+  assert.match(refusal, /add 'Bug' to one of the lists/);
+  // It never blames the owner: there is no owner to blame at a level that has
+  // no record.
+  assert.doesNotMatch(refusal, /assigned to anybody|owner/);
+});
 
-  const below = importLevelRefusal("below", Object.assign({}, facts, { workItemType: "Task" }));
-  assert.match(below, /is Task/);
-  assert.match(below, /below the level that carries a person's time/);
-  assert.match(below, /Feature/);
-  // Neither blames the owner: there is no owner to blame at these levels.
-  [tag, below].forEach((text) => assert.doesNotMatch(text, /assigned to anybody|owner/));
+/* --- nesting: the same work at two levels -------------------------------- */
+
+test("a work item's children are read from its forward hierarchy relations", () => {
+  assert.deepEqual(childIdsOf({
+    relations: [
+      { rel: "System.LinkTypes.Hierarchy-Forward", url: "https://dev.azure.com/x/_apis/wit/workItems/2001" },
+      { rel: "System.LinkTypes.Hierarchy-Reverse", url: "https://dev.azure.com/x/_apis/wit/workItems/1999" },
+      { rel: "System.LinkTypes.Hierarchy-Forward", url: "https://dev.azure.com/x/_apis/wit/workItems/2002/" },
+      { rel: "System.LinkTypes.Related", url: "https://dev.azure.com/x/_apis/wit/workItems/3000" }
+    ]
+  }), [2001, 2002]);
+  assert.deepEqual(childIdsOf({ fields: {} }), []);
+  assert.deepEqual(childIdsOf(null), []);
+});
+
+test("the nesting warning says the same work would be planned twice, and offers a press", () => {
+  const above = nestingOffer({
+    workItemId: 2001,
+    workItemType: "Feature",
+    relation: "ancestor",
+    relative: { id: 1000, type: "Epic", title: "Invoices", place: "Project" }
+  });
+  assert.equal(above.kind, "nesting");
+  assert.equal(above.label, "Import anyway");
+  assert.equal(above.relation, "ancestor");
+  assert.match(above.message, /Epic #1000 "Invoices" is already on the plan as a Project and sits above it/);
+  assert.match(above.message, /Importing Feature #2001 would plan the same work twice/);
+  assert.match(above.message, /the two records' figures overlap, so the report adds them together/);
+  assert.match(above.message, /Press Import anyway to place it as well/);
+
+  const below = nestingOffer({
+    workItemId: 2000,
+    workItemType: "Epic",
+    relation: "descendant",
+    relative: { id: 2001, type: "Feature", title: "PDF export", place: "Assignment" }
+  });
+  assert.equal(below.relation, "descendant");
+  assert.match(below.message, /is already on the plan as an Assignment and sits below it/);
 });
 
 /* --- the offer a matching name makes ------------------------------------ */
