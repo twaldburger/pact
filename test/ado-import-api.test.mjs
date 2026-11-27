@@ -220,8 +220,9 @@ test("an item with dates lands as an Assignment carrying them, its Person, its P
   assert.equal(created.projectId, "invoices");
   assert.equal(created.start, day(5));
   assert.equal(created.end, day(20));
-  // The Share is PACT's own number: one step of the plan's granularity.
-  assert.equal(created.share, 10);
+  // The Share is PACT's own number: an imported item is the whole of that
+  // person for those dates until a person narrows it in the panel.
+  assert.equal(created.share, 100);
   assert.deepEqual(created.link, {
     workItemId: 1001,
     rev: 7,
@@ -252,6 +253,23 @@ test("an item with dates lands as an Assignment carrying them, its Person, its P
   assert.match(line, /The dates are the work item's own\./);
   // One write, one undo step.
   assert.equal(app.store.historyDepth().undo, 1);
+});
+
+test("an import's Share is 100% whatever the plan's step is", async () => {
+  // The step governs the steppers and the drags; it no longer decides what an
+  // import takes. A 1% step and a 25% step both land the whole of the person.
+  for (const step of [1, 25]) {
+    const app = await start({
+      plan: (plan) => { plan.step = step; },
+      items: { 1000: EPIC, 1001: feature() }
+    });
+    const res = await importOf(app, { id: 1001 });
+    assert.equal(res.status, 200, res.text);
+    const created = app.store.get().assignments.slice(-1)[0];
+    assert.equal(created.share, 100, "a " + step + "% step produced " + created.share + "%");
+    // The import leaves the plan's own granularity alone.
+    assert.equal(app.store.get().step, step);
+  }
 });
 
 test("a work-item link is read the same as the bare id", async () => {

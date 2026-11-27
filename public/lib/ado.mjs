@@ -1177,17 +1177,95 @@ export function importLine(facts) {
 }
 
 /*
- * What a linked Assignment's read-only line says: the work item it came from,
- * the revision both sides last agreed, and the assumed marker when its dates are
- * PACT's own guess rather than ADO's answer. The marker is part of the line
- * because an assumed date is never written back to ADO until a person confirms
- * it, and a reader looking at the block should be able to see which it is.
+ * The work item's own page: `https://dev.azure.com/{org}/{project}/_workitems/
+ * edit/{id}`, or the same page under `{org}.visualstudio.com`. The address is
+ * the mapping's, not the link's, because a plan carries one connection and a
+ * link stores the item rather than where it was read from.
+ *
+ * No mapping means no address: a plan whose mapping was removed still holds its
+ * links, and an address invented for it would point somewhere real and wrong.
+ * So an empty string here is the row's `not linked`, and it is never guessed at.
  */
-export function linkLine(link) {
+export function workItemUrl(link, mapping) {
+  const id = Number(link && link.workItemId);
+  const base = adoUrlFor(mapping);
+  if (!(id > 0) || base === "") return "";
+  return base + "/_workitems/edit/" + id;
+}
+
+/*
+ * The id the row links: the work item's own number and nothing else, because
+ * that is what a reader recognises the item by now that it can be clicked.
+ */
+export function linkLabel(link) {
+  const id = Number(link && link.workItemId);
+  return id > 0 ? String(id) : "";
+}
+
+/*
+ * The type the row names beside the id, as the link stores it - no lookup, and
+ * no fallback: a link that recorded no type shows the id alone rather than being
+ * called a "work item", which is what its absence would be read as.
+ */
+export function linkType(link) {
+  const type = link && link.workItemType;
+  return typeof type === "string" ? type.trim() : "";
+}
+
+/*
+ * What the row used to spell out, kept where this app explains things: the
+ * work item's type, the revision both sides last agreed, and the assumed marker
+ * when its dates are PACT's own guess rather than ADO's answer. The marker is
+ * there because an assumed date is never written back to ADO until a person
+ * confirms it, so a reader should be able to see which kind of date a block
+ * carries.
+ */
+export function linkFacts(link) {
   const facts = link || {};
   const type = String(facts.workItemType === undefined || facts.workItemType === null ? "" : facts.workItemType).trim();
   let text = (type === "" ? "Work item " : type + " ") + "#" + facts.workItemId +
     ", revision " + facts.rev;
   if (facts.datesAssumed) text += " - its dates are assumed";
   return text + ".";
+}
+
+// The two explanations the row's hover title ends with. The link's own facts
+// lead it; these say what the row is not, which is the part a reader cannot
+// tell by looking at it.
+const LINK_READ_ONLY_TIP =
+  "It is read-only here: an import establishes the link, and PACT does not write to ADO yet.";
+const LINK_NOT_LINKED_TIP =
+  "No Azure DevOps work item behind this record: an import creates the link, and PACT does not " +
+  "write to ADO yet.";
+
+/*
+ * The ADO row of a panel, as one rule, so an Assignment's row and a Project's
+ * cannot drift apart: what it reads, where it points and what it says on hover.
+ *
+ * The row names the work item's type and links its id - `Feature 1234` with the
+ * number clickable - because the type is what tells a reader which kind of thing
+ * they are looking at, and the id is what they came to follow.
+ *
+ * It is drawn for a Project as well as an Assignment, and always: with a link it
+ * reads the type and the id and points at the work item, and without one it
+ * reads `not linked`, which is information rather than an error - seeing that no
+ * work item is behind a record is worth the row. A record is linked only when
+ * the plan's mapping can build its address, so a plan with no mapping reads `not
+ * linked` rather than any invented one.
+ *
+ * Nothing here reads `values.personEmail`: a Project's link carries no owner, so
+ * a row that assumed one would break on the half of the plan that has no owner.
+ */
+export function linkRow(link, mapping) {
+  const url = workItemUrl(link, mapping);
+  if (url === "") {
+    return { linked: false, type: "", text: "not linked", href: "", title: LINK_NOT_LINKED_TIP };
+  }
+  return {
+    linked: true,
+    type: linkType(link),
+    text: linkLabel(link),
+    href: url,
+    title: linkFacts(link) + " " + LINK_READ_ONLY_TIP
+  };
 }

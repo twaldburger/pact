@@ -62,7 +62,7 @@ import {
   assignmentLevelBelow,
   connectionLine,
   importLine,
-  linkLine,
+  linkRow,
   projectImportLine,
   readWorkItemId,
   tokenLine
@@ -3067,6 +3067,39 @@ function copyPerson(person) {
   }).catch(showError);
 }
 
+/*
+ * The ADO row a Project's and an Assignment's panel both draw, from the one rule
+ * in public/lib/ado.mjs: the work item's type and its id, with the id a link to
+ * the item's own page opening in a new tab so reading the plan is not
+ * interrupted - or the words `not linked` when there is nothing behind the
+ * record. The rule also holds the hover title, which carries what the row used
+ * to spell out - the type, the revision both sides last agreed and the assumed
+ * marker - beside the sentence saying the row is read-only. A record with no
+ * link and a plan with no mapping both read `not linked`: no address is ever
+ * invented for one.
+ */
+function adoLinkRow(link, id) {
+  var row = linkRow(link, adoState && adoState.mapping);
+  var node = el("span", "ado__link");
+  node.id = id;
+  node.setAttribute("title", row.title);
+  if (row.linked) {
+    // The type is the row's own text and the id is the link, so the word that
+    // says which kind of thing this is never looks like the thing to press.
+    if (row.type) node.appendChild(document.createTextNode(row.type + " "));
+    var anchor = el("a", "ado__link__item");
+    anchor.href = row.href;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.textContent = row.text;
+    node.appendChild(anchor);
+  } else {
+    node.textContent = row.text;
+    node.classList.add("ado__link--none");
+  }
+  return formRow("ADO", node, row.title);
+}
+
 function openProjectPanel(project, trigger) {
   var editing = !!project;
   var node = panelShell(editing ? "Project" : "Add project",
@@ -3094,6 +3127,11 @@ function openProjectPanel(project, trigger) {
   // never how the Project is stored.
   var absence = checkbox(editing ? !!project.absence : false, "Absence");
   form.appendChild(formRow("Absence", absence.node));
+
+  // A Project can carry a link, so its panel says whether one exists - and
+  // always, because reading that a Project has no work item behind it is
+  // information. A new Project has nothing to link yet, so it has no row.
+  if (editing) form.appendChild(adoLinkRow(project.link, "project-ado-link"));
 
   node.appendChild(form);
   var error = errorLine(node);
@@ -3195,16 +3233,12 @@ function openAssignmentPanel(a, trigger) {
   form.appendChild(formRow("Tags", tags.node));
   var noteInput = input(a.raw.note);
   form.appendChild(formRow("Note", noteInput));
-  // A linked Assignment says so, read-only: the link is ADO's, established by
-  // the import and changed there rather than retyped here. Whether its dates
-  // are assumed is part of what it says, because an assumed date is PACT's own
-  // guess and nothing writes it back to ADO.
-  if (a.raw.link) {
-    var linkText = el("span", "ado__link");
-    linkText.id = "assignment-ado-link";
-    linkText.textContent = linkLine(a.raw.link);
-    form.appendChild(formRow("ADO", linkText, ADO_LINK_TIP));
-  }
+  // The ADO row is on every Assignment's panel: a linked one reads the work
+  // item's id as a link to it, and an unlinked one reads `not linked`, because
+  // which of the two a block is belongs to reading the block. It is read-only
+  // either way - the link is ADO's, established by the import and changed there
+  // rather than retyped here.
+  form.appendChild(adoLinkRow(a.raw.link, "assignment-ado-link"));
   node.appendChild(form);
   var error = errorLine(node);
 
@@ -7252,11 +7286,6 @@ var CHOOSE_TYPE = "Choose one";
 // the press then does with it.
 var ADO_IMPORT_TIP = ADO_WORK_ITEM_SHAPES +
   " PACT reads the item's title, its owner, the parents that decide the Project, and its dates.";
-
-// The linked Assignment's explanation, on hover: which way the link points.
-var ADO_LINK_TIP = "The Azure DevOps work item this Assignment was imported from, and the revision " +
-  "both sides last agreed. It is read-only here: an import establishes the link, and PACT does not " +
-  "write to ADO yet.";
 
 /*
  * Fill a type select from the instance, keeping a stored name visible even when

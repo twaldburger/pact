@@ -29,8 +29,11 @@ import {
   importLine,
   importPlacement,
   iterationStartFor,
-  linkLine,
+  linkFacts,
+  linkLabel,
   linkRefusals,
+  linkRow,
+  linkType,
   normalizeLink,
   parentIdOf,
   personForEmail,
@@ -40,7 +43,8 @@ import {
   readWorkItemId,
   schedulingFields,
   sprintForDate,
-  unmatchedAssigneeOffer
+  unmatchedAssigneeOffer,
+  workItemUrl
 } from "../public/lib/ado.mjs";
 import { scratch } from "../test-support/scratch.mjs";
 
@@ -348,6 +352,15 @@ test("the sprint chain a plan derives is what the placement is matched against",
 
 /* --- the link and its baseline ------------------------------------------- */
 
+// The connection a row's address is built from: the same pair the settings
+// store, and the same shape a plan carries in its `ado` block.
+const MAPPING = {
+  organizationUrl: "https://dev.azure.com/example",
+  project: "PACT",
+  projectLevel: "Epic",
+  assignmentLevel: "Feature"
+};
+
 const LINK = {
   workItemId: 1234,
   rev: 7,
@@ -415,11 +428,69 @@ test("a plan without any link, and a Person without an email, stay valid", () =>
   assert.deepEqual(validatePlan(good), []);
 });
 
-test("the link's read-only line names the item, the revision and the assumed marker", () => {
-  assert.equal(linkLine(LINK), "Feature #1234, revision 7 - its dates are assumed.");
-  assert.equal(linkLine(Object.assign({}, LINK, { datesAssumed: false })),
-    "Feature #1234, revision 7.");
-  assert.equal(linkLine({ workItemId: 12, rev: 1, datesAssumed: false }), "Work item #12, revision 1.");
+test("the link row names the type and the id, on either kind of record", () => {
+  // The row is the type and the id, and the id is the link's own text. A
+  // Project's link carries no owner's email, so nothing in the row may read one.
+  const assignment = linkRow(LINK, MAPPING);
+  assert.equal(assignment.type, "Feature");
+  assert.equal(assignment.text, "1234");
+  assert.equal(linkRow(PROJECT_LINK, MAPPING).type, "Epic");
+  assert.equal(linkRow(PROJECT_LINK, MAPPING).text, "2000");
+  // The type is the link's own recorded name, with no lookup: a link that
+  // recorded none shows the id alone rather than being called a work item.
+  assert.equal(linkLabel(LINK), "1234");
+  assert.equal(linkType({ workItemId: 5, rev: 1, workItemType: "  Bug " }), "Bug");
+  assert.equal(linkType({ workItemId: 5, rev: 1 }), "");
+  const untyped = linkRow({ workItemId: 12, rev: 1, datesAssumed: false }, MAPPING);
+  assert.equal(untyped.type, "");
+  assert.equal(untyped.text, "12");
+});
+
+test("the facts the row used to spell out are its hover title", () => {
+  const assignment = linkRow(LINK, MAPPING);
+  assert.match(assignment.title, /Feature #1234, revision 7/);
+  assert.match(assignment.title, /its dates are assumed/);
+  assert.match(assignment.title, /an import establishes the link/);
+  assert.match(assignment.title, /does not write to ADO/);
+  // A Project's link carries the type and revision it has and no assumed
+  // marker, because a Project has no dates to assume.
+  const project = linkRow(PROJECT_LINK, MAPPING);
+  assert.match(project.title, /Epic #2000, revision 4/);
+  assert.doesNotMatch(project.title, /assumed/);
+  // An untyped link is a work item rather than nothing.
+  assert.equal(linkFacts({ workItemId: 12, rev: 1, datesAssumed: false }), "Work item #12, revision 1.");
+});
+
+test("the row's address comes from the mapping, and is the work item's own page", () => {
+  assert.equal(workItemUrl(LINK, MAPPING), "https://dev.azure.com/example/PACT/_workitems/edit/1234");
+  assert.equal(workItemUrl(PROJECT_LINK, MAPPING), "https://dev.azure.com/example/PACT/_workitems/edit/2000");
+  assert.equal(linkRow(LINK, MAPPING).href, "https://dev.azure.com/example/PACT/_workitems/edit/1234");
+  // It is a work-item address, read back as the id it names - the same rule the
+  // import's own field reads, so a link the app draws is a link it accepts.
+  assert.deepEqual(readWorkItemId(linkRow(LINK, MAPPING).href), { id: 1234, refusal: "" });
+  // A visualstudio.com connection keeps its own host.
+  assert.equal(workItemUrl(LINK, Object.assign({}, MAPPING, {
+    organizationUrl: "https://example.visualstudio.com"
+  })), "https://example.visualstudio.com/PACT/_workitems/edit/1234");
+  // A project name with a space in it is encoded as the mapping's URL is.
+  assert.equal(workItemUrl(LINK, Object.assign({}, MAPPING, { project: "PACT Lab" })),
+    "https://dev.azure.com/example/PACT%20Lab/_workitems/edit/1234");
+});
+
+test("no mapping, no address: the row reads `not linked` rather than inventing one", () => {
+  const unlinked = linkRow(LINK, null);
+  assert.equal(unlinked.linked, false);
+  assert.equal(unlinked.href, "");
+  assert.equal(unlinked.text, "not linked");
+  assert.equal(unlinked.type, "");
+  assert.match(unlinked.title, /an import creates the link/);
+  assert.equal(workItemUrl(LINK, undefined), "");
+  assert.equal(workItemUrl(LINK, {}), "");
+  // A record with no link at all is the same row, whatever the mapping says.
+  const none = linkRow(undefined, MAPPING);
+  assert.equal(none.linked, false);
+  assert.equal(none.text, "not linked");
+  assert.equal(linkRow(null, MAPPING).text, "not linked");
 });
 
 /* --- one write, one undo -------------------------------------------------- */
