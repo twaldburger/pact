@@ -84,11 +84,14 @@ test("the row-height pair keeps its vertical arrows", () => {
   });
 });
 
-test("a disabled spacing button takes the shared disabled treatment", () => {
-  const rule = STYLE.match(/\.spacing__btn:disabled[^{}]*\{([^}]*)\}/);
-  assert.ok(rule, "the .spacing__btn:disabled rule is missing");
+test("a disabled spacing button takes the bar's shared disabled treatment", () => {
+  const rule = STYLE.match(/\.topbar button:disabled[^{}]*\{([^}]*)\}/);
+  assert.ok(rule, "the bar's one disabled rule is missing");
   assert.match(rule[1], /opacity:\s*var\(--op-disabled\)/);
   assert.match(rule[1], /cursor:\s*default/);
+  // The pair's buttons are buttons in the bar, so that rule is theirs; the pair
+  // carries no disabled rule of its own.
+  assert.doesNotMatch(STYLE, /\.spacing__btn:disabled/);
 });
 
 test("the spacing hover does not fire on a disabled button", () => {
