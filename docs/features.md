@@ -887,12 +887,19 @@ and Milestone panels; `Options` then `Tags...`, whose detail counts the
 keys and colours set, opens the panel: a `Projects`, `People` and `Assignments`
 select for the key, then the values grouped by key with their swatches.
 
-## The ADO panel
+## The Azure DevOps settings
 
 PACT can be told how an Azure DevOps project maps onto the plan. A
 [connection](../GLOSSARY.md#connection) is two halves that travel differently: a
 [Mapping](../GLOSSARY.md#mapping), which is plan data and is written into the
 plan file, and a personal access token, which is a secret and never is.
+
+Setting the connection up and using it are two surfaces, and each door opens
+exactly one kind of thing. The settings are this one: they change rarely, they
+are visited carefully, and a person who is not configuring anything never meets
+them. The operations - importing a work item today, and the sync when it lands -
+open from the top bar's own `ADO` button and are documented under
+[Importing a work item](#importing-a-work-item).
 
 The panel asks for one URL, because a URL is what a person has to hand - from
 the browser bar, or pasted out of a work item - while the organisation's address
@@ -955,10 +962,10 @@ wrong for this organisation, expired or revoked, or missing a scope, because
 PACT needs Work Items (read) and Project and Team (read). Every ADO
 call is the direct result of a press - opening this panel (which loads the
 types once, because the slots are chosen from them), Test connection, Save
-mapping, or a token action. There is no status light, no timer and no polling:
-with ADO unreachable the plan keeps working exactly as it does today, and the
-panel says why the last press failed. Saving the mapping is one plan write, so
-it is one Undo step back, like any other change.
+mapping, a token action, or an import. There is no status light, no timer and no
+polling: with ADO unreachable the plan keeps working exactly as it does today,
+and the panel whose press failed says why. Saving the mapping is one plan write,
+so it is one Undo step back, like any other change.
 
 The panel draws two lines under its rows, in one style. The first is the
 token's state - `A personal access token is set at <path>.` - green while a
@@ -990,8 +997,17 @@ assignment, so the panel never sits on a pair the rank rule refuses. It opens
 with a stored mapping shown as the one URL it is. A plan carrying a mapping and
 no token keeps the panel and says where the token file goes.
 
-**The import.** Below the connection's rows the panel holds one field and one
-press: paste a work-item id - `12345`, or `#12345` - or the browser's link to it, and press
+**Where the controls are.** `Options` then `Azure DevOps...`, whose detail says
+`Not configured` or names the mapped ADO project. The settings panel holds the
+URL, the mapping's three rows, the token field with its Save and Clear actions,
+the token's state line, the last connection line, and a footer with
+`Test connection` and `Save mapping`. It holds no import control at all - an
+operation is not a setting.
+
+## Importing a work item
+
+**The import.** The operations panel holds one field and one press: paste a
+work-item id - `12345`, or `#12345` - or the browser's link to it, and press
 `Import`. The link may be any of the shapes ADO writes, such as
 `https://dev.azure.com/{org}/{project}/_workitems/edit/12345`, the same page
 under `https://{org}.visualstudio.com/DefaultCollection/{project}`, or the older
@@ -1006,11 +1022,12 @@ becomes the Assignment's own Name. The owner is matched
 to a Person **by email and never by name** - the instance's own `uniqueName`,
 compared without case against each live Person's email - because "Anna Meier"
 and "Meier, Anna (EXT)" are one person and no string comparison can know that. An
-email matching no Person is refused **with an offer**: the panel draws a press
-that creates the Person with ADO's display name verbatim and that email, which
-can then be edited like any other. Nothing is created before that press, so a
-Person never appears on the plan unasked. An item assigned to nobody, or to a
-group - an identity with no email - is refused, and the refusal names which.
+email matching no Person is refused **with an offer**: the operations panel
+draws a press that creates the Person with ADO's display name verbatim and that
+email, which can then be edited like any other. Nothing is created before that
+press, so a Person never appears on the plan unasked. An item assigned to nobody,
+or to a group - an identity with no email - is refused, and the refusal names
+which.
 
 **The parents decide the Project.** The import walks up from the item to the
 first ancestor whose work-item type is the mapping's project level, and that
@@ -1065,10 +1082,22 @@ naming that Assignment; archive it first if a second block of the same work is
 what was meant. ADO's own dates outside the plan period are refused by the plan's
 rule rather than moved, and widening the period or archiving is the answer.
 
-**Where the controls are.** `Options` then `ADO...`, whose detail says
-`Not configured` or names the mapped ADO project. The panel holds the URL, the
-mapping's three rows, the token field with its Save and Clear actions, and the
-import row with its field and its `Import` press.
+**Where the controls are.** The `ADO` button in the top bar, after the undo and
+redo controls and before the Options glyph, so it sits with the app-level
+controls rather than among the view controls. It is always visible, and it is
+withdrawn until an operation could work: a mapping in the plan, with its project
+and assignment levels, **and** a token on this machine. A plan carrying a mapping
+but no token leaves it withdrawn, and the reason names the missing half rather
+than repeating the same sentence. It is withdrawn with `aria-disabled` rather
+than `disabled`, because a natively disabled button takes no focus and its
+tooltip is unreliable: it keeps its focus and its title, and a press while it is
+withdrawn writes nothing and says the same words in the app's toast, so a mouse
+and a keyboard both learn the reason. On a plan that is not configured at all
+that reason is `Connect PACT to Azure DevOps first: Options then Azure DevOps...`,
+which points at the settings. The operations panel holds the import's field, its
+`Import` press, the offer to create a missing Person, and its own line reporting
+what the import did or refused. Nothing about the URL, the token or the mapping's
+levels is in it: the settings are the other door.
 
 ## Reset view
 

@@ -15,7 +15,10 @@ import path from "node:path";
 import { createStore, seedPlan, validatePlan, ValidationError } from "../lib/plan.mjs";
 import { adoState, clearToken, readToken, tokenState, writeToken, resolveTokenFile } from "../lib/ado.mjs";
 import {
+  ADO_CONNECT_FIRST,
   ADO_PLACEHOLDER,
+  adoMappingInPlan,
+  adoOperationState,
   adoRefusals,
   connectionLine,
   defaultTokenFile,
@@ -268,15 +271,90 @@ test("clearing the token deletes the file, and an absent file is already clear",
 
 /* --- the menu's entry ---------------------------------------------------- */
 
-test("ADO is always an entry in the Options menu's last group, after Plan file", () => {
+test("the settings are always an entry in the Options menu's last group, after Plan file", () => {
   const groups = optionGroups(optionsItems());
   const last = groups[groups.length - 1];
   assert.deepEqual(last, ["plan-file", "ado"]);
-  assert.equal(adoItem(null).label, "ADO...");
+  // Titled for what it configures, with the ellipsis every panel-opener here
+  // carries: opening it is the settings and nothing else.
+  assert.equal(adoItem(null).label, "Azure DevOps...");
   assert.equal(adoItem(undefined).detail, "Not configured");
   assert.equal(adoItem({ project: "PACT" }).detail, "PACT");
   // A token on this machine is not a mapping: the detail speaks for the plan.
   assert.equal(adoItem({ project: "" }).detail, "Not configured");
+});
+
+/* --- the two doors ------------------------------------------------------- */
+
+// The settings hold configuration and the operations hold the import, and the
+// top bar's button is the second door. Whether that button may be opened is one
+// of the rules, because it is both halves or neither that make an operation
+// work: a mapping in the plan and a token on this machine.
+
+const COMPLETE = {
+  organizationUrl: "https://dev.azure.com/timwaldburger",
+  project: "PACT",
+  projectLevel: "Epic",
+  assignmentLevel: "Feature"
+};
+
+test("a mapping is in the plan only when both of its levels and its address are", () => {
+  assert.equal(adoMappingInPlan(null), false);
+  assert.equal(adoMappingInPlan({}), false);
+  assert.equal(adoMappingInPlan(COMPLETE), true);
+  // The tag level is optional in the plan, so it is optional here too.
+  assert.equal(adoMappingInPlan(Object.assign({ tagLevel: "User Story" }, COMPLETE)), true);
+  // A half-made mapping is not one: an operation reading it would fail.
+  ["organizationUrl", "project", "projectLevel", "assignmentLevel"].forEach((key) => {
+    const short = Object.assign({}, COMPLETE);
+    delete short[key];
+    assert.equal(adoMappingInPlan(short), false, key);
+  });
+  // And a mapping the store itself would refuse never counts as configured.
+  assert.equal(adoMappingInPlan(Object.assign({ pat: "a-secret" }, COMPLETE)), false);
+});
+
+test("no mapping and no token: the button is withheld and says where to go", () => {
+  const state = adoOperationState(null, false);
+  assert.equal(state.enabled, false);
+  assert.equal(state.missing, "both");
+  assert.equal(state.title, "Connect PACT to Azure DevOps first: Options then Azure DevOps\u2026");
+  assert.equal(ADO_CONNECT_FIRST, state.title);
+});
+
+test("a mapping with no token stays withheld, and the reason names the token", () => {
+  const state = adoOperationState(COMPLETE, false);
+  assert.equal(state.enabled, false);
+  assert.equal(state.missing, "token");
+  assert.match(state.title, /no token is/);
+  assert.match(state.title, /Options then Azure DevOps\u2026$/);
+  // Not the sentence for a plan with nothing configured at all: the half that
+  // is present is not asked for again.
+  assert.notEqual(state.title, ADO_CONNECT_FIRST);
+  assert.doesNotMatch(state.title, /^Connect PACT to Azure DevOps first/);
+});
+
+test("a token with no mapping stays withheld, and the reason names the mapping", () => {
+  const state = adoOperationState(null, true);
+  assert.equal(state.enabled, false);
+  assert.equal(state.missing, "mapping");
+  assert.match(state.title, /no mapping/);
+  assert.notEqual(state.title, ADO_CONNECT_FIRST);
+});
+
+test("both halves present: the button may be opened, and says what it opens", () => {
+  const state = adoOperationState(COMPLETE, true);
+  assert.equal(state.enabled, true);
+  assert.equal(state.missing, "");
+  assert.equal(state.title, "Import a work item from Azure DevOps");
+});
+
+test("a token is a flag, not a value: only a set one enables the button", () => {
+  // The state is what the server reports, and a token that is absent, still
+  // the placeholder, or simply not reported is no token.
+  assert.equal(adoOperationState(COMPLETE, undefined).enabled, false);
+  assert.equal(adoOperationState(COMPLETE, null).enabled, false);
+  assert.equal(adoOperationState(COMPLETE, "a-real-token").enabled, false);
 });
 
 test("the store refuses a credential-shaped key on a direct write too", () => {

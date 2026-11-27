@@ -213,7 +213,9 @@ at, and what to say when neither happened.
 - Reach Azure DevOps. The tool reads the plan file and calls the app; it never
   calls ADO, never reads the connection's token, and never reads the plan's
   [Mapping](../GLOSSARY.md#mapping) beyond passing the plan along. The
-  connection is set up and tested in the app, from `Options` then `ADO...`.
+  connection is set up and tested in the app, from `Options` then
+  `Azure DevOps...`, and its operations - the import - open from the `ADO`
+  button in the top bar.
 - Tell you what the screen looks like. Only measuring it or looking at it does.
 
 ## The commands, in full

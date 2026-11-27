@@ -1,6 +1,6 @@
 /*
- * The one URL field in the ADO panel: what a pasted URL is read as, and what
- * the panel does with the reading.
+ * The one URL field in the Azure DevOps settings: what a pasted URL is read as,
+ * and what the panel does with the reading.
  *
  * The reading itself is a pure function, so every accepted shape, the dropped
  * tail and the refusals are asserted here directly. So is the pair a press
@@ -232,13 +232,13 @@ test("a pair with no address is no URL", () => {
 
 /* --- the panel ------------------------------------------------------------ */
 
-// The ADO panel's source, from its opening function to the helper that follows
-// it, read the way the other panel tests read one.
+// The settings panel's source, from its opening function to the operations
+// panel that follows it, read the way the other panel tests read one.
 const PANEL = (() => {
-  const start = APP.indexOf("function openAdoPanel(");
-  assert.ok(start >= 0, "the ADO panel is not in the script");
-  const end = APP.indexOf("\n// A type slot's select, empty until the instance answers.", start);
-  assert.ok(end > start, "the ADO panel does not end where its helper begins");
+  const start = APP.indexOf("function openAdoSettingsPanel(");
+  assert.ok(start >= 0, "the Azure DevOps settings panel is not in the script");
+  const end = APP.indexOf("\n/* --- the Azure DevOps operations panel", start);
+  assert.ok(end > start, "the settings panel does not end where the operations panel begins");
   return APP.slice(start, end);
 })();
 
@@ -334,8 +334,8 @@ test("a stored mapping opens as the one URL it is", () => {
 /* --- the feature reference ------------------------------------------------ */
 
 function adoSection() {
-  const start = FEATURES.indexOf("## The ADO panel");
-  assert.ok(start >= 0, "the ADO panel has no section in the feature reference");
+  const start = FEATURES.indexOf("## The Azure DevOps settings");
+  assert.ok(start >= 0, "the Azure DevOps settings have no section in the feature reference");
   const end = FEATURES.indexOf("\n## ", start + 1);
   return FEATURES.slice(start, end === -1 ? FEATURES.length : end);
 }
@@ -347,4 +347,12 @@ test("the reference describes the simpler panel, not the reading line", () => {
   assert.match(section, /`Project`, `Assignment` and `Tag`/);
   assert.match(section, /title/);
   assert.match(section, /Test connection/, "a mis-paste is caught at Test connection");
+});
+
+test("the settings section says where its controls are, and that no import is among them", () => {
+  const section = adoSection();
+  assert.match(section, /Where the controls are/);
+  assert.match(section, /`Options` then `Azure DevOps\.\.\.`/);
+  assert.match(section, /`Test connection` and `Save mapping`/);
+  assert.match(section, /no import control/);
 });

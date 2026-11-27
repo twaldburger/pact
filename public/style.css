@@ -2851,10 +2851,12 @@ down to the last row and no further. */
    plan path is long and is meant to be read whole. */
 .panel--planfile { width: 24rem; }
 
-/* The ADO panel: the one URL field, the three rows named after what each maps -
-   Project, Assignment and Tag - and the token. A little wider than the default
-   so a long URL and a long type name fit one line, and the token's field and its
-   two actions stack instead of squeezing the field into an unreadable column. */
+/* The Azure DevOps panels, which are two: the settings - the one URL field, the
+   three rows named after what each maps (Project, Assignment and Tag) and the
+   token - and the operations, which hold the import. A little wider than the
+   default so a long URL, a long type name or a long work-item link fits one
+   line, and the token's field and its two actions stack instead of squeezing the
+   field into an unreadable column. */
 .panel--ado { width: 24rem; }
 
 .ado__token {
@@ -2867,9 +2869,10 @@ down to the last row and no further. */
 .ado__token input { flex: 1 1 100%; }
 
 /* The import row: one field and one press, wrapping the same way the token row
-   does so a long work-item link never squeezes the field into a column. The
-   block sits below the connection's rows, with the hint that says one item at a
-   time and the line the last import left. */
+   does so a long work-item link never squeezes the field into a column. In the
+   settings panel the block sat below the connection's rows and carried the hint
+   that says one item at a time; it is the operations panel's whole content now,
+   so the rule above it and the space that separated it from rows are gone. */
 .ado__import {
   display: flex;
   flex-direction: column;
@@ -2877,6 +2880,12 @@ down to the last row and no further. */
   margin-top: var(--sp-3);
   padding-top: var(--sp-3);
   border-top: 1px solid var(--rule);
+}
+
+.ado__import--sole {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .ado__import-row {
