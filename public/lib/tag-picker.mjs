@@ -1,6 +1,9 @@
 /*
- * PACT's tag picker: the rules behind the suggestion list a tag field opens,
- * kept apart from the DOM that draws it so `node --test` pins them.
+ * PACT's picker: the rules behind the list a multi-choice field opens, kept
+ * apart from the DOM that draws it so `node --test` pins them. One list serves
+ * two fields - a tag field, whose vocabulary is the plan's own tags, and the
+ * ADO mapping's lists, whose vocabulary is the types the instance ranks - so
+ * the rules and the manners are written once here.
  *
  * A tag field offers the plan's own vocabulary for its editor's vocabulary -
  * a Person field offers other People's tags, a Project field other Projects'
@@ -17,6 +20,46 @@
  */
 import { matchesQuery } from "./filter.mjs";
 import { hasTag, withTag } from "./panels.mjs";
+
+// The word a closed choice field shows when it holds nothing. The ellipsis is
+// the app's own: it says a list opens, as the Filter's rows do.
+export const CHOOSE_NONE = "Choose\u2026";
+
+function isName(value) {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+/*
+ * What a closed choice field says: the values it holds, in the order it holds
+ * them, or the stand-in word when it holds none. One field is one line, so a
+ * several-value choice is named on that line rather than as a row per value.
+ */
+export function choiceText(chosen) {
+  const list = (chosen || []).filter(isName);
+  return list.length ? list.join(", ") : CHOOSE_NONE;
+}
+
+/*
+ * The rows a choice list shows: the vocabulary it was given, then any chosen
+ * value that vocabulary does not name. A plan may store a type the instance no
+ * longer reports, and a list that hid it would change the mapping behind the
+ * person's back - so it stays listed, and stays ticked, until the person
+ * unticks it themselves.
+ */
+export function choiceRows(vocabulary, chosen) {
+  const rows = (vocabulary || []).filter(isName);
+  (chosen || []).filter(isName).forEach(function (name) {
+    if (rows.indexOf(name) === -1) rows.push(name);
+  });
+  return rows;
+}
+
+// The commit row's words for a list that replaces its choice: the count of the
+// ticks, where choosing none is a real answer rather than an empty one.
+export function applyLabel(count) {
+  if (count === 0) return "Use no types";
+  return count === 1 ? "Use 1 type" : "Use " + count + " types";
+}
 
 /*
  * The tags the list shows: the offered vocabulary, minus anything the editor

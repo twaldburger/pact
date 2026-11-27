@@ -2661,27 +2661,27 @@ down to the last row and no further. */
 
 .tags { display: block; }
 
-/* The tag suggestions: the Filter's own fixed dropdown and rows, with the one
-   state the Filter has no equivalent of - a row ticked for a multi-pick. The
-   tick is a mark in the row's own leading column, in the app's ink, and a
-   ticked row carries the quiet tint the chips' hover uses, so a tick reads
-   before anything lands in the chips. The column is always there so the tags
-   never shift as rows are ticked. */
-.tags__menu { overflow-y: auto; }
-.tags__list { display: block; }
+/* The tick list, shared by the tag field and the mapping lists: the Filter's own
+   fixed dropdown and rows, with the one state the Filter has no equivalent of -
+   a row ticked for a multi-pick. The tick is a mark in the row's own leading
+   column, in the app's ink, and a ticked row carries the quiet tint the chips'
+   hover uses, so a tick reads before anything is taken. The column is always
+   there so the rows never shift as they are ticked. */
+.pick__menu { overflow-y: auto; }
+.pick__list { display: block; }
 
-.tags__tick {
+.pick__tick {
   flex: 0 0 auto;
   width: 1ch;
   color: transparent;
 }
 
 .filter__hit.is-ticked { background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent); }
-.filter__hit.is-ticked .tags__tick { color: var(--ink); }
+.filter__hit.is-ticked .pick__tick { color: var(--ink); }
 
 /* The last row of a list with ticks: the same row a mouse commits through, so
-   the keyboard is not the only way to add several tags at once. */
-.tags__commit { font-weight: var(--fw-title); }
+   the keyboard is not the only way to take several at once. */
+.pick__commit { font-weight: var(--fw-title); }
 
 /* Sized to the tag chips it sits beside, so the row is one height. */
 .form .tags__input {
@@ -2950,27 +2950,34 @@ down to the last row and no further. */
   color: var(--ink-soft);
 }
 
-/* A mapping list: one row of ticked boxes per type, in a box the row draws, so
-   two ticks read as two levels rather than as a picker that can hold one. Each
-   box is the control and its label is the type's name, so a reader is told the
-   type; the whole list scrolls rather than widening the panel when an instance
-   reports many types, and the empty state is one line of words. */
-.ado__levels {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  max-height: 9rem;
-  overflow-y: auto;
-  min-width: 0;
+/* A choice field: one closed row naming what is chosen, drawn as a field so it
+   sits in its form row like every other control, and opening the shared tick
+   list rather than stacking a box per value down the panel. "Choose..." until
+   something is chosen is the field's own word, from the rules in the script. */
+.choose__value {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  text-align: left;
+  cursor: pointer;
 }
 
-.ado__level {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
+.choose__value:hover { border-color: var(--rule-strong); }
 
-.ado__levels-empty { color: var(--ink-soft); }
+/* What a list with nothing to offer says: before Test connection the
+   instance's types are unknown, and the list says what it is waiting for
+   rather than opening empty. */
+.choose__empty {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--ink-soft);
+  font-size: var(--fs-data);
+}
 
 /* What the panel says about the token and about the last press: a file path
    and a set of ranks, either of which can be long, so both wrap anywhere

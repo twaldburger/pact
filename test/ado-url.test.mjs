@@ -240,9 +240,9 @@ const FORM_ROW = (() => {
   return APP.slice(start, end);
 })();
 
-// The type slot's filler, where the empty choice lives.
+// The mapping list's control, where the two dropdowns come from.
 const FILL = (() => {
-  const start = APP.indexOf("function levelTicks(");
+  const start = APP.indexOf("function levelPicker(");
   assert.ok(start >= 0, "the mapping list's control is not in the script");
   const end = APP.indexOf("\n/* --- the help panel", start);
   assert.ok(end > start, "the list control does not end where the help panel begins");
@@ -303,13 +303,13 @@ test("the two explanations are one sentence each, in the app's voice", () => {
   });
 });
 
-test("the two lists are ticked over the instance's types, and nothing is pre-ticked", () => {
-  // The rows are the tick lists, filled from the instance's ranked types with
-  // the plan's stored lists ticked - so two names on each side is a plan the
+test("the two lists are chosen from the instance's types, and nothing is pre-chosen", () => {
+  // The two fields are the tick list over the instance's ranked types, opening
+  // with the plan's stored lists - so two names on each side is a plan the
   // panel can open and a save it can send.
-  assert.match(PANEL, /var projectLevels = levelTicks\(\);/);
+  assert.match(PANEL, /var projectLevels = levelPicker\("Project work-item types"\);/);
   assert.match(PANEL, /projectLevels\.fill\(\[\], mapping\.projectLevels \|\| \[\]\);/);
-  assert.match(PANEL, /var assignmentLevels = levelTicks\(\);/);
+  assert.match(PANEL, /var assignmentLevels = levelPicker\("Assignment work-item types"\);/);
   assert.match(PANEL, /assignmentLevels\.fill\(\[\], mapping\.assignmentLevels \|\| \[\]\);/);
   assert.match(PANEL, /projectLevels\.fill\(ranked, currentOr\(projectLevels, mapping\.projectLevels\)\);/);
   assert.match(PANEL, /assignmentLevels\.fill\(ranked, currentOr\(assignmentLevels, mapping\.assignmentLevels\)\);/);
@@ -317,14 +317,15 @@ test("the two lists are ticked over the instance's types, and nothing is pre-tic
   // one before the request is made.
   assert.match(PANEL, /projectLevels: projectLevels\.chosen\(\),\s*assignmentLevels: assignmentLevels\.chosen\(\)/);
   assert.match(PANEL, /var refusals = adoRefusals\(payload\);/);
-  // A list is a list: the control offers every type as a tick, not as the one
-  // value of a select.
-  assert.match(FILL, /box\.type = "checkbox";/);
-  assert.match(FILL, /box\.checked = \(selected \|\| \[\]\)\.indexOf\(name\) !== -1;/);
-  assert.match(FILL, /return boxes\.filter\(function \(box\) \{ return box\.checked; \}\)/);
-  // A stored name the instance did not report stays visible and ticked, so the
-  // panel shows what the plan holds rather than dropping it.
-  assert.match(FILL, /if \(listed\.indexOf\(name\) === -1\) listed\.push\(name\);/);
+  // A list is a list: the control offers every type as a row to tick, not as
+  // the one value of a select, and the rows come from the shared rules.
+  assert.match(FILL, /suggest: function \(\) \{ return choiceRows\(vocabulary, levels\); \}/);
+  assert.match(FILL, /seeded: function \(\) \{ return levels; \}/);
+  // A stored name the instance did not report stays listed and ticked, so the
+  // panel shows what the plan holds rather than dropping it. The rule is
+  // choiceRows, held in tag-picker.test.mjs; what is checked here is that the
+  // panel uses it and keeps its own copy of the list.
+  assert.match(FILL, /function \(names, selected\) \{\s*vocabulary = \(names \|\| \[\]\)\.slice\(\);/);
   // Nothing is chosen on the panel's own initiative: an empty list stays empty
   // and the rank rule, not a default, decides what may be saved.
   assert.doesNotMatch(PANEL, /syncAssignment|assignmentLevelBelow/);
