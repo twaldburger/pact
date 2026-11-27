@@ -29,7 +29,7 @@ import {
   normalizeStep,
   stepSettingRefusal
 } from "./lib/panels.mjs";
-import { offeredTags, tickToggled, commitLabel, committedTags, enterTags } from "./lib/tag-picker.mjs";
+import { offeredTags, tickToggled, commitLabel, committedTags, enterTags, choiceText, choiceRows, applyLabel } from "./lib/tag-picker.mjs";
 import { planQuery } from "./lib/visibility.mjs";
 import { optionsItems, optionDividerKeys, reportDisabledOptionKeys, dividerUnit, rangeControl, stepControl, paletteItems, paletteControl, blockLabelControl, blockLabelItems, sprintsItem, holidaysItem, tagsItem, milestonesItem, helpItem, adoItem } from "./lib/options.mjs";
 import { mountTopbar, viewFromAttribute, VIEW_PLAN, VIEW_REPORT, isReportView, reportDisabledControlIds } from "./lib/topbar.mjs";
@@ -2623,51 +2623,315 @@ function shareControl(value) {
   });
 }
 
-var tagMenuSeq = 0;
+var tickMenuSeq = 0;
 
-// The tag field: chips, an input that takes a new tag, and the suggestion list
-// it opens. The list is the Filter's own fixed dropdown - it narrows as you
-// type with its first row already highlighted, the arrow keys move the
-// highlight, Space ticks a row and Enter takes the highlighted row or, while
-// rows are ticked, adds every ticked tag at once - so one narrowing serves
-// several picks, and the plan's vocabulary can be taken more than a tag at a
-// time.
-// `onChange`, when given, is called with the new list after a chip is added or
-// removed, so a list that saves itself needs no Save button of its own.
-function tagEditor(initial, suggest, onChange) {
-  var tags = (initial || []).slice();
-  // The ticks belong to the open list rather than to the query, so narrowing
-  // keeps them and one commit adds them all.
+/*
+ * The app's one tick list: a field on the row, a list that opens under it, rows
+ * that tick, Space to tick a row, Enter to take the ticks and close, Escape to
+ * close and leave them as they were. Two controls are this interaction over
+ * different vocabularies - a tag field, which offers the plan's own tags, and a
+ * mapping list, which offers the work-item types an ADO instance ranks - so the
+ * list, its rows and every key are built once here and each control supplies
+ * its own field.
+ *
+ * `typed` is the one difference between them: a tag field takes a new tag in
+ * its input, so what it holds may be something the vocabulary does not name,
+ * while a mapping list is closed to the vocabulary it was given - the types
+ * belong to the instance and a reader cannot invent one. A typed field also
+ * commits as it always did, a comma or leaving the field making a tag of the
+ * text, while an untyped one commits only on Enter or its own commit row,
+ * because a mis-click on a list of ten has to cost nothing.
+ *
+ * The caller supplies the field as `{ node, control, paint }`: `node` is put in
+ * the wrap, `control` takes the keys and the focus, and `paint` redraws it from
+ * what the control now holds. Everything else is this function's:
+ *
+ *   suggest()   the vocabulary the open list offers
+ *   carried()   values not offered back, for a field that adds what it holds
+ *   seeded()    the values ticked when the list opens; none for a field that
+ *               adds, the whole choice for one that replaces it
+ *   commitText(n)  the commit row's words for n ticks, where no words is no row
+ *   empty()     the words a list with nothing to offer says, if any
+ *   apply(values)   what the field holds after a commit
+ */
+function tickPicker(spec) {
+  var typed = !!spec.typed;
+  // The ticks belong to the open list rather than to the query, so a narrowing
+  // keeps them and one commit takes them all.
   var ticks = [];
-  var shown = [];      // the tags the list is showing, in row order
+  var shown = [];      // the values the list shows, in row order
   var rowIndex = -1;   // the highlighted row, -1 for none
   var watching = false;
+  var control = spec.field.control;
 
-  var wrap = el("div", "tags");
-  var chips = el("span", "chips");
-  var input = document.createElement("input");
-  input.type = "text";
-  input.className = "tags__input";
-  input.placeholder = "Add a tag";
-  input.setAttribute("aria-label", "Add a tag");
-  input.setAttribute("role", "combobox");
-  input.setAttribute("aria-autocomplete", "list");
-  input.setAttribute("aria-expanded", "false");
-
-  var menu = el("div", "filter__suggest tags__menu");
-  menu.id = "tag-menu-" + (++tagMenuSeq);
+  var wrap = el("div", typed ? "tags" : "choose");
+  var menu = el("div", "filter__suggest pick__menu");
+  menu.id = "pick-menu-" + (++tickMenuSeq);
   menu.hidden = true;
-  var list = el("div", "tags__list");
+  var list = el("div", "pick__list");
   list.id = menu.id + "-list";
   list.setAttribute("role", "listbox");
   menu.appendChild(list);
   // While a row is ticked the list ends with the one row a pointer commits
   // through, so ticking several is not a keyboard-only road.
-  var commitRow = el("button", "filter__hit tags__commit");
+  var commitRow = el("button", "filter__hit pick__commit");
   commitRow.type = "button";
   commitRow.hidden = true;
   menu.appendChild(commitRow);
-  input.setAttribute("aria-controls", list.id);
+
+  control.setAttribute("role", "combobox");
+  control.setAttribute("aria-expanded", "false");
+  control.setAttribute("aria-controls", list.id);
+  control.setAttribute("aria-label", spec.label);
+  if (typed) {
+    control.placeholder = spec.placeholder;
+    control.setAttribute("aria-autocomplete", "list");
+  } else {
+    // A field with nothing to type: the button is the field, and the list is
+    // the only thing it has to offer.
+    control.type = "button";
+    control.setAttribute("aria-haspopup", "listbox");
+  }
+
+  // The list is fixed, so a panel that scrolls under it has to carry it along.
+  function place() {
+    // The field is a chip row's width, not the Filter's, so the list hangs
+    // from the field's left edge rather than being centred on it.
+    if (!menu.hidden) placePopover(menu, control, "left");
+  }
+
+  function watch(on) {
+    if (on === watching) return;
+    watching = on;
+    if (on) document.addEventListener("scroll", place, true);
+    else document.removeEventListener("scroll", place, true);
+  }
+
+  function highlight() {
+    var rows = list.querySelectorAll("button");
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].classList.toggle("is-sel", i === rowIndex);
+    }
+    var active = rows[rowIndex];
+    if (active) {
+      control.setAttribute("aria-activedescendant", active.id);
+      active.scrollIntoView({ block: "nearest" });
+    } else {
+      control.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function close() {
+    ticks = [];
+    shown = [];
+    rowIndex = -1;
+    menu.hidden = true;
+    list.innerHTML = "";
+    commitRow.hidden = true;
+    control.setAttribute("aria-expanded", "false");
+    control.removeAttribute("aria-activedescendant");
+    watch(false);
+  }
+
+  // The commit row's words are its visibility: a field that can commit nothing
+  // has no row to do it through, and one that can choose none says so.
+  function updateCommitRow() {
+    commitRow.textContent = spec.commitText(ticks.length);
+    commitRow.hidden = commitRow.textContent === "";
+  }
+
+  function draw() {
+    // The ticks are the open list's, so they are seeded where the list opens -
+    // from the field's own choice - and kept while it stays open.
+    if (menu.hidden) ticks = (spec.seeded ? spec.seeded() : []).slice();
+    shown = offeredTags(spec.suggest(), spec.carried ? spec.carried() : [],
+      typed ? control.value : "");
+    list.innerHTML = "";
+    shown.forEach(function (value, i) {
+      var ticked = ticks.indexOf(value) !== -1;
+      var row = el("button", "filter__hit");
+      row.type = "button";
+      row.id = menu.id + "-row-" + i;
+      row.setAttribute("role", "option");
+      // The row's announced state is its tick, not the highlight: the
+      // highlight is where the keyboard is, the tick is what will be taken.
+      row.setAttribute("aria-selected", ticked ? "true" : "false");
+      if (ticked) row.classList.add("is-ticked");
+      var mark = el("span", "pick__tick");
+      mark.textContent = "\u2713";
+      mark.setAttribute("aria-hidden", "true");
+      var val = el("span", "filter__val");
+      val.textContent = value;
+      row.appendChild(mark);
+      row.appendChild(val);
+      // Keep the field focused so the click lands and the list stays put.
+      row.addEventListener("mousedown", function (e) { e.preventDefault(); });
+      row.addEventListener("click", function () { tickRow(value); });
+      list.appendChild(row);
+    });
+    var note = shown.length === 0 && spec.empty ? spec.empty() : "";
+    if (note) {
+      var waiting = el("p", "choose__empty");
+      waiting.textContent = note;
+      list.appendChild(waiting);
+    }
+    var open = shown.length > 0 || ticks.length > 0 || note !== "";
+    menu.hidden = !open;
+    control.setAttribute("aria-expanded", open ? "true" : "false");
+    if (!open) {
+      rowIndex = -1;
+      control.removeAttribute("aria-activedescendant");
+      watch(false);
+      return;
+    }
+    // The highlight lands on the first row of every redraw - an opened list and
+    // a narrowing alike - so one Space ticks the obvious choice, and it stays
+    // inside the rows on show: a narrowing that leaves nothing leaves no
+    // highlight rather than a stale one.
+    rowIndex = shown.length ? 0 : -1;
+    updateCommitRow();
+    watch(true);
+    place();
+    highlight();
+  }
+
+  function tickRow(value) {
+    ticks = tickToggled(ticks, value);
+    var ticked = ticks.indexOf(value) !== -1;
+    var rows = list.querySelectorAll("button");
+    for (var i = 0; i < rows.length; i++) {
+      if (shown[i] !== value) continue;
+      rows[i].classList.toggle("is-ticked", ticked);
+      rows[i].setAttribute("aria-selected", ticked ? "true" : "false");
+    }
+    updateCommitRow();
+  }
+
+  // Taking the ticks a key or a row chose, in one step: the field's own half
+  // decides what holding them means - a tag field adds them, a mapping list
+  // becomes them - and the list closes on the same step whatever it decided.
+  function commit(values) {
+    spec.apply((values || []).slice());
+    if (typed) control.value = "";
+    spec.field.paint();
+    close();
+  }
+
+  function commitTicks() { commit(ticks); }
+
+  // The typed text is committed as it always was, so free text is never lost to
+  // the list: a comma, or leaving the field, makes a new tag of it.
+  function commitTyped() {
+    if (String(control.value).trim() === "") { control.value = ""; close(); return; }
+    commit([control.value]);
+  }
+
+  commitRow.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  commitRow.addEventListener("click", commitTicks);
+
+  if (typed) control.addEventListener("input", draw);
+  // A field with nothing to type opens on the press that lands on it, and a
+  // second press closes it and takes nothing - as Escape does.
+  else control.addEventListener("click", function () {
+    if (menu.hidden) draw();
+    else close();
+  });
+
+  control.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (menu.hidden) {
+        // The list opens where the field was left, with its first row in reach.
+        draw();
+      } else if (shown.length) {
+        rowIndex = e.key === "ArrowDown"
+          ? Math.min(rowIndex + 1, shown.length - 1)
+          : Math.max(rowIndex - 1, 0);
+        highlight();
+      }
+      return;
+    }
+    if (e.key === " ") {
+      // A space ticks the highlighted row. In a typed field with nothing
+      // highlighted it is a space in the tag being typed, so multi-word free
+      // text still reads; an untyped field opens instead, as a list does.
+      if (menu.hidden && !typed) {
+        e.preventDefault();
+        draw();
+        return;
+      }
+      if (!menu.hidden && rowIndex >= 0 && shown[rowIndex]) {
+        e.preventDefault();
+        tickRow(shown[rowIndex]);
+      }
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!typed) {
+        // A list that replaces its choice takes the ticks whole; from closed it
+        // opens first, so Enter reaches the rows before it commits anything.
+        if (menu.hidden) { draw(); return; }
+        commitTicks();
+        return;
+      }
+      var add = enterTags(control.value, ticks, shown, rowIndex);
+      if (add.length) commit(add);
+      else { control.value = ""; close(); }
+      return;
+    }
+    if (e.key === "," && typed) { e.preventDefault(); commitTyped(); return; }
+    if (e.key === "Escape") {
+      // The list closes and takes nothing: only then does Escape reach the
+      // panel.
+      if (!menu.hidden) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typed) control.value = "";
+        close();
+      }
+      return;
+    }
+    if (e.key === "Tab") { close(); return; }
+    if (e.key === "Backspace" && typed && control.value === "" && spec.emptyBackspace) {
+      spec.emptyBackspace();
+    }
+  });
+  // A click on a row or on the commit row keeps the focus, so a blur is a click
+  // away: a typed field commits its text as it always did, and an untyped one
+  // closes and takes nothing.
+  control.addEventListener("blur", function () {
+    if (typed) commitTyped();
+    else close();
+  });
+
+  wrap.appendChild(spec.field.node);
+  wrap.appendChild(menu);
+  spec.field.paint();
+
+  return {
+    node: wrap,
+    focus: function () { control.focus(); }
+  };
+}
+
+// The tag field: chips, an input that takes a new tag, and the tick list it
+// opens. The list is `tickPicker`'s, shared with the ADO mapping's two lists;
+// this is the tag field's own half - the chips, the typed text, and adding to
+// them rather than replacing them. It narrows as you type with its first row
+// already highlighted, the arrow keys move the highlight, Space ticks a row and
+// Enter takes the highlighted row or, while rows are ticked, adds every ticked
+// tag at once - so one narrowing serves several picks, and the plan's
+// vocabulary can be taken more than a tag at a time.
+// `onChange`, when given, is called with the new list after a chip is added or
+// removed, so a list that saves itself needs no Save button of its own.
+function tagEditor(initial, suggest, onChange) {
+  var tags = (initial || []).slice();
+
+  var chips = el("span", "chips");
+  var input = document.createElement("input");
+  input.type = "text";
+  input.className = "tags__input";
 
   // The input sits in the chip row once and never moves again, so rebuilding
   // the chips around it cannot drop its focus.
@@ -2700,189 +2964,34 @@ function tagEditor(initial, suggest, onChange) {
     });
   }
 
-  // The list is fixed, so a panel that scrolls under it has to carry it along.
-  function place() {
-    // The tag field is a chip row's width, not the Filter's, so the list hangs
-    // from the field's left edge rather than being centred on it.
-    if (!menu.hidden) placePopover(menu, input, "left");
-  }
-
-  function watch(on) {
-    if (on === watching) return;
-    watching = on;
-    if (on) document.addEventListener("scroll", place, true);
-    else document.removeEventListener("scroll", place, true);
-  }
-
-  function highlight() {
-    var rows = list.querySelectorAll("button");
-    for (var i = 0; i < rows.length; i++) {
-      rows[i].classList.toggle("is-sel", i === rowIndex);
-    }
-    var active = rows[rowIndex];
-    if (active) {
-      input.setAttribute("aria-activedescendant", active.id);
-      active.scrollIntoView({ block: "nearest" });
-    } else {
-      input.removeAttribute("aria-activedescendant");
-    }
-  }
-
-  function close() {
-    ticks = [];
-    shown = [];
-    rowIndex = -1;
-    menu.hidden = true;
-    list.innerHTML = "";
-    commitRow.hidden = true;
-    input.setAttribute("aria-expanded", "false");
-    input.removeAttribute("aria-activedescendant");
-    watch(false);
-  }
-
-  function updateCommitRow() {
-    commitRow.hidden = ticks.length === 0;
-    commitRow.textContent = commitLabel(ticks.length);
-  }
-
-  function draw() {
-    shown = offeredTags(suggest(), tags, input.value);
-    list.innerHTML = "";
-    shown.forEach(function (tag, i) {
-      var ticked = ticks.indexOf(tag) !== -1;
-      var row = el("button", "filter__hit");
-      row.type = "button";
-      row.id = menu.id + "-row-" + i;
-      row.setAttribute("role", "option");
-      // The row's announced state is its tick, not the highlight: the
-      // highlight is where the keyboard is, the tick is what will be added.
-      row.setAttribute("aria-selected", ticked ? "true" : "false");
-      if (ticked) row.classList.add("is-ticked");
-      var mark = el("span", "tags__tick");
-      mark.textContent = "\u2713";
-      mark.setAttribute("aria-hidden", "true");
-      var val = el("span", "filter__val");
-      val.textContent = tag;
-      row.appendChild(mark);
-      row.appendChild(val);
-      // Keep the input focused so the click lands and the list stays put.
-      row.addEventListener("mousedown", function (e) { e.preventDefault(); });
-      row.addEventListener("click", function () { tickRow(tag); });
-      list.appendChild(row);
-    });
-    var open = shown.length > 0 || ticks.length > 0;
-    menu.hidden = !open;
-    input.setAttribute("aria-expanded", open ? "true" : "false");
-    if (!open) {
-      rowIndex = -1;
-      input.removeAttribute("aria-activedescendant");
-      watch(false);
-      return;
-    }
-    // The highlight lands on the first row of every redraw - an opened list and
-    // a narrowing alike - so one Space ticks the obvious choice, and it stays
-    // inside the rows on show: a narrowing that leaves nothing leaves no
-    // highlight rather than a stale one.
-    rowIndex = shown.length ? 0 : -1;
-    updateCommitRow();
-    watch(true);
-    place();
-    highlight();
-  }
-
-  function tickRow(tag) {
-    ticks = tickToggled(ticks, tag);
-    var ticked = ticks.indexOf(tag) !== -1;
-    var rows = list.querySelectorAll("button");
-    for (var i = 0; i < rows.length; i++) {
-      if (shown[i] !== tag) continue;
-      rows[i].classList.toggle("is-ticked", ticked);
-      rows[i].setAttribute("aria-selected", ticked ? "true" : "false");
-    }
-    updateCommitRow();
-  }
-
-  // Adding the tags a key chose, whichever key chose them: the commits below
-  // differ only in what they read and in whether the typed text is spent.
-  function commitAdd(add) {
-    tags = committedTags(tags, "", add);
-    input.value = "";
-    render();
-    close();
-    if (onChange) onChange(tags.slice());
-  }
-
-  function commitTicks() { commitAdd(ticks); }
-
-  // The typed text is committed as it always was, so free text is never lost to
-  // the list: a comma, or leaving the field, makes a new tag of it.
-  function commitTyped() {
-    if (input.value.trim() === "") { input.value = ""; close(); return; }
-    commitAdd([input.value]);
-  }
-
-  commitRow.addEventListener("mousedown", function (e) { e.preventDefault(); });
-  commitRow.addEventListener("click", commitTicks);
-
-  input.addEventListener("input", draw);
-
-  input.addEventListener("keydown", function (e) {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      if (menu.hidden) {
-        // The list opens where the field was left, with its first row in reach.
-        draw();
-      } else if (shown.length) {
-        rowIndex = e.key === "ArrowDown"
-          ? Math.min(rowIndex + 1, shown.length - 1)
-          : Math.max(rowIndex - 1, 0);
-        highlight();
-      }
-      return;
-    }
-    if (e.key === " ") {
-      // A space ticks the highlighted row; with nothing highlighted it is a
-      // space in the tag being typed, so multi-word free text still reads.
-      if (!menu.hidden && rowIndex >= 0 && shown[rowIndex]) {
-        e.preventDefault();
-        tickRow(shown[rowIndex]);
-      }
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      var add = enterTags(input.value, ticks, shown, rowIndex);
-      if (add.length) commitAdd(add);
-      else { input.value = ""; close(); }
-      return;
-    }
-    if (e.key === ",") { e.preventDefault(); commitTyped(); return; }
-    if (e.key === "Escape") {
-      // The list closes and adds nothing; only then does Escape reach the panel.
-      if (!menu.hidden) {
-        e.preventDefault();
-        e.stopPropagation();
-        input.value = "";
-        close();
-      }
-      return;
-    }
-    if (e.key === "Tab") { close(); return; }
-    if (e.key === "Backspace" && input.value === "" && tags.length) {
+  var picker = tickPicker({
+    typed: true,
+    label: "Add a tag",
+    placeholder: "Add a tag",
+    field: { node: chips, control: input, paint: render },
+    suggest: suggest,
+    // A tag added as a chip during this edit is not offered back, and the
+    // chips are the field's own list of what it holds.
+    carried: function () { return tags; },
+    // Tags are added, never chosen in place: the list opens with nothing
+    // ticked and a commit adds what it holds.
+    seeded: function () { return []; },
+    // Nothing ticked is nothing to add, so there is no row to add it through.
+    commitText: function (count) { return count === 0 ? "" : commitLabel(count); },
+    apply: function (values) {
+      tags = committedTags(tags, "", values);
+      if (onChange) onChange(tags.slice());
+    },
+    // Backspace in an empty input drops the last chip, as it always has.
+    emptyBackspace: function () {
+      if (tags.length === 0) return;
       tags = tags.slice(0, -1);
       render();
     }
   });
-  // A click on a row or on the commit row keeps the focus, so a blur is a click
-  // away: the list closes and the typed text is committed, as it always was.
-  input.addEventListener("blur", commitTyped);
-
-  wrap.appendChild(chips);
-  wrap.appendChild(menu);
-  render();
 
   return {
-    node: wrap,
+    node: picker.node,
     tags: function () { return tags.slice(); },
     // Re-read the suggestions, for when the Project a tag list is drawn from
     // changes underneath it.
@@ -6801,15 +6910,16 @@ function openAdoSettingsPanel(trigger) {
     form.appendChild(formRow("URL", urlInput));
 
     // The two lists, each named for the PACT thing its types produce and
-    // explained on hover rather than on screen. Both are tick lists over the
-    // types the instance ranks, so a plan that draws Projects from Epics and
-    // Initiatives says both with two ticks. Nothing is ticked before Test
-    // connection has answered, and a stored list is what opens ticked.
-    var projectLevels = levelTicks();
+    // explained on hover rather than on screen. Each is a closed field naming
+    // its choice that opens the tick list over the types the instance ranks,
+    // so a plan that draws Projects from Epics and Initiatives says both with
+    // two ticks. Nothing is chosen before Test connection has answered, and a
+    // stored list is what the two fields open holding.
+    var projectLevels = levelPicker("Project work-item types");
     projectLevels.node.id = "ado-project-levels";
     projectLevels.fill([], mapping.projectLevels || []);
     form.appendChild(formRow("Project", projectLevels.node, ADO_ROW_TIPS.project));
-    var assignmentLevels = levelTicks();
+    var assignmentLevels = levelPicker("Assignment work-item types");
     assignmentLevels.node.id = "ado-assignment-levels";
     assignmentLevels.fill([], mapping.assignmentLevels || []);
     form.appendChild(formRow("Assignment", assignmentLevels.node, ADO_ROW_TIPS.assignment));
@@ -6922,9 +7032,9 @@ function openAdoSettingsPanel(trigger) {
       return addressFromUrl(urlInput.value);
     }
 
-    // What the instance reported fills both rows, each keeping what is ticked
+    // What the instance reported fills both rows, each keeping what is chosen
     // and falling back to the plan's stored list. The rank rule decides whether
-    // the pair may be saved; the panel does not pre-tick a guess.
+    // the pair may be saved; the panel does not pre-choose a guess.
     function applyInstance(result) {
       instance = result;
       var ranked = (result.types || []).map(function (type) { return type.name; });
@@ -7258,57 +7368,64 @@ function updateAdoOperationsButton() {
   adoOperationsButton.title = state.title;
 }
 /*
- * A mapping list: one ticked box per type, in the box its row draws. Two lists
- * of types, not a picker per role, because a plan that draws Projects from Epics
- * and Initiatives has to say both - and the rank rule, not the control, is what
- * decides whether the two lists may sit where they are. `chosen` is what a save
- * sends, `fill` redraws the boxes once the instance's types are known, and a
- * name the plan stores that the instance did not report stays visible rather
- * than being dropped behind the person's back.
+ * A mapping list: the work-item types the instance ranks, as one closed field
+ * that opens the app's tick list. It is the tag field's own interaction over
+ * the instance's vocabulary, with the one difference that nothing can be typed
+ * into it - the types belong to the instance, not to the reader - so the field
+ * is a button naming the choice rather than a place to write.
+ *
+ * Two lists of types, not a picker per role, because a plan that draws Projects
+ * from Epics and Initiatives has to say both - and the rank rule, not the
+ * control, is what decides whether the two lists may sit where they are.
+ * `chosen` is what a save sends, `fill` says which types the instance reports
+ * and which are chosen, and a name the plan stores that the instance did not
+ * report stays listed rather than being dropped behind the person's back.
  */
-function levelTicks() {
-  var wrap = el("div", "ado__levels");
-  var boxes = [];
+function levelPicker(label) {
+  var levels = [];
+  var vocabulary = [];
 
-  function chosen() {
-    return boxes.filter(function (box) { return box.checked; })
-      .map(function (box) { return box.value; });
-  }
+  var button = el("button", "choose__value");
+  button.type = "button";
+  var field = {
+    node: button,
+    control: button,
+    paint: function () { button.textContent = choiceText(levels); }
+  };
 
-  function fill(names, selected) {
-    var listed = (names || []).slice();
-    (selected || []).forEach(function (name) {
-      if (listed.indexOf(name) === -1) listed.push(name);
-    });
-    boxes = [];
-    wrap.textContent = "";
-    if (listed.length === 0) {
-      var waiting = el("span", "ado__levels-empty");
-      waiting.textContent = LEVELS_WAITING;
-      wrap.appendChild(waiting);
-      return;
+  var picker = tickPicker({
+    typed: false,
+    label: label,
+    field: field,
+    // The rows are the instance's types, and then whatever the plan stores
+    // that it no longer reports: the rule is `choiceRows`', so the panel
+    // cannot word a second one.
+    suggest: function () { return choiceRows(vocabulary, levels); },
+    // The list opens with the choice already ticked, because this control
+    // takes the ticks as the whole choice rather than as additions to it.
+    seeded: function () { return levels; },
+    commitText: applyLabel,
+    // Nothing is ticked and there is no instance yet: the list says what it is
+    // waiting for rather than opening empty.
+    empty: function () { return LEVELS_WAITING; },
+    apply: function (values) {
+      levels = values.slice();
     }
-    listed.forEach(function (name) {
-      var label = el("label", "ado__level");
-      var box = document.createElement("input");
-      box.type = "checkbox";
-      box.className = "ado__level-box";
-      box.value = name;
-      // The box is the control and its label names it, so a reader hears the
-      // type rather than "checkbox" read out of the markup.
-      box.checked = (selected || []).indexOf(name) !== -1;
-      label.appendChild(box);
-      label.appendChild(document.createTextNode(name));
-      wrap.appendChild(label);
-      boxes.push(box);
-    });
-  }
+  });
 
-  return { node: wrap, chosen: chosen, fill: fill };
+  return {
+    node: picker.node,
+    chosen: function () { return levels.slice(); },
+    fill: function (names, selected) {
+      vocabulary = (names || []).slice();
+      levels = (selected || []).slice();
+      field.paint();
+    }
+  };
 }
 
 // What a list with no types in it reads as: the panel has not asked the
-// instance yet, and says so rather than showing an empty box.
+// instance yet, and says so rather than opening an empty list.
 var LEVELS_WAITING = "Test the connection to list the instance's types.";
 
 // The import row's explanation, on hover: the shapes a paste may take, and what

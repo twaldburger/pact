@@ -40,7 +40,7 @@ function sourceFrom(startMarker, endMarker) {
 
 const SETTINGS = sourceFrom("function openAdoSettingsPanel(", "\n/* --- the Azure DevOps operations panel");
 const OPERATIONS = sourceFrom("function openAdoOperationsPanel(", "\n/* --- the bar's ADO button");
-const BAR = sourceFrom("/* --- the bar's ADO button", "\n/*\n * A mapping list: one ticked box per type");
+const BAR = sourceFrom("/* --- the bar's ADO button", "\nfunction levelPicker(");
 const OPTIONS_ROW = sourceFrom("function buildAdoItem(", "\nfunction updateAdoItem(");
 
 // Every element id a panel gives one of its own controls, in source order.
@@ -84,12 +84,25 @@ test("no import control survives in the settings panel", () => {
 /* --- the operations panel ------------------------------------------------ */
 
 test("the settings hold two lists, and the tag row is gone entirely", () => {
-  assert.equal((SETTINGS.match(/levelTicks\(\)/g) || []).length, 2, "the panel does not draw exactly two lists");
+  assert.equal((SETTINGS.match(/levelPicker\(/g) || []).length, 2, "the panel does not draw exactly two lists");
   assert.match(SETTINGS, /form\.appendChild\(formRow\("Project", projectLevels\.node, ADO_ROW_TIPS\.project\)\);/);
   assert.match(SETTINGS, /form\.appendChild\(formRow\("Assignment", assignmentLevels\.node, ADO_ROW_TIPS\.assignment\)\);/);
   // No tag slot in the settings: no control, no id, no explanation.
   assert.doesNotMatch(SETTINGS, /tagLevel|tag-level|ADO_ROW_TIPS\.tag/);
   assert.doesNotMatch(SETTINGS, /formRow\("Tag"/);
+});
+
+test("the mapping is chosen from two dropdowns, and the checkbox stack is gone", () => {
+  // The control is the alias's own: one closed field per list, opening the tick
+  // list the tag field opens, rather than ten native boxes down the panel.
+  assert.match(SETTINGS, /var projectLevels = levelPicker\("Project work-item types"\);/);
+  assert.match(SETTINGS, /var assignmentLevels = levelPicker\("Assignment work-item types"\);/);
+  assert.doesNotMatch(APP, /levelTicks/);
+  assert.doesNotMatch(APP, /ado__level/);
+  assert.doesNotMatch(SETTINGS, /checkbox/);
+  // Nor a label wrapping a box: the row's own label is the only label, and the
+  // field is the row's one control, so the two cannot sit side by side.
+  assert.doesNotMatch(APP, /el\("label", "ado__level"\)/);
 });
 
 test("the operations hold the import, and every part of it", () => {

@@ -1008,20 +1008,28 @@ than as a failure that happens not to be one.
 The panel holds the URL, the two lists that name what the mapping is drawn
 from, and the token field with its `Save token`, `Replace token` and
 `Clear token` actions. The rows read
-`Project` and `Assignment`, and no line explains them on screen: each is a tick
-list over the work-item types the instance itself ranks - filled once Test
-connection has answered - and each explains itself on hover, as a `title` on the
-row's label, with the same slight delay a block's own title has. The `Project`
-row holds the types a PACT Project comes from, and every type in it must rank
-above every type in the assignment row. The `Assignment` row holds the types a
-PACT Assignment comes from, the levels that carry a person and their time. Two
-ticks on each side is an ordinary plan, not an exception: a person who plans
-Initiatives and Epics both says both.
+`Project` and `Assignment`, and no line explains them on screen: each explains
+itself on hover, as a `title` on the row's label, with the same slight delay a
+block's own title has. The `Project` row holds the types a PACT Project comes
+from, and every type in it must rank above every type in the assignment row. The
+`Assignment` row holds the types a PACT Assignment comes from, the levels that
+carry a person and their time. Two types on each side is an ordinary plan, not
+an exception: a person who plans Initiatives and Epics both says both.
+
+Each row is one field, and it is the tick list the app's tag fields open rather
+than a stack of native checkboxes. Closed, the field names what is chosen -
+`Epic, Feature` - or reads `Choose...` when nothing is. Opened, it lists the
+work-item types the instance itself ranks, with the chosen ones ticked: Space
+ticks a row, Enter takes the ticks and closes, and Escape closes without
+changing them, so a mis-click on a list of ten costs nothing. Nothing can be
+typed into it, because the vocabulary is the instance's and not the reader's. The
+list is filled by Test connection, and before it has answered it says what it is
+waiting for rather than opening empty.
 
 No row opens on a guess: both start with only what the plan already stores, and
-nothing is ticked on the panel's own initiative, so the rank rule - not a
+nothing is chosen on the panel's own initiative, so the rank rule - not a
 default - is what decides whether a pair may be saved. A stored name the
-instance does not report stays visible and ticked, so a plan from another
+instance does not report stays listed and ticked, so a plan from another
 instance shows what it holds rather than losing it.
 
 It opens with a stored mapping shown as the one URL it is. A plan carrying a

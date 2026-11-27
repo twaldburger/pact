@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CHOOSE_NONE,
+  applyLabel,
+  choiceRows,
+  choiceText,
   offeredTags,
   tickToggled,
   commitLabel,
@@ -95,4 +99,31 @@ test("typed text differing only by case or surrounding space names the row", () 
   // tag differing by a capital letter.
   assert.deepEqual(enterTags("OPS", [], rows, -1), ["ops"]);
   assert.deepEqual(enterTags("  ops", [], rows, -1), ["ops"]);
+});
+
+test("a closed choice field names what is chosen, or offers the list", () => {
+  // One field is one line: the choice reads as the values it holds, in order.
+  assert.equal(choiceText([]), CHOOSE_NONE);
+  assert.equal(choiceText(null), CHOOSE_NONE);
+  assert.equal(choiceText([""]), CHOOSE_NONE);
+  assert.equal(choiceText(["Epic"]), "Epic");
+  assert.equal(choiceText(["Epic", "Feature"]), "Epic, Feature");
+});
+
+test("the rows are the vocabulary, then any chosen name it does not report", () => {
+  assert.deepEqual(choiceRows(["Epic", "Feature"], []), ["Epic", "Feature"]);
+  // A type the instance no longer reports is still listed, so a mapping the
+  // plan already holds is never changed behind the person's back.
+  assert.deepEqual(choiceRows(["Epic", "Feature"], ["Bug"]), ["Epic", "Feature", "Bug"]);
+  assert.deepEqual(choiceRows([], ["Bug"]), ["Bug"]);
+  // A chosen name the vocabulary does name is one row, not two.
+  assert.deepEqual(choiceRows(["Epic"], ["Epic"]), ["Epic"]);
+  assert.deepEqual(choiceRows(null, null), []);
+});
+
+test("the commit row counts the ticks, and choosing none is a choice", () => {
+  // Unlike a tag field, a list that replaces its choice can commit none of it.
+  assert.equal(applyLabel(0), "Use no types");
+  assert.equal(applyLabel(1), "Use 1 type");
+  assert.equal(applyLabel(2), "Use 2 types");
 });
