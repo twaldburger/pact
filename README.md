@@ -29,10 +29,12 @@ real colleagues, clients or engagements.
 
 PACT is local by default, and stays that way. The one thing that can reach the
 network is an [ADO connection](docs/features.md#the-azure-devops-settings), and it
-does so only in answer to a press - Test connection, Save mapping, an import, or a
-token action - never on a timer and never in the background. The token it uses
-stays on the server, and the plan behaves exactly as it always has whether the
-connection is missing, or Azure DevOps is unreachable.
+does so only in answer to a press - opening the settings panel when a token and
+an address are already stored, `Test connection`, `Save mapping`, or an import -
+never on a timer and never in the background. Writing or clearing the token is
+not one of those presses: it touches a file on this machine and reaches nothing.
+The token it uses stays on the server, and the plan behaves exactly as it always
+has whether the connection is missing, or Azure DevOps is unreachable.
 
 ## What it does
 
@@ -55,9 +57,9 @@ person's time.
   while the work is being promised rather than when it arrives.
 - **Figures that count working time.** A
   [working day](GLOSSARY.md#working-day) is a day the person is actually there, so
-  weekends, the public holidays configured for their Location and their Absences
-  come off before anything is counted. A figure is therefore time worked rather
-  than time elapsed, and a full-time working day is an
+  weekends, the [Holidays](GLOSSARY.md#holiday) configured for their Location and
+  their Absences come off before anything is counted. A figure is therefore time
+  worked rather than time elapsed, and a full-time working day is an
   [FTE-day](GLOSSARY.md#fte-day) - the unit every total, share and report is
   expressed in.
 - **Milestones.** A delivery, a deployment or a deadline is a dated point in the
@@ -123,10 +125,12 @@ grid, the filter, the panels, sorting and the view state.
 - [`docs/features.md`](docs/features.md) - what each capability does, how it
   behaves and where its controls live.
 - [`docs/agent-tooling.md`](docs/agent-tooling.md) - the command line: the reads,
-  the writes, the limits, and the command table it generates for itself.
+  the writes, the limits, the `view` read for what the app is drawing, and the
+  command table it generates for itself.
 - [`docs/index.md`](docs/index.md) - every page under `docs/`, with what it is
   for.
-- [`docs/scope.md`](docs/scope.md) - what the first version covers.
+- [`docs/scope.md`](docs/scope.md) - what the first version covers, and what has
+  landed since.
 - [`docs/checking-appearance.md`](docs/checking-appearance.md) - how to check
   what the app draws, measured or looked at.
 - [`docs/adr/`](docs/adr) - the decisions behind it.

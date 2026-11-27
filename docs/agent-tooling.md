@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: PACT's command line
-description: Working a plan from a terminal - the reads, the writes, the limits, and the command table the tool prints for itself.
+description: Working a plan from a terminal - the reads, the writes, the limits, the view read for what the app is drawing, and the command table the tool prints for itself.
 ---
 
 # PACT's command line

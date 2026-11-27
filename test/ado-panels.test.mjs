@@ -23,6 +23,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { ADO_CONNECT_FIRST } from "../public/lib/ado.mjs";
 
 const APP = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const TOPBAR = readFileSync(new URL("../public/lib/topbar.mjs", import.meta.url), "utf8");
@@ -225,6 +226,9 @@ test("the two lines of prose that name the doors name them right", () => {
   assert.match(section, /`ADO` button in the top bar/);
   assert.match(section, /before the Options glyph/);
   assert.match(section, /`aria-disabled` rather\s+than `disabled`/);
-  assert.match(section, /Connect PACT to Azure DevOps first: Options then Azure DevOps\.\.\./);
+  // The withheld button's reason, as the rule words it rather than as it was
+  // once retyped here: the prose quotes one ellipsis character, not three full
+  // stops, and a copy of the sentence could not have known that.
+  assert.ok(section.includes(ADO_CONNECT_FIRST), "the section does not quote the withheld button's reason verbatim");
   assert.match(section, /a mapping in the plan[\s\S]*and\*\* a token/);
 });

@@ -3429,10 +3429,11 @@ function renderView(data) {
     else lines.push(row[0].padEnd(width) + "  " + row[1]);
   });
   lines.push("");
-  lines.push("These are the app's own View settings, kept in its Config beside the plan");
-  lines.push("file. The period, the Step and the cadence are the plan's, and the only rows here");
-  lines.push("that travel with it. The Filter and the Marker's date are session-only and are");
-  lines.push("not stored at all. None of it changes a figure or a plan record.");
+  lines.push("These are the app's own View settings, kept in its Config beside the app");
+  lines.push("rather than beside the plan file. The period, the Step and the cadence are the");
+  lines.push("plan's, and the only rows here that travel with it. The Filter and the Marker's");
+  lines.push("date are session-only and are not stored at all. None of it changes a figure or");
+  lines.push("a plan record.");
   return lines.join("\n") + "\n";
 }
 
