@@ -149,8 +149,10 @@ test("the button sits in the bar after the history controls and before Options",
   assert.ok(history < button && button < options,
     "the ADO button belongs between the history controls and the Options glyph");
   // A word, because the surface has no glyph of its own, and the full name for
-  // a reader who cannot see the abbreviation's shape.
-  assert.match(TOPBAR, /id="ado-operations"\s+aria-disabled="true" aria-label="Azure DevOps operations">ADO<\/button>/);
+  // a reader who cannot see the abbreviation's shape. The word sits in a span
+  // of its own because it is the one all-caps label in the bar, and the caps
+  // are what --optical-caps corrects; the test for that is in style.test.mjs.
+  assert.match(TOPBAR, /id="ado-operations"\s+aria-disabled="true" aria-label="Azure DevOps operations"><span class="ghost__caps">ADO<\/span><\/button>/);
 });
 
 test("the bar mounts the button withheld, and carries no copy of the words", () => {

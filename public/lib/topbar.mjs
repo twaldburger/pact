@@ -146,7 +146,7 @@ export function topbarMarkup(view) {
         </button>
       </div>
       <button type="button" class="ghost is-disabled" id="ado-operations"
-        aria-disabled="true" aria-label="Azure DevOps operations">ADO</button>
+        aria-disabled="true" aria-label="Azure DevOps operations"><span class="ghost__caps">ADO</span></button>
       <div class="options" id="options">
         <button type="button" class="ghost options__btn" id="options-btn"
           aria-haspopup="true" aria-expanded="false" aria-label="Options" title="Options">
