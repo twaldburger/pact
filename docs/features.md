@@ -925,23 +925,34 @@ rather than used without one: the panel asks for a URL, so the project has to
 be in it.
 
 The mapping is the plan's `ado` block: the organisation's address, the ADO
-project's name, and three work-item type names - the type a Project is drawn
-from, the type an Assignment is drawn from, and, optionally, the type a tag is
-drawn from. Nothing else is in it. A credential-shaped key (`token`, `pat`,
-`password` and the like) inside the block is refused when the plan is read or
-written, so a plan can be shared, versioned and diffed with no secret in it, and
-a plan without an `ado` block loads and behaves exactly as it did before there
-was a connection.
+project's name, and **two lists of work-item type names** - the types whose items
+become Projects, and the types whose items become Assignments. Nothing else is
+in it: a tag mapping is deliberately not part of it, because a list can say what
+a tag slot only ever tried to, and a kind of mapping that produced nothing but a
+label is not worth a slot. A credential-shaped key (`token`, `pat`, `password`
+and the like) inside the block is refused when the plan is read or written, so a
+plan can be shared, versioned and diffed with no secret in it, and a plan without
+an `ado` block loads and behaves exactly as it did before there was a connection.
 
-The three slots are checked against the instance's own backlog ranks - the
-number ADO gives each backlog level, higher meaning a higher level - not against
-a fixed list of type names. The project slot must sit above the assignment slot,
-so an Epic-over-Feature instance and a Feature-over-User-Story configuration both
-work, while an equal or inverted pair is refused with both ranks named. The tag
-slot, when set, must be a type the instance reports, and it may be left unset.
-Because the ranks belong to the instance, a mapping is saved only after a
-successful Test connection: the check needs the instance, and nothing is written
-when it cannot be read.
+The lists are checked against the instance's own backlog ranks - the number ADO
+gives each backlog level, higher meaning a higher level - not against a fixed
+list of type names. Both lists must be non-empty, every name in them must be a
+type the instance ranks, and **every assignment type must rank below every
+project type** (`min(project ranks) > max(assignment ranks)`). The rule is a pair
+of sets, not a pair of names: `projectLevels: [Initiative, Epic]` with
+`assignmentLevels: [Feature, User Story]` is one configuration, and
+`projectLevels: [Epic]` with `assignmentLevels: [Feature]` is another. A pair
+whose sets overlap - equal ranks, or an assignment type sitting above a project
+type - is refused with **both offending names and both of their ranks**, and an
+empty list is refused with the sentence saying what that list produces. Because
+the ranks belong to the instance, a mapping is saved only after a successful
+Test connection: the check needs the instance, and nothing is written when it
+cannot be read.
+
+A plan written before the lists is read as they mean: a singular
+`projectLevel`/`assignmentLevel` becomes the one-item list it is, a `tagLevel` is
+accepted and left out of the block the next time the plan is written, and no plan
+needs migrating to load.
 
 The token is a personal access token pasted into the panel. The server writes it
 to this machine's config directory - `$XDG_CONFIG_HOME/pact/ado-pat` or
@@ -986,25 +997,30 @@ this machine and ADO. A failed test replaces the line with that failure's own
 sentence in the danger colour. Success is therefore drawn as success rather
 than as a failure that happens not to be one.
 
-The panel holds the URL, the three rows that name what the mapping is drawn
+The panel holds the URL, the two lists that name what the mapping is drawn
 from, and the token field with its Save and Clear actions. The rows read
-`Project`, `Assignment` and `Tag`, and no line explains them on screen: each is
-a picker over the work-item types the instance itself reports - offered once
-Test connection has answered - and each explains itself on hover, as a `title`
-on the row's label, with the same slight delay a block's own title has. The
-`Project` row is the type a PACT Project comes from, and must sit at a higher
-level than the assignment's. The `Assignment` row is the type a PACT Assignment
-comes from, the level that carries a person and their time. The `Tag` row is the
-type whose name becomes a tag on the assignment; empty leaves nothing tagged.
-No row opens on a guess: all three start empty, and once Test connection has read
-the instance's ranks, choosing a project offers the level below it as the
-assignment, so the panel never sits on a pair the rank rule refuses. It opens
-with a stored mapping shown as the one URL it is. A plan carrying a mapping and
-no token keeps the panel and says where the token file goes.
+`Project` and `Assignment`, and no line explains them on screen: each is a tick
+list over the work-item types the instance itself ranks - filled once Test
+connection has answered - and each explains itself on hover, as a `title` on the
+row's label, with the same slight delay a block's own title has. The `Project`
+row holds the types a PACT Project comes from, and every type in it must rank
+above every type in the assignment row. The `Assignment` row holds the types a
+PACT Assignment comes from, the levels that carry a person and their time. Two
+ticks on each side is an ordinary plan, not an exception: a person who plans
+Initiatives and Epics both says both.
+
+No row opens on a guess: both start with only what the plan already stores, and
+nothing is ticked on the panel's own initiative, so the rank rule - not a
+default - is what decides whether a pair may be saved. A stored name the
+instance does not report stays visible and ticked, so a plan from another
+instance shows what it holds rather than losing it.
+
+It opens with a stored mapping shown as the one URL it is. A plan carrying a
+mapping and no token keeps the panel and says where the token file goes.
 
 **Where the controls are.** `Options` then `Azure DevOps...`, whose detail says
 `Not configured` or names the mapped ADO project. The settings panel holds the
-URL, the mapping's three rows, the token field with its Save and Clear actions,
+URL, the mapping's two lists, the token field with its Save and Clear actions,
 the token's state line, the last connection line, and a footer with
 `Test connection` and `Save mapping`. It holds no import control at all - an
 operation is not a setting.
@@ -1021,34 +1037,42 @@ form that keeps the id in the query string; a host that is neither
 read. **One work item per press, and its children are not imported** - the hint
 under the field says so, rather than leaving it to be discovered.
 
-What the import needs from ADO is a title and the item's own type: the type's
-level against the mapping decides what the item becomes, before any person is
-considered. An owner is needed only at the assignment level, and dates are
+What the import needs from ADO is a title and the item's own type: which of the
+mapping's two lists the type is in decides what the item becomes, before any
+person is considered. An owner is needed only for an Assignment, and dates are
 never required.
 
-**The level decides the record.**
+**The type's list decides the record.**
 
-- An item whose own type is the mapping's **project level** becomes a
+- An item whose type is in the mapping's **project levels** becomes a
   [Project](../GLOSSARY.md#project): the title verbatim as its name, the
   least-used colour slot as any new Project takes, and no notes. Its `AssignedTo`
   is not read at all - a Project needs no owner - and no Assignment is created.
   The import records the item's [Link](../GLOSSARY.md#link), with its baseline, on
   that Project, so a later sync can keep its name current.
-- An item at the **assignment level** - or at a rank between it and the project
-  level, which has always been read as an Assignment - becomes an
+- An item whose type is in the **assignment levels** becomes an
   [Assignment](../GLOSSARY.md#assignment): the title as its own Name, the owner
   matched to a Person, the parents walked for the Project, and the dates by the
   rules below.
-- An item at the **tag level** is refused, because a tag has no record of its
-  own: an import of one would put nothing on the plan. So is an item ranked
-  **below the assignment level**, because that is below the level that carries a
-  person's time. Each refusal names the level its type belongs to and the raw
-  item, never the owner.
+- An item whose type is in **neither list** is refused, and the refusal names
+  both lists and the item: *“this is a Feature; your project levels are Epic and
+your assignment levels are User Story”*. Adding that type to one of the lists in
+  the settings is the way in, and the refusal never blames the owner.
 
-The rank comes from the instance's own backlog levels, read only for a type the
-mapping does not name. An instance that will not answer them leaves that type on
-**the assignment path it has always had**, because an import must not refuse work
-for want of a rank it never needed before.
+The lists are what decide a type's level; the instance's backlog ranks are not
+consulted by an import at all. That is what makes two levels on each side work:
+a Feature is an Assignment because the assignment list says so, not because of
+where its rank sits.
+
+**Nesting is a warning, not a refusal.** An item whose ancestor or descendant is
+already linked to a record on the plan would put the same work on the plan twice,
+and the two lists make that a legitimate choice rather than a mistake. So the
+import says so - naming the linked work item, what it became, and that the two
+records' figures overlap, so the report adds them together - and offers
+`Import anyway`. Nothing is written until that press; then the import proceeds
+exactly as it would have. The search looks at the ancestors it walks anyway and
+at the item's descendants, reading each child only to reach its own, and it stops
+rather than failing an import if ADO will not answer for a child.
 
 **A title the plan already carries is offered, never duplicated.** When a live
 Project's name matches the item's title - compared trimmed and without case, as
@@ -1070,14 +1094,17 @@ on the plan unasked. An item assigned to nobody, or to a group - an identity wit
 no email - is refused at that level, and the refusal names which.
 
 **The parents decide the Project**, for an item that becomes an Assignment. The
-import walks up from the item to the first ancestor whose work-item type is the
-mapping's project level, and that ancestor's title names the Project: `Invoices`
-for an Epic of that name, matched against the live Projects without case. A chain
-that reaches no such ancestor is refused, naming every level it walked and the
-project level it was looking for, and so is a project level whose title matches
-no Project - **an assignment-level import never invents a Project**, because a
-wrong Project puts real work in the wrong place. The mapping's `Tag` row is not
-applied by an import yet: nothing is tagged from ADO.
+import walks up from the item to the **nearest** ancestor whose work-item type is
+in the mapping's project levels, and that ancestor's title names the Project:
+`Invoices` for an Epic of that name, matched against the live Projects without
+case. With two project levels the nearest one wins - an item under an Epic under
+an Initiative is placed under the Epic - because the nearer ancestor is the
+closer container. A chain that reaches no such ancestor is refused, naming every
+level it walked and the project levels it was looking for, and so is a project
+level whose title matches no Project - **an assignment-level import never invents
+a Project**, because a wrong Project puts real work in the wrong place. A mapping
+has no tag row, and no import writes a tag: a level the mapping does not name is
+refused rather than labelled.
 
 **The dates follow three rules, in order.** ADO's own win whenever the item's
 type carries both, and are recorded as not assumed; the end field is resolved per
@@ -1156,15 +1183,18 @@ than a Person with no work or a Project with no link. Re-importing a work item
 that a live Assignment already carries is refused,
 naming that Assignment; archive it first if a second block of the same work is
 what was meant. Re-importing a project-level item offers its Project instead:
-using it stores the link again and creates nothing. ADO's own dates outside the
+using it stores the link again and creates nothing. Re-importing an item whose
+ancestor or descendant is already linked warns first: the press that accepts the
+warning is the one that writes, and the plan's own figures then carry both
+records. ADO's own dates outside the
 plan period are refused by the plan's
 rule rather than moved, and widening the period or archiving is the answer.
 
 **Where the controls are.** The `ADO` button in the top bar, after the undo and
 redo controls and before the Options glyph, so it sits with the app-level
 controls rather than among the view controls. It is always visible, and it is
-withdrawn until an operation could work: a mapping in the plan, with its project
-and assignment levels, **and** a token on this machine. A plan carrying a mapping
+withdrawn until an operation could work: a mapping in the plan, with both of
+its lists, **and** a token on this machine. A plan carrying a mapping
 but no token leaves it withdrawn, and the reason names the missing half rather
 than repeating the same sentence. It is withdrawn with `aria-disabled` rather
 than `disabled`, because a natively disabled button takes no focus and its

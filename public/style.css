@@ -2865,11 +2865,11 @@ down to the last row and no further. */
 .panel--planfile { width: 24rem; }
 
 /* The Azure DevOps panels, which are two: the settings - the one URL field, the
-   three rows named after what each maps (Project, Assignment and Tag) and the
-   token - and the operations, which hold the import. A little wider than the
-   default so a long URL, a long type name or a long work-item link fits one
-   line, and the token's field and its two actions stack instead of squeezing the
-   field into an unreadable column. */
+   two lists named after what each maps (Project and Assignment) and the token -
+   and the operations, which hold the import. A little wider than the default so
+   a long URL, a long type name or a long work-item link fits one line, and the
+   token's field and its two actions stack instead of squeezing the field into an
+   unreadable column. */
 .panel--ado { width: 24rem; }
 
 .ado__token {
@@ -2933,8 +2933,27 @@ down to the last row and no further. */
   color: var(--ink-soft);
 }
 
-.ado__select { min-width: 0; }
-.ado__select:disabled { color: var(--ink-soft); }
+/* A mapping list: one row of ticked boxes per type, in a box the row draws, so
+   two ticks read as two levels rather than as a picker that can hold one. Each
+   box is the control and its label is the type's name, so a reader is told the
+   type; the whole list scrolls rather than widening the panel when an instance
+   reports many types, and the empty state is one line of words. */
+.ado__levels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 9rem;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.ado__level {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ado__levels-empty { color: var(--ink-soft); }
 
 /* What the panel says about the token and about the last press: a file path
    and a set of ranks, either of which can be long, so both wrap anywhere

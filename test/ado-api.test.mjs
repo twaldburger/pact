@@ -25,24 +25,24 @@ const TOKEN_PARTS = [TOKEN, TOKEN.slice(0, 16), TOKEN.slice(16), Buffer.from(":"
 const MAPPING = {
   organizationUrl: "https://dev.azure.com/example",
   project: "PACT",
-  projectLevel: "Epic",
-  assignmentLevel: "Feature",
-  tagLevel: "User Story"
+  projectLevels: ["Initiative", "Epic"],
+  assignmentLevels: ["Feature", "User Story"]
 };
 
 const BACKLOGS = {
-  count: 4,
+  count: 5,
   value: [
     { id: "Microsoft.TaskCategory", name: "Tasks", rank: 1, workItemTypes: [{ name: "Task" }, { name: "Bug" }] },
     { id: "Microsoft.RequirementCategory", name: "Stories", rank: 2, workItemTypes: [{ name: "User Story" }] },
     { id: "Microsoft.FeatureCategory", name: "Features", rank: 3, workItemTypes: [{ name: "Feature" }] },
-    { id: "Microsoft.EpicCategory", name: "Epics", rank: 4, workItemTypes: [{ name: "Epic" }] }
+    { id: "Microsoft.EpicCategory", name: "Epics", rank: 4, workItemTypes: [{ name: "Epic" }] },
+    { id: "Microsoft.PortfolioEpicCategory", name: "Initiatives", rank: 5, workItemTypes: [{ name: "Initiative" }] }
   ]
 };
 
 const TYPES = {
-  count: 6,
-  value: [{ name: "Bug" }, { name: "Epic" }, { name: "Feature" }, { name: "Task" }, { name: "User Story" }, { name: "Test Case" }]
+  count: 7,
+  value: [{ name: "Bug" }, { name: "Epic" }, { name: "Feature" }, { name: "Initiative" }, { name: "Task" }, { name: "User Story" }, { name: "Test Case" }]
 };
 
 // The sign-in page Azure DevOps redirects an unaccepted request to: a 2xx whose
@@ -272,6 +272,7 @@ test("test connection reports the project, the types and their ranks from the in
     assert.equal(answer.json.project.name, "PACT");
     assert.equal(answer.json.team, "PACT Team");
     assert.deepEqual(answer.json.types, [
+      { name: "Initiative", rank: 5 },
       { name: "Epic", rank: 4 },
       { name: "Feature", rank: 3 },
       { name: "User Story", rank: 2 },
@@ -307,7 +308,7 @@ test("a 203 whose body is JSON is the instance answering, and the connection is 
   assert.equal(res.status, 200, res.text);
   assert.equal(res.json.project.name, "PACT");
   assert.equal(res.json.team, "PACT Team");
-  assert.deepEqual(res.json.types.map((type) => type.name), ["Epic", "Feature", "User Story", "Bug", "Task"]);
+  assert.deepEqual(res.json.types.map((type) => type.name), ["Initiative", "Epic", "Feature", "User Story", "Bug", "Task"]);
   // The status travels for the panel's title; it is not the line's words.
   assert.equal(res.json.status, 203);
   assertNoToken(res, "POST /api/ado/test on a 203");
@@ -432,7 +433,8 @@ test("a valid mapping is written into the plan, and Undo takes it back", async (
   assert.deepEqual(app.store.get().ado, MAPPING);
   assert.equal(app.store.canUndo(), true);
   const onDisk = fs.readFileSync(app.planFile, "utf8");
-  assert.ok(onDisk.includes('"projectLevel": "Epic"'));
+  assert.ok(onDisk.includes('"projectLevels": ['));
+  assert.ok(onDisk.includes('"assignmentLevels": ['));
   TOKEN_PARTS.forEach((part) => assert.equal(onDisk.includes(part), false));
 
   const state = await call(app.base, "GET", "/api/ado");
@@ -448,14 +450,31 @@ test("a valid mapping is written into the plan, and Undo takes it back", async (
   assert.deepEqual(app.store.get().ado, MAPPING);
 });
 
-test("a valid mapping without a tag slot is stored as a mapping with two levels", async () => {
+test("a mapping with one type in each list is stored as exactly that", async () => {
   const app = await start();
   await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
-  const two = { organizationUrl: MAPPING.organizationUrl, project: "PACT", projectLevel: "Epic", assignmentLevel: "Feature" };
-  const saved = await call(app.base, "POST", "/api/ado/mapping", two);
-  assert.equal(saved.status, 200);
-  assert.deepEqual(saved.json.mapping, two);
-  assert.equal("tagLevel" in app.store.get().ado, false);
+  const single = { organizationUrl: MAPPING.organizationUrl, project: "PACT", projectLevels: ["Epic"], assignmentLevels: ["Feature"] };
+  const saved = await call(app.base, "POST", "/api/ado/mapping", single);
+  assert.equal(saved.status, 200, saved.text);
+  assert.deepEqual(saved.json.mapping, single);
+});
+
+test("an empty list is refused with the sentence saying what the list is for", async () => {
+  const app = await start();
+  await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
+
+  const noProjects = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, { projectLevels: [] }));
+  assert.equal(noProjects.status, 400);
+  assert.match(noProjects.json.error, /projectLevels must name at least one work-item type/);
+  assert.match(noProjects.json.error, /become PACT Projects/);
+
+  const noAssignments = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, { assignmentLevels: [] }));
+  assert.equal(noAssignments.status, 400);
+  assert.match(noAssignments.json.error, /assignmentLevels must name at least one work-item type/);
+  assert.match(noAssignments.json.error, /become PACT Assignments/);
+
+  assert.equal(app.store.get().ado, undefined);
+  assert.equal(app.store.canUndo(), false);
 });
 
 test("an equal or inverted pair is refused, and the message names both ranks", async () => {
@@ -463,8 +482,8 @@ test("an equal or inverted pair is refused, and the message names both ranks", a
   await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
 
   const equal = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, {
-    projectLevel: "Feature",
-    assignmentLevel: "Feature"
+    projectLevels: ["Feature"],
+    assignmentLevels: ["Feature"]
   }));
   assert.equal(equal.status, 400);
   assert.match(equal.json.error, /project type 'Feature' \(rank 3\)/);
@@ -472,25 +491,35 @@ test("an equal or inverted pair is refused, and the message names both ranks", a
   assertNoToken(equal, "equal ranks");
 
   const inverted = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, {
-    projectLevel: "Feature",
-    assignmentLevel: "Epic"
+    projectLevels: ["Feature"],
+    assignmentLevels: ["Epic"]
   }));
   assert.equal(inverted.status, 400);
   assert.match(inverted.json.error, /'Feature' \(rank 3\)/);
   assert.match(inverted.json.error, /'Epic' \(rank 4\)/);
+
+  // One list is only as good as its worst pair: a User Story on the project
+  // side sits below the Feature on the assignment side.
+  const overlapping = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, {
+    projectLevels: ["Epic", "User Story"],
+    assignmentLevels: ["Feature", "User Story"]
+  }));
+  assert.equal(overlapping.status, 400);
+  assert.match(overlapping.json.error, /project type 'User Story' \(rank 2\)/);
+  assert.match(overlapping.json.error, /assignment type 'Feature' \(rank 3\)/);
 
   // A refused mapping writes nothing, and records no undo step.
   assert.equal(app.store.get().ado, undefined);
   assert.equal(app.store.canUndo(), false);
 });
 
-test("a tag slot the instance does not report is refused", async () => {
+test("a tag level is no longer part of the mapping: it is accepted and not stored", async () => {
   const app = await start();
   await call(app.base, "POST", "/api/ado/token", { token: TOKEN });
-  const refused = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, { tagLevel: "Imaginary" }));
-  assert.equal(refused.status, 400);
-  assert.match(refused.json.error, /does not report a type called 'Imaginary'/);
-  assert.equal(app.store.get().ado, undefined);
+  const saved = await call(app.base, "POST", "/api/ado/mapping", Object.assign({}, MAPPING, { tagLevel: "Imaginary" }));
+  assert.equal(saved.status, 200, saved.text);
+  assert.equal("tagLevel" in saved.json.mapping, false);
+  assert.equal("tagLevel" in app.store.get().ado, false);
 });
 
 test("a credential-shaped key inside the mapping is refused, and never reaches the file", async () => {

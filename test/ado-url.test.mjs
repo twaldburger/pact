@@ -19,7 +19,7 @@ import {
   ADO_URL_SHAPES,
   addressFromUrl,
   adoUrlFor,
-  assignmentLevelBelow,
+  mappingRefusal,
   readAdoUrl,
   typeRanks
 } from "../public/lib/ado.mjs";
@@ -175,38 +175,26 @@ test("the parser's refusal is passed through, worded once", () => {
   assert.equal(addressFromUrl("").refusal, readAdoUrl("").refusal);
 });
 
-/* --- the assignment default: the level below, never an invalid pair ------ */
+/* --- the two lists: a list per role, not a picker ------------------------ */
 
 const RANKS = typeRanks({
   value: [
+    { rank: 4, workItemTypes: [{ name: "Initiative" }] },
     { rank: 3, workItemTypes: [{ name: "Epic" }] },
     { rank: 2, workItemTypes: [{ name: "Feature" }] },
     { rank: 1, workItemTypes: [{ name: "User Story" }] }
   ]
 });
 
-test("the assignment slot is offered the level below the chosen project", () => {
-  assert.equal(assignmentLevelBelow(RANKS, "Epic", ""), "Feature");
-  assert.equal(assignmentLevelBelow(RANKS, "Feature", ""), "User Story");
-});
-
-test("an assignment choice already below the project is kept as it is", () => {
-  assert.equal(assignmentLevelBelow(RANKS, "Epic", "User Story"), "User Story");
-  assert.equal(assignmentLevelBelow(RANKS, "Feature", "User Story"), "User Story");
-});
-
-test("a pair the rank rule refuses is never the one offered", () => {
-  // Equal: Epic over Epic, which the issue names as the panel's old default.
-  assert.equal(assignmentLevelBelow(RANKS, "Epic", "Epic"), "Feature");
-  // Inverted: Epic under Feature.
-  assert.equal(assignmentLevelBelow(RANKS, "Feature", "Epic"), "User Story");
-});
-
-test("nothing is offered with no project chosen, no ranks, or nothing below", () => {
-  assert.equal(assignmentLevelBelow(RANKS, "", "Feature"), "");
-  assert.equal(assignmentLevelBelow(RANKS, "User Story", ""), "");
-  assert.equal(assignmentLevelBelow([], "Epic", ""), "");
-  assert.equal(assignmentLevelBelow(undefined, "Epic", ""), "");
+test("a mapping may name two project types and two assignment types at once", () => {
+  // The rule is a pair of sets, not a pair of names: every assignment type
+  // ranks below every project type, which two levels on each side still does.
+  assert.equal(mappingRefusal({
+    projectLevels: ["Initiative", "Epic"],
+    assignmentLevels: ["Feature", "User Story"]
+  }, { ranks: RANKS }), null);
+  // And the lists are read the same whether one name is in them or two.
+  assert.equal(mappingRefusal({ projectLevels: ["Epic"], assignmentLevels: ["Feature"] }, { ranks: RANKS }), null);
 });
 
 /* --- the pair as one URL -------------------------------------------------- */
@@ -254,10 +242,10 @@ const FORM_ROW = (() => {
 
 // The type slot's filler, where the empty choice lives.
 const FILL = (() => {
-  const start = APP.indexOf("function fillTypeSelect(");
-  assert.ok(start >= 0, "the type slot's filler is not in the script");
+  const start = APP.indexOf("function levelTicks(");
+  assert.ok(start >= 0, "the mapping list's control is not in the script");
   const end = APP.indexOf("\n/* --- the help panel", start);
-  assert.ok(end > start, "the filler does not end where the help panel begins");
+  assert.ok(end > start, "the list control does not end where the help panel begins");
   return APP.slice(start, end);
 })();
 
@@ -275,19 +263,21 @@ test("the panel asks for the URL and for nothing else about the address", () => 
 test("the pair a press sends is read from that URL, by the shared rules", () => {
   assert.match(PANEL, /function address\(\) \{\s*return addressFromUrl\(urlInput\.value\);\s*\}/);
   assert.match(PANEL, /api\("POST", "\/api\/ado\/test", \{\s*organizationUrl: reading\.organizationUrl,\s*project: reading\.project\s*\}\)/);
-  assert.match(PANEL, /organizationUrl: reading\.organizationUrl,\s*project: reading\.project,\s*projectLevel:/);
+  assert.match(PANEL, /organizationUrl: reading\.organizationUrl,\s*project: reading\.project,\s*projectLevels:/);
   // The refusal is the shared rules' own, so the panel cannot word a second set
   // of accepted shapes that drifts from the ones the reading accepts.
   assert.match(PANEL, /var reading = address\(\);\s*if \(reading\.refusal\) \{/);
   assert.doesNotMatch(PANEL, /dev\.azure\.com\/ needs|visualstudio\.com' addresses/);
 });
 
-test("the three rows are named after PACT's things, with no lead-in and no 'type'", () => {
-  assert.match(PANEL, /form\.appendChild\(formRow\("Project", projectLevel, ADO_ROW_TIPS\.project\)\);/);
-  assert.match(PANEL, /form\.appendChild\(formRow\("Assignment", assignmentLevel, ADO_ROW_TIPS\.assignment\)\);/);
-  assert.match(PANEL, /form\.appendChild\(formRow\("Tag", tagLevel, ADO_ROW_TIPS\.tag\)\);/);
+test("the two rows are named after PACT's things, with no lead-in and no 'type'", () => {
+  assert.match(PANEL, /form\.appendChild\(formRow\("Project", projectLevels\.node, ADO_ROW_TIPS\.project\)\);/);
+  assert.match(PANEL, /form\.appendChild\(formRow\("Assignment", assignmentLevels\.node, ADO_ROW_TIPS\.assignment\)\);/);
   assert.doesNotMatch(PANEL, /formRow\("(Project|Assignment|Tag) type/);
   assert.doesNotMatch(PANEL, /type"\s*,/);
+  // The tag row is gone entirely: no control, no id, no explanation, and no
+  // word for it anywhere in the panel.
+  assert.doesNotMatch(PANEL, /tagLevel|tag-level|"Tag"|ADO_ROW_TIPS\.tag/i);
 });
 
 test("each row's explanation rides on the row's label, not only on the select", () => {
@@ -299,11 +289,12 @@ test("each row's explanation rides on the row's label, not only on the select", 
   assert.match(APP, /b\.setAttribute\("title", full\);/);
 });
 
-test("the three explanations are one sentence each, in the app's voice", () => {
-  assert.equal(Object.keys(ADO_ROW_TIPS).join(","), "project,assignment,tag");
-  assert.match(ADO_ROW_TIPS.project, /^The ADO work-item type a PACT Project comes from/);
-  assert.match(ADO_ROW_TIPS.assignment, /^The ADO work-item type a PACT Assignment comes from/);
-  assert.match(ADO_ROW_TIPS.tag, /^The ADO work-item type whose name becomes a tag on the assignment/);
+test("the two explanations are one sentence each, in the app's voice", () => {
+  assert.equal(Object.keys(ADO_ROW_TIPS).join(","), "project,assignment");
+  assert.match(ADO_ROW_TIPS.project, /^The ADO work-item types that become PACT Projects/);
+  assert.match(ADO_ROW_TIPS.assignment, /^The ADO work-item types that become PACT Assignments/);
+  // The Project row's explanation still states the rank rule, in the plural.
+  assert.match(ADO_ROW_TIPS.project, /must rank above every type on the Assignment row/);
   Object.values(ADO_ROW_TIPS).forEach((tip) => {
     assert.ok(tip.trim() !== "");
     assert.match(tip, /\.$/, tip);
@@ -312,19 +303,31 @@ test("the three explanations are one sentence each, in the app's voice", () => {
   });
 });
 
-test("nothing opens on a pair the rank rule would refuse", () => {
-  // Before a test connection each slot offers only its empty choice, and a slot
-  // with nothing stored stays empty rather than taking the first type offered.
-  assert.match(PANEL, /fillTypeSelect\(projectLevel, \[\], mapping\.projectLevel, \{ blank: CHOOSE_TYPE \}\);/);
-  assert.match(PANEL, /fillTypeSelect\(assignmentLevel, \[\], mapping\.assignmentLevel, \{ blank: CHOOSE_TYPE \}\);/);
-  assert.match(PANEL, /fillTypeSelect\(tagLevel, \[\], mapping\.tagLevel \|\| "", \{ blank: "None" \}\);/);
-  assert.match(PANEL, /fillTypeSelect\(projectLevel, ranked, currentOr\(projectLevel, mapping\.projectLevel\), \{ blank: CHOOSE_TYPE \}\);/);
-  assert.match(FILL, /: \(blank \? "" : list\[0\]\)/);
-  // Once the ranks are known, the assignment is held to the level below the
-  // chosen project, so a chosen project never leaves an unsavable pair.
-  assert.match(PANEL, /function syncAssignment\(\) \{[\s\S]*?assignmentLevelBelow\(instance\.types \|\| \[\], projectLevel\.value, assignmentLevel\.value\)/);
-  assert.match(PANEL, /projectLevel\.addEventListener\("change", syncAssignment\);/);
-  assert.match(PANEL, /syncAssignment\(\);\s*saveButtonEl\.disabled = false;/);
+test("the two lists are ticked over the instance's types, and nothing is pre-ticked", () => {
+  // The rows are the tick lists, filled from the instance's ranked types with
+  // the plan's stored lists ticked - so two names on each side is a plan the
+  // panel can open and a save it can send.
+  assert.match(PANEL, /var projectLevels = levelTicks\(\);/);
+  assert.match(PANEL, /projectLevels\.fill\(\[\], mapping\.projectLevels \|\| \[\]\);/);
+  assert.match(PANEL, /var assignmentLevels = levelTicks\(\);/);
+  assert.match(PANEL, /assignmentLevels\.fill\(\[\], mapping\.assignmentLevels \|\| \[\]\);/);
+  assert.match(PANEL, /projectLevels\.fill\(ranked, currentOr\(projectLevels, mapping\.projectLevels\)\);/);
+  assert.match(PANEL, /assignmentLevels\.fill\(ranked, currentOr\(assignmentLevels, mapping\.assignmentLevels\)\);/);
+  // What a save sends is the two lists, and the shared rules refuse an empty
+  // one before the request is made.
+  assert.match(PANEL, /projectLevels: projectLevels\.chosen\(\),\s*assignmentLevels: assignmentLevels\.chosen\(\)/);
+  assert.match(PANEL, /var refusals = adoRefusals\(payload\);/);
+  // A list is a list: the control offers every type as a tick, not as the one
+  // value of a select.
+  assert.match(FILL, /box\.type = "checkbox";/);
+  assert.match(FILL, /box\.checked = \(selected \|\| \[\]\)\.indexOf\(name\) !== -1;/);
+  assert.match(FILL, /return boxes\.filter\(function \(box\) \{ return box\.checked; \}\)/);
+  // A stored name the instance did not report stays visible and ticked, so the
+  // panel shows what the plan holds rather than dropping it.
+  assert.match(FILL, /if \(listed\.indexOf\(name\) === -1\) listed\.push\(name\);/);
+  // Nothing is chosen on the panel's own initiative: an empty list stays empty
+  // and the rank rule, not a default, decides what may be saved.
+  assert.doesNotMatch(PANEL, /syncAssignment|assignmentLevelBelow/);
 });
 
 test("a stored mapping opens as the one URL it is", () => {
@@ -344,7 +347,12 @@ test("the reference describes the simpler panel, not the reading line", () => {
   const section = adoSection();
   assert.doesNotMatch(section, /organisation: timwaldburger/);
   assert.doesNotMatch(section, /states what it read/);
-  assert.match(section, /`Project`, `Assignment` and `Tag`/);
+  assert.match(section, /`Project` and `Assignment`/);
+  // The reference says the mapping is two lists, and that the rank rule is one
+  // rule over both of them - not a tag row that has gone.
+  assert.match(section, /two lists of work-item type names/);
+  assert.match(section, /every assignment type must rank below every\s+project type/);
+  assert.doesNotMatch(section, /`Tag` row|tag slot, when set/);
   assert.match(section, /title/);
   assert.match(section, /Test connection/, "a mis-paste is caught at Test connection");
 });

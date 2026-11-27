@@ -219,7 +219,7 @@ export function milestonesItem(milestones) {
  * The Azure DevOps entry in the Options menu: the settings door. Like the panel
  * entries above it an action, not a checked state: opening it opens the
  * Azure DevOps settings, where a connection is set up - the URL, the mapping's
- * three rows and the token - so the row is always there rather than appearing
+ * two lists and the token - so the row is always there rather than appearing
  * once a mapping exists, which would leave no way to make the first one. The
  * detail states whether a mapping is configured, and names its ADO project when
  * one is. The mapping is plan data; whether a token is set is not, so a plan
