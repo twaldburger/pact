@@ -30,15 +30,20 @@ test("the Sprint button is the last child of the zoom group", () => {
   assert.equal(buttons[buttons.length - 1][1], "sprint");
 });
 
-// The disabled look is the interface's one shared treatment: the same
-// --op-disabled opacity and default cursor every other exhausted control uses.
-test("a disabled zoom button takes the shared disabled treatment", () => {
-  const rule = STYLE.match(/\.zoom__btn:disabled[^{}]*\{([^}]*)\}/);
-  assert.ok(rule, "the .zoom__btn:disabled rule is missing");
+// The disabled look is the bar's one shared treatment: the same --op-disabled
+// opacity and default cursor every other control in the bar that cannot act
+// uses, stated once for the state rather than once per control.
+test("a disabled zoom button takes the bar's shared disabled treatment", () => {
+  const rule = STYLE.match(/\.topbar button:disabled[^{}]*\{([^}]*)\}/);
+  assert.ok(rule, "the bar's one disabled rule is missing");
   assert.match(rule[1], /opacity:\s*var\(--op-disabled\)/);
   assert.match(rule[1], /cursor:\s*default/);
   // The token itself is defined, so the opacity is not a bare fallback.
   assert.match(STYLE, /--op-disabled:\s*[^;]+;/);
+  // The zoom segments are buttons in the bar, so that rule is theirs; none of
+  // them carries a disabled rule of its own.
+  assert.match(HTML, /<button[^>]*class="zoom__btn"/);
+  assert.doesNotMatch(STYLE, /\.zoom__btn:disabled/);
 });
 
 test("the zoom hover does not fire on a disabled button", () => {

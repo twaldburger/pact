@@ -935,3 +935,165 @@ test("the panel's status lines take their colours from --ok and --signal", () =>
   assert.doesNotMatch(lines[1], /#[0-9A-Fa-f]{3,6}/);
   assert.doesNotMatch(lines[2], /#[0-9A-Fa-f]{3,6}/);
 });
+
+/* --- the bar's one disabled rendering ------------------------------------ */
+
+// Every leaf rule of the stylesheet, split into its selector and its
+// declarations. Comments are stripped first, so a brace or a semicolon in prose
+// cannot end a rule early, and a block that holds further blocks (an @media
+// query) yields its children rather than itself.
+function cssRules(css) {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [];
+  const open = [];
+  let body = "";
+  for (const ch of text) {
+    if (ch === "{") {
+      open.push(body.trim());
+      body = "";
+    } else if (ch === "}") {
+      const selector = open.pop();
+      if (body.includes(":")) rules.push({ selector, body });
+      body = "";
+    } else {
+      body += ch;
+    }
+  }
+  return rules;
+}
+
+function selectorsOf(rule) {
+  return rule.selector.split(",").map((part) => part.trim());
+}
+
+// A declaration, or null where the rule does not make it - the counterpart of
+// `declaration` above, which insists the rule does.
+function declared(body, name) {
+  const found = body.match(new RegExp("(?:^|[;{])\\s*" + name + ":\\s*([^;]+);"));
+  return found ? found[1].replace(/\s+/g, " ").trim() : null;
+}
+
+// The colour a control has at rest: the last `color` declared by a rule naming
+// exactly that class. A rule carrying a state or a child in its selector is not
+// the control's rest state and is skipped.
+function restColour(className) {
+  let colour = null;
+  for (const rule of cssRules(STYLE)) {
+    if (!selectorsOf(rule).includes(className)) continue;
+    const value = declared(rule.body, "color");
+    if (value) colour = value;
+  }
+  return colour;
+}
+
+// The bar's controls that can be disabled: the ones the top bar mounts, and
+// every one of them a button.
+const BAR_CONTROLS = [".ghost", ".history__btn", ".zoom__btn", ".rowheight__btn", ".spacing__btn"];
+
+// The one rule that draws a control in the bar that cannot act.
+function barDisabledRule() {
+  const found = cssRules(STYLE).filter(
+    (rule) => rule.selector.includes(".topbar") && declared(rule.body, "opacity") === "var(--op-disabled)"
+  );
+  assert.equal(found.length, 1,
+    "the bar's disabled rendering is not written once: " + found.length + " rules set --op-disabled in the bar");
+  return found[0];
+}
+
+// ADO looked fainter than Undo because the two shared --op-disabled but not its
+// base: the ghost started from --ink-soft and the history buttons from the
+// bar's ink, so 45% of a soft grey read as almost nothing beside 45% of ink.
+// The fix is one base and one opacity for both, stated once for the state, so a
+// control added to the bar cannot arrive with a third rendering.
+test("the bar's disabled rendering is one rule for the state, not one per control", () => {
+  const rule = barDisabledRule();
+  assert.match(rule.selector, /\.topbar[ :]/);
+  // It names the state, never a control.
+  for (const control of BAR_CONTROLS) {
+    assert.ok(!rule.selector.includes(control), control + " is named by the disabled rule");
+  }
+  for (const mark of [":disabled", '[aria-disabled="true"]', ".is-disabled"]) {
+    assert.ok(rule.selector.includes(mark), "the disabled rule does not cover " + mark);
+  }
+  // And no control has copied it back: nothing draws a disabled bar control of
+  // its own.
+  for (const control of BAR_CONTROLS) {
+    const own = cssRules(STYLE).filter((candidate) =>
+      selectorsOf(candidate).some((s) =>
+        s.startsWith(control) && /:disabled|\.is-disabled|\[aria-disabled/.test(s)) &&
+      declared(candidate.body, "opacity")
+    );
+    assert.deepEqual(own.map((candidate) => selectorsOf(candidate)),
+      [], control + " still draws a disabled state of its own");
+  }
+});
+
+test("a disabled ghost and a disabled history button resolve to one colour at one opacity", () => {
+  const rule = barDisabledRule();
+  // They start apart, which is the whole of the bug: the ghost is a soft grey,
+  // the history buttons inherit the bar's ink.
+  assert.equal(restColour(".ghost"), "var(--ink-soft)");
+  assert.equal(restColour(".history__btn"), "inherit");
+  // The bar sets no colour of its own, so `inherit` there is the page's ink.
+  const bar = cssRules(STYLE).filter((candidate) => selectorsOf(candidate).includes(".topbar"));
+  assert.ok(bar.length, "the .topbar rule is missing");
+  assert.equal(declared(bar[0].body, "color"), null, "the bar sets a colour, so `inherit` is not the page's ink");
+  assert.equal(restColour("body"), "var(--ink)");
+  // One state, one base, one opacity - and it reaches both, because every one of
+  // them is a button in the bar.
+  assert.equal(declared(rule.body, "color"), "var(--ink)");
+  assert.equal(declared(rule.body, "opacity"), "var(--op-disabled)");
+  assert.equal(declared(rule.body, "cursor"), "default");
+  for (const selector of selectorsOf(rule)) {
+    assert.ok(selector.includes("button"), selector + " does not reach a button");
+  }
+  // The value the owner reported: the ink seen through the shared opacity is a
+  // stronger mark on the paper than the soft grey it replaces.
+  const alpha = Number(STYLE.match(/--op-disabled:\s*([0-9.]+)\s*;/)[1]) * 100;
+  const canvas = tokenHex("--canvas");
+  const wasSoft = contrast(mix(canvas, tokenHex("--ink-soft"), alpha), canvas);
+  const nowInk = contrast(mix(canvas, tokenHex("--ink"), alpha), canvas);
+  assert.ok(nowInk > wasSoft,
+    "the disabled ink reads at " + nowInk.toFixed(2) + ", no stronger than the soft grey's " + wasSoft.toFixed(2));
+});
+
+test("a disabled control in the bar takes no hover tint, whichever mark carries the state", () => {
+  const hover = cssRules(STYLE).find((candidate) =>
+    selectorsOf(candidate).some((s) => s.startsWith(".history__btn:hover")));
+  assert.ok(hover, "the bar's hover rule is missing");
+  assert.equal(declared(hover.body, "background"),
+    "color-mix(in srgb, var(--ink) var(--mix-hover), transparent)");
+  for (const control of BAR_CONTROLS) {
+    const selector = selectorsOf(hover).find((s) => s.startsWith(control + ":hover"));
+    assert.ok(selector, control + " is not covered by the bar's one hover rule");
+    for (const guard of [":not(:disabled)", ':not([aria-disabled="true"])', ":not(.is-disabled)"]) {
+      assert.ok(selector.includes(guard), control + "'s hover does not stand down for " + guard);
+    }
+  }
+  // Nothing re-tints a control that cannot act: no bar control carries a hover
+  // rule of its own for a disabled state, once the guards above are read off.
+  for (const control of BAR_CONTROLS) {
+    const own = cssRules(STYLE).filter((candidate) =>
+      selectorsOf(candidate).some((s) =>
+        s.startsWith(control) && s.includes(":hover") &&
+        /:disabled|\.is-disabled|\[aria-disabled/.test(s.replace(/:not\([^)]*\)/g, "")))
+    );
+    assert.deepEqual(own.map((candidate) => selectorsOf(candidate)), [],
+      control + " has a hover rule of its own for the disabled state");
+  }
+});
+
+// The border, decided: a disabled ghost keeps its frame and the frame rides the
+// control's own opacity. The bar's frames say which controls belong together,
+// never whether one of them can act - the history buttons have no frame of
+// their own either, they sit inside the pair's - so dropping the frame would
+// make a disabled Today read as a different kind of control rather than the
+// same one, unavailable.
+test("a disabled ghost keeps its frame, drawn through the same opacity", () => {
+  const rule = barDisabledRule();
+  assert.doesNotMatch(rule.body, /border/, "the disabled rule handles the border itself");
+  const ghost = cssRules(STYLE).find((candidate) =>
+    selectorsOf(candidate).includes(".ghost") && declared(candidate.body, "border"));
+  assert.ok(ghost, "the ghost has no border to fade");
+  assert.equal(declared(ghost.body, "border"), "1px solid var(--rule)");
+});

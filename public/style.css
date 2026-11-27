@@ -95,7 +95,7 @@
   --mix-band: 8%;         /* the rubber band of a range being drawn */
   --mix-hatch: 42%;       /* the over-allocation hatch, drawn in --signal */
   --mix-over: 5%;         /* the row header of a Person over their Availability */
-  --op-disabled: 0.45;    /* a control at the end of its range */
+  --op-disabled: 0.45;    /* a control that cannot act: at its range's end, or withdrawn */
   --op-archived: 0.6;     /* history: an archived Assignment, and its chip */
   /* A text glyph is not centred in its line box, and a "+" sits below the cap
      centre of the title beside it. This is that distance for a 17px title, in
@@ -347,12 +347,16 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* Hover is one quiet tint for every transparent control in the bar; a control
-   that is already pressed keeps the ink fill instead. */
-.zoom__btn:hover:not([aria-pressed="true"]):not(:disabled),
-.rowheight__btn:hover:not(:disabled),
-.spacing__btn:hover:not(:disabled),
-.history__btn:hover:not(:disabled),
-.ghost:hover:not([aria-pressed="true"]) {
+   that is already pressed keeps the ink fill instead. A control that cannot
+   act is not hovered at all: the tint is guarded on the three marks the
+   disabled rendering below is written for, so whichever of them a control
+   wears - a native `disabled`, a withdrawn `aria-disabled`, or the
+   `.is-disabled` beside it - the tint stands down. */
+.zoom__btn:hover:not([aria-pressed="true"]):not(:disabled):not([aria-disabled="true"]):not(.is-disabled),
+.rowheight__btn:hover:not(:disabled):not([aria-disabled="true"]):not(.is-disabled),
+.spacing__btn:hover:not(:disabled):not([aria-disabled="true"]):not(.is-disabled),
+.history__btn:hover:not(:disabled):not([aria-disabled="true"]):not(.is-disabled),
+.ghost:hover:not([aria-pressed="true"]):not(:disabled):not([aria-disabled="true"]):not(.is-disabled) {
   background: color-mix(in srgb, var(--ink) var(--mix-hover), transparent);
   color: var(--ink);
 }
@@ -363,10 +367,31 @@ h1, h2, h3, p { margin: 0; }
   color: var(--canvas);
 }
 
-.zoom__btn:disabled,
-.rowheight__btn:disabled,
-.spacing__btn:disabled,
-.history__btn:disabled { opacity: var(--op-disabled); cursor: default; }
+/* One disabled rendering for every control in the bar that can be disabled: the
+   zoom segments, the row-height and Grid-spacing pairs, Undo and Redo, Today and
+   the ADO button. A control that has reached the end of its range is natively
+   `disabled`; one whose action is withdrawn - Today outside the plan's period,
+   ADO with no mapping or token - stays focusable and answers with why, so it
+   wears `aria-disabled` and `.is-disabled` instead. Those are one visual state,
+   and they get this one rule, written for the state rather than for each
+   control, so a control cannot arrive with a third rendering of its own.
+
+   The base is the bar's ink, not --ink-soft: a disabled text control reads the
+   way a disabled glyph does, the same colour through the same --op-disabled.
+   45% of an already-soft grey reads as almost nothing beside 45% of ink, which
+   is why ADO looked fainter than Undo. The border is not touched, so it rides
+   the element's opacity with the rest of the control and a disabled ghost's
+   frame fades with its words rather than being dropped: frames in this bar say
+   which controls belong together and never whether one can act, so a disabled
+   control keeps its frame instead of losing it and reading as another kind of
+   control. */
+.topbar button:disabled,
+.topbar button[aria-disabled="true"],
+.topbar button.is-disabled {
+  color: var(--ink);
+  opacity: var(--op-disabled);
+  cursor: default;
+}
 
 /* One control language for the quiet actions that sit in a column's own
    header, beside the title they belong to: the plus that adds a Person or
@@ -865,18 +890,6 @@ h1, h2, h3, p { margin: 0; }
 
 .options__apply:hover:not(:disabled) { border-color: var(--rule-strong); }
 .options__apply:disabled { opacity: var(--op-disabled); cursor: default; }
-
-/* The Today control when the set period excludes today: still labelled and
-   still reachable, with its action withdrawn. */
-.ghost.is-disabled {
-  opacity: var(--op-disabled);
-  cursor: default;
-}
-
-.ghost.is-disabled:hover {
-  background: transparent;
-  color: var(--ink-soft);
-}
 
 /* The empty result: the grid steps aside and names the filter that emptied it. */
 .tl.is-empty {
