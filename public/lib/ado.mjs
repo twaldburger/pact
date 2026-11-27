@@ -520,6 +520,26 @@ export function noTokenMessage(token) {
 export const ADO_CONNECT_FIRST =
   "Connect PACT to Azure DevOps first: Options then Azure DevOps\u2026";
 
+/*
+ * The presses that reach Azure DevOps: the whole of the egress, as data. A call
+ * is made only in answer to one of these, never on a timer and never in the
+ * background. The list lives here rather than in prose because three documents
+ * make the same promise - the README, the glossary and the feature reference -
+ * and one list quoted three times cannot drift the way three descriptions can.
+ *
+ * Writing or clearing the token is deliberately absent: those are a file on
+ * this machine's own disk and reach nothing, which is exactly the mistake a
+ * prose list made. The settings panel visits ADO on open only when a token and
+ * an address are both already stored, because it reads the types and tests the
+ * connection it may then draw; that is still a press, and its own.
+ */
+export const ADO_EGRESS_ACTIONS = Object.freeze([
+  "opening the settings panel",
+  "Test connection",
+  "Save mapping",
+  "an import"
+]);
+
 // A mapping is in the plan when the store would accept it: the address pair
 // and the two levels an Assignment is drawn from. The tag level is optional
 // there, so it is optional here too.

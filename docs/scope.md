@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: "PACT scope"
-description: What the first version covers, and what is deliberately left out of it.
+description: What the first version covers, what is deliberately left out of it, and what has landed since.
 ---
 
 # PACT - scope
@@ -18,9 +18,9 @@ Confirmed by the owner on 2026-11-02. The first version is locked; the interface
 - **Vertical drag** - dragging an Assignment's edge changes its share of the Person's Availability in the plan's percentage step, between one step and 100%. The same share is set by the plus-and-minus stepper a Person's Availability uses, in the Assignment popover and the New assignment panel, so an Allocation is set by dragging or by stepping, never free-typed.
 - **One share per Assignment** - the share holds for the whole range; a change of share, or a gap, is a second Assignment.
 - **Assignment extras** - any number of Assignment tags and an optional note.
-- **The Marker** - a draggable vertical line on the Timeline, starting on today, with the date it sits on being the date the per-Person totals are read at. Each Person's row header reads their absolute assigned total together with their Availability - "96% of 80%" - with a warning state when the total passes the Availability. It is drawn by default and can be hidden from the Options menu: hiding it takes the line and its date chip away, so there is nothing to drag, and leaves the reading where it was.
+- **The Marker** - a draggable vertical line on the Timeline, starting on today, with the date it sits on being the date the per-Person totals are read at. Each Person's row header reads their absolute assigned total together with their Availability, as `assigned/availability` - `96/80%` - turning to the signal colour when the total passes the Availability. It is drawn by default and can be hidden from the Options menu: hiding it takes the line and its date chip away, so there is nothing to drag, and leaves the reading where it was.
 - **Default view** - opens on the past plus the next eleven months at month resolution, with free scrolling in both directions.
-- **Tags** - Person tags, Project tags and Assignment tags are separate vocabularies. A new one is typed, or an existing one chosen from the same kind: for a Person, tags already used on other People; for a Project, tags already used on other Projects; for an Assignment, tags already used on that Project's other Assignments. The vocabulary is derived from use and matched case-insensitively. Every element's tags are stored alphabetically, case-insensitive A-Z, so the chips read and the saved array reads the same order. Tags are recorded and shown in v1; grouping and colour-coding by tag are later.
+- **Tags** - Person tags, Project tags and Assignment tags are separate vocabularies. A new one is typed, or an existing one chosen from the same kind: for a Person, tags already used on other People; for a Project, tags already used on other Projects; for an Assignment, tags already used on that Project's other Assignments. The vocabulary is derived from use and matched case-insensitively. Every element's tags are stored alphabetically, case-insensitive A-Z, so the chips read and the saved array reads the same order. Tags are recorded and shown on the grid; grouping and colour-coding by tag have since landed, and are listed under "Since v1" below.
 - **Tag display** - a compact marker on the Assignment's rectangle and the Person's row header, with full editing in the Assignment popover and the Person form; the marker is hidden in month zoom, where a rectangle is a few pixels wide.
 - **Zoom** - day, week, sprint and month views, changing only what the grid draws and never the stored dates. Sprint opens at half the week's width, so by default a two-week sprint spans what one week does at Week zoom, and its secondary band names the derived sprint chain in place of days or weeks; the Sprint zoom is shown but disabled until a sprint cadence is defined. Beside the zoom sit two stepper pairs: a row-height control that changes the drawn height of every row in 8px steps from 32 to 120, defaulting to 48, drawn with vertical arrows, and a grid-spacing control that changes the drawn width of one day in 2px steps from 2 to 48, drawn with horizontal arrows, each of the four zooms remembering its own width. Both are view settings kept in the config and restored on load, not written to the plan, and Reset view restores the spacing defaults of 44, 16, 8 and 5px. A Today control sits between the Filter and the zoom group and scrolls the view so today is visible again.
 - **Percentage step** - one whole-number setting from 1 to 100, under the Options glyph in the same shape as the plan-period control, that governs both a Person's Availability and an Assignment's Allocation: the steppers, the panels and the vertical drag snap by it, and one step is also the floor. It is plan data, stored beside the period and defaulting to 10 when absent, so an existing plan loads unchanged. The server never enforces it, accepting any whole number from 1 to 100, so changing the step leaves every stored value exactly as it was.
@@ -28,7 +28,7 @@ Confirmed by the owner on 2026-11-02. The first version is locked; the interface
 - **Archive** - a Show archived item in the top bar's Options menu for People, Projects and Assignments, alone in its own group between the view settings and the plan's because it decides which records are included rather than what is drawn, and session-only: every load starts with it off and `Reset view` leaves it alone. Archived entries are hidden while it is off and cannot take new Assignments until restored.
 - **Delete** - a Delete beside Archive in the person panel, the project panel and the assignment popover permanently destroys the record at once, with no confirmation; an Assignment can also be deleted with the Delete key while the pointer is over its block. A deletion needs no prior archive and an archived record can be deleted too; there is no trash, and a deletion is recoverable only through Undo while it remains in the running server's history.
 - **Minimap** - an overview strip of the Timeline, off by default and enabled from the Options menu, fixed at the board's bottom-right. Its height is how much of the shown rows' available capacity is used on each day rather than an absolute assigned share, with over-allocation marked distinctly at the top of that scale; it follows the Filter and Show archived and shows an empty map when the Filter leaves nothing. The stretch the grid currently shows is highlighted and can be dragged, and the strip clicked, to scroll the Timeline along its time axis. It is kept in the config like Zoom and Row height and is independent of the collapsible Stack.
-- **View state** - the Zoom, the Row height, the Grid spacing per zoom, the weekend band, the holiday band, the Milestone rules, the availability lines, whether the assignment blocks are drawn, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, whether the Stack rail is folded, and the two sort orders are view settings: they are kept in `data/config.json` beside the plan path and restored on each load, never written to the plan. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press and leaves the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's own default.
+- **View state** - the Zoom, the Row height, the Grid spacing per zoom, the weekend band, the holiday band, the Milestone rules, the availability lines, whether the assignment blocks are drawn, the Grid dividers, the Minimap, whether the Marker is drawn, the Colour palette, whether the Stack rail is folded, and the two sort orders are view settings: they are kept in `data/config.json` beside the app and restored on each load, never written to the plan. The Filter is deliberately not a view setting, being a query, so it does not persist; nor does the Marker's date, being a cursor into the timeline - only whether the Marker is drawn does. `Reset view`, under the Options glyph, returns every view setting to its default in one press and leaves the plan, the plan path, the Filter and the Marker's date alone. A malformed stored value falls back to that setting's own default.
 - **Filter** - one field in the top bar that hides everything on the grid not matching a case-insensitive substring, with People, Projects and Assignments all looked in by default and each switchable behind a scope popover that states how many areas are being searched; a matching Project appears in the Projects rail with all of its Assignments, a matching Person with all of their work, and a matching Assignment brings its Person's row and its Project. Typing offers a keyboard-navigable list of the plan's own vocabulary - project names, people's names, Project tags, Assignment tags, Person tags and notes, and, under a milestone prefix, Milestone names, tags and notes - each labelled with its source and how much it would match, prefix matches first. A term naming a milestone field - `milestone:`, `milestone tag:` or `milestone note:` - narrows the Milestones alone, leaving the rows whole, and the visibility rule still decides which of them are drawn. Row-header figures keep describing the whole plan, the filter is session-only and respects Show archived, and an empty result names what was typed and offers to clear it.
 - **Persistence** - every change is written to the active JSON file; starting the app loads it. The app keeps no backups of its own: one file, backed up by the owner however they choose.
 - **Plan file choice** - the active plan is one file, chosen from the `Plan file...` entry under the Options glyph: the panel holds the current file's resolved path, a field to type another, Open and New plan. An existing file opens as asked and the resolved path is reported; a missing, read-only, deleted or unmounted file is refused plainly and the current plan stays loaded; a new plan is truly empty - no people or projects - and is offered under the `.pact.json` suffix, while a plain `.json` may still be opened but is never offered as a plan by default. Paths are stored absolute and resolved with `~` expanded, no relative paths; the choice is remembered in `data/config.json` beside the app, and `PACT_DATA` wins when set. The app writes only the chosen file, and refuses a write when the file changed underneath it since it was last read. The default is `data/default.pact.json`, the old `data/pact.json` moved to it on the first run with this code.
@@ -39,14 +39,28 @@ Designed through the `frontend-design` skill and built. The brief it was given: 
 
 ## Later, deliberately not in v1
 
-- Grouping, reporting and colour-coding by tag.
-- Public holidays and non-working days.
 - Rates and cost, and therefore budget views.
-- Reports and exports.
+- Exports - the report draws its figures in the app and writes no file.
 - Forecasting and scenario planning (what if this Project moves).
 - Multi-user access and any server-side sharing.
-- Import from other planners or spreadsheets.
+- Import from other planners or spreadsheets at large: one Azure DevOps work
+  item imports today, which is one shape of import rather than the general one.
 
 ## Out of scope entirely
 
 - Any hosted or cloud service: PACT runs locally over one file.
+
+## Since v1
+
+Amended later, on 2026-11-27, against what the app now does. The list above is
+the record of what v1 promised; these are the things on it that have landed
+since, so a reader is not told in the past tense about work they can use.
+
+- Grouping, reporting and colour-coding by tag - see [Tags, typed tags and
+  colour by key](features.md#tags-typed-tags-and-colour-by-key) and [the
+  report's views](features.md#the-reports-views).
+- Holidays, configured per Location and full or half day - see [the holidays
+  panel](features.md#the-holidays-panel) and [the holiday
+  band](features.md#the-holiday-band).
+- Reports - see [the report](features.md#the-report). Exports have not landed,
+  so that entry stays above on its own.

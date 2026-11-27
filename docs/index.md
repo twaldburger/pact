@@ -17,9 +17,10 @@ sits outside it is listed first.
 - [features.md](features.md) - the feature reference: what each capability does,
   how it behaves and where its controls live.
 - [agent-tooling.md](agent-tooling.md) - the command line: the reads, the writes,
-  the limits, and the command table the tool generates for itself.
-- [scope.md](scope.md) - what the first version covers, and what is deliberately
-  left out of it.
+  the limits, `view` for what the app is drawing, and the command table the tool
+  generates for itself.
+- [scope.md](scope.md) - what the first version covers, what is deliberately
+  left out of it, and what has landed since.
 - [checking-appearance.md](checking-appearance.md) - how to check what the app
   draws: measure it or look at it, and what to say when neither happened.
 - [adr/0001](adr/0001-no-dependency-node-server-with-a-json-file.md) - run PACT

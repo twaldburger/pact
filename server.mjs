@@ -201,7 +201,8 @@ export function createServer(store, options) {
     };
   }
 
-  // The config is the app's own settings store, beside the plan. Its view
+  // The config is the app's own settings store, beside the app and not the plan:
+  // a plan may live anywhere, while this file stays in the app's `data/`. Its view
   // settings and the plan path share the one file, so this write must keep the
   // view. A failed config write never fails the plan-file switch that just
   // succeeded; it is reported and the choice simply does not survive a restart.
@@ -254,7 +255,7 @@ export function createServer(store, options) {
           });
         }
         // The view settings: the app's own display state, kept in the config
-        // beside the plan file. Reading falls back per key, so a malformed
+        // beside the app. Reading falls back per key, so a malformed
         // value never breaks a view. Writing stores the sent keys over the
         // stored view - one write per change - and never touches the plan path;
         // the reply is the view as it now stands.

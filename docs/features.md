@@ -74,11 +74,12 @@ carries their name, their
 [Marker](../GLOSSARY.md#marker)'s date as `assigned/availability`, and a
 colour mark when their tags are coloured by key.
 
-The panel behind a row holds everything a Person is: a name, an optional
-[Location](../GLOSSARY.md#location), an Availability, any number of
-[Person tags](../GLOSSARY.md#person-tag), and a note. Availability moves in the
-plan's [Step](../GLOSSARY.md#step), from one step up to 100%; one step is also
-the floor, so a 10% step floors at 10%.
+The panel behind a row holds everything a Person is: a name, an optional Email,
+an optional [Location](../GLOSSARY.md#location), an Availability, any number of
+[Person tags](../GLOSSARY.md#person-tag), and a note. The Email is what an
+[import](../GLOSSARY.md#link) from Azure DevOps matches a Person by, compared
+without case. Availability moves in the plan's [Step](../GLOSSARY.md#step), from
+one step up to 100%; one step is also the floor, so a 10% step floors at 10%.
 
 Location and tags are free text with suggestions, not fixed lists. A Location
 is suggested from the Locations other People use and from the Locations the
@@ -632,8 +633,9 @@ both.
 
 ## In-app help
 
-The help is opened from the first entry of the Options menu: this reference and
-the [glossary](../GLOSSARY.md), in a panel over the board. It is opened and
+The help is opened from the first entry of the Options menu: this reference, the
+[glossary](../GLOSSARY.md) and the [command line](agent-tooling.md), in a panel
+over the board. It is opened and
 never docked - nothing in the grid moves because it exists - and `Esc`, the
 close control or a press outside it closes it. Because the menu that opened it
 is closed first, focus lands on the page when the panel goes, exactly as it does
@@ -649,19 +651,19 @@ choosing one opens that section. A search typed before a switch is kept rather
 than cleared, and is run again against the document switched to, so a word
 looked up in the reference finds its term in the glossary.
 
-The row under the panel's title is the switch between the two documents:
-`Feature reference` and `Glossary`, side by side, the one showing filled the way
-the Plan/Report switch fills the page you are on. Choosing the other shows that
-document in place - at its opening with the field empty, at the results of a
-query already typed - so the lexicon is a press away rather than a search away.
-Every visit still starts on this reference, with the field empty: the document
-read last is not remembered.
+The row under the panel's title is the switch between the three documents:
+`Feature reference`, `Glossary` and `Command line`, side by side, the one
+showing filled the way the Plan/Report switch fills the page you are on.
+Choosing another shows that document in place - at its opening with the field
+empty, at the results of a query already typed - so the lexicon and the command
+line are a press away rather than a search away. Every visit still starts on
+this reference, with the field empty: the document read last is not remembered.
 
 Inside the text, a link to the glossary or to another section of this page
 moves within the panel, and the switch marks whichever document the panel is
 then showing. A link anywhere else - the README, an ADR, the scope doc - is
 drawn as plain text, because reading the rest of the docs tree is not what this
-panel is for. The two documents are read from the repository each time the
+panel is for. The three documents are read from the repository each time the
 panel opens rather than kept as a copy, so the help cannot describe a version
 of the app that has moved on.
 
@@ -681,7 +683,8 @@ they do, with a divider above the first row of each group after the first:
 - the plan's own settings: `Plan period` and `Percentage step` disclosures,
   then the `Sprints...`, `Holidays...`, `Tags...` and `Milestones...` panel
   entries, each stating in its detail what opening it will find;
-- `Plan file...`.
+- `Plan file...`, and `Azure DevOps...` beside it, whose detail says
+  `Not configured` or names the mapped ADO project.
 
 A disclosure opens its control in place, one at a time, and keeps its own value
 line visible while open. A checkable row ticks when its state is on. The menu
@@ -788,8 +791,10 @@ The chain is never stored: it is derived from the
 of 1 to 365 days, and a name rule of a prefix and first number - plus any
 per-sprint adjustment and the plan period. A prefix's trailing space is what
 separates it from the number, and the first number's spelling sets the padding
-width, so `Sprint` and `24` give `Sprint 24`, `Sprint 25`, while `26-` and `01`
-give `26-01`, `26-02`.
+width: the prefix `Sprint` and a space, then `24`, give `Sprint 24` and
+`Sprint 25`, while `26-` and `01` give `26-01`, `26-02`. The same prefix
+without that space gives `Sprint24`, so the prefix a new cadence is offered
+already ends in one.
 
 In the panel, each row's name and end date can be edited; changing either writes
 an adjustment keyed by the sprint's ordinal and re-flows every later sprint at
@@ -976,12 +981,15 @@ not have (404), an answer with no content or one that is not JSON, and the
 redirect to the sign-in page, which says the token was not accepted - it may be
 wrong for this organisation, expired or revoked, or missing a scope, because
 PACT needs Work Items (read) and Project and Team (read). Every ADO
-call is the direct result of a press - opening this panel (which loads the
-types once, because the slots are chosen from them), Test connection, Save
-mapping, a token action, or an import. There is no status light, no timer and no
-polling: with ADO unreachable the plan keeps working exactly as it does today,
-and the panel whose press failed says why. Saving the mapping is one plan write,
-so it is one Undo step back, like any other change.
+call is the direct result of a press - opening the settings panel,
+`Test connection`, `Save mapping` or an import - and never of a timer, a poll or
+a background check. Opening the settings panel reads the instance's types
+once, because the mapping's lists are chosen from them, and tests the connection
+when a token and an address are already stored. Writing or clearing the token
+is not on that list: it writes or deletes a file on this machine and reaches
+Azure DevOps not at all. With ADO unreachable the plan keeps working exactly as
+it does today, and the panel whose press failed says why. Saving the mapping is
+one plan write, so it is one Undo step back, like any other change.
 
 The panel draws two lines under its rows, in one style. The first is the
 token's state - `A personal access token is set at <path>.` - green while a
@@ -998,7 +1006,8 @@ sentence in the danger colour. Success is therefore drawn as success rather
 than as a failure that happens not to be one.
 
 The panel holds the URL, the two lists that name what the mapping is drawn
-from, and the token field with its Save and Clear actions. The rows read
+from, and the token field with its `Save token`, `Replace token` and
+`Clear token` actions. The rows read
 `Project` and `Assignment`, and no line explains them on screen: each is a tick
 list over the work-item types the instance itself ranks - filled once Test
 connection has answered - and each explains itself on hover, as a `title` on the
@@ -1020,8 +1029,9 @@ mapping and no token keeps the panel and says where the token file goes.
 
 **Where the controls are.** `Options` then `Azure DevOps...`, whose detail says
 `Not configured` or names the mapped ADO project. The settings panel holds the
-URL, the mapping's two lists, the token field with its Save and Clear actions,
-the token's state line, the last connection line, and a footer with
+URL, the mapping's two lists, the token field with its `Save token`,
+`Replace token` and `Clear token` actions, the token's state line, the last
+connection line, and a footer with
 `Test connection` and `Save mapping`. It holds no import control at all - an
 operation is not a setting.
 
@@ -1201,7 +1211,7 @@ than `disabled`, because a natively disabled button takes no focus and its
 tooltip is unreliable: it keeps its focus and its title, and a press while it is
 withdrawn writes nothing and says the same words in the app's toast, so a mouse
 and a keyboard both learn the reason. On a plan that is not configured at all
-that reason is `Connect PACT to Azure DevOps first: Options then Azure DevOps...`,
+that reason is `Connect PACT to Azure DevOps first: Options then Azure DevOps…`,
 which points at the settings. The operations panel holds the import's field, its
 `Import` press, the offer to create a missing Person, the two presses a clashing
 Project name offers (`Use "<name>"` and `Import as a copy`), and its own line
@@ -1294,12 +1304,13 @@ Week, Sprint and Month. The report keeps its own level, so moving the grid to Da
 never turns the report into 365 columns.
 
 The buckets tile the plan period exactly and are clipped at both ends. Day is one
-bucket per calendar day. Week runs from the period's own start to the end of
-that calendar week, then whole Sunday-to-Saturday weeks, so only the first and
-last buckets are short - not Monday-based weeks. Month is one bucket per
-calendar month. Sprint is one bucket per derived sprint, clipped to the period
-and named by the sprint; with no cadence the report falls back to months rather
-than an empty table.
+bucket per calendar day. Week runs from the period's own start to the Sunday
+that closes that week, then whole Monday-to-Sunday weeks, so only the first and
+last buckets are short: a period starting on a Sunday gets a one-day first
+bucket, and one starting midweek gets a first bucket of the days left before its
+Sunday. Month is one bucket per calendar month. Sprint is one bucket per derived
+sprint, clipped to the period and named by the sprint; with no cadence the
+report falls back to months rather than an empty table.
 
 **Where the controls are.** The `Day`, `Week`, `Sprint` and `Month` buttons in
 the top bar. On the report they set the report's level, not the grid's.
@@ -1308,8 +1319,9 @@ the top bar. On the report they set the report's level, not the grid's.
 
 `Allocation against capacity` is one chart: the capacity the plan offers, as a
 quiet band whose solid top edge is the roof, and what is allocated, as a line
-riding under it. Its vertical scale stops at the smallest round number above the
-largest value, so a plan's figures divide into readable ticks rather than into
+riding under it. Its vertical scale stops at the smallest friendly step above
+the largest value - whole multiples such as 1, 1.25, 1.5, 2 and 2.5 times a power
+of ten - so a plan's figures divide into readable ticks rather than into
 whatever the maximum happens to be.
 
 The [ruler](../GLOSSARY.md#ruler) is how the chart answers a question. It snaps
