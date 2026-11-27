@@ -63,6 +63,7 @@ import {
   connectionLine,
   importLine,
   linkLine,
+  projectImportLine,
   readWorkItemId,
   tokenLine
 } from "./lib/ado.mjs";
@@ -7039,7 +7040,10 @@ function openAdoSettingsPanel(trigger) {
  * The import did not change when it moved. One field and one press, one work
  * item per press, and an assignee PACT cannot match refused with an offer
  * naming the Person it would add rather than created silently; only that
- * offer's press sends createPerson. Every call to ADO is caused by a press.
+ * offer's press sends createPerson. A project-level item asks for no owner at
+ * all, and a name clash offers to use the Project already on the plan or to
+ * import a copy - two presses, each of which sends its own flag. Every call to
+ * ADO is caused by a press.
  */
 function openAdoOperationsPanel(trigger) {
   var node = panelShell("Azure DevOps operations",
@@ -7057,7 +7061,7 @@ function openAdoOperationsPanel(trigger) {
   importInput.setAttribute("placeholder", "12345 or a work item URL");
   var importRow = el("div", "ado__import-row");
   importRow.appendChild(importInput);
-  var importButton = button("btn-ghost", "Import", function () { runImport(false); });
+  var importButton = button("btn-ghost", "Import", function () { runImport(); });
   importButton.id = "ado-import";
   importRow.appendChild(importButton);
   importBlock.appendChild(formRow("Import", importRow, ADO_IMPORT_TIP));
@@ -7071,12 +7075,19 @@ function openAdoOperationsPanel(trigger) {
   importStateLine.id = "ado-import-line";
   importStateLine.hidden = true;
   importBlock.appendChild(importStateLine);
-  // The offer, drawn only by a refusal that came with one.
+  // The offer, drawn only by a refusal that came with one: one press for the
+  // offer's own choice (creating the Person, or using the Project already on
+  // the plan), and - when the offer carries a second way out - the copy press
+  // beside it.
   var offer = null;
   var offerButton = button("btn-primary", "", function () { acceptOffer(); });
   offerButton.id = "ado-import-offer";
   offerButton.hidden = true;
+  var offerAltButton = button("btn-ghost", "", function () { acceptOffer(true); });
+  offerAltButton.id = "ado-import-offer-alt";
+  offerAltButton.hidden = true;
   importBlock.appendChild(offerButton);
+  importBlock.appendChild(offerAltButton);
   form.appendChild(importBlock);
   node.appendChild(form);
 
@@ -7091,19 +7102,26 @@ function openAdoOperationsPanel(trigger) {
     offer = null;
     offerButton.hidden = true;
     offerButton.textContent = "";
+    offerAltButton.hidden = true;
+    offerAltButton.textContent = "";
   }
 
   function showOffer(next) {
     offer = next || null;
     offerButton.textContent = offer ? offer.label : "";
     offerButton.hidden = !offer;
+    offerAltButton.textContent = offer && offer.altLabel ? offer.altLabel : "";
+    offerAltButton.hidden = !(offer && offer.altLabel);
   }
 
   // One import press. The id or link is read here first, so a paste that is
   // neither is refused before a round trip. A refusal that carries an offer
-  // says why nothing was imported and turns the offer into the press below it;
-  // every other refusal is this panel's error line.
-  function runImport(createPerson) {
+  // says why nothing was imported and turns the offer into the presses below
+  // it; every other refusal is this panel's error line. `presses` is what the
+  // offer's own press adds to the request: the Person it would create, or the
+  // Project it would use or copy. The Import press sends none of them.
+  function runImport(presses) {
+    var choice = presses || {};
     var reading = readWorkItemId(importInput.value);
     if (reading.refusal) {
       error.set(reading.refusal);
@@ -7115,12 +7133,18 @@ function openAdoOperationsPanel(trigger) {
     drawLine(importStateLine, null);
     importButton.disabled = true;
     offerButton.disabled = true;
-    api("POST", "/api/ado/import", { id: reading.id, createPerson: createPerson === true })
+    offerAltButton.disabled = true;
+    api("POST", "/api/ado/import", {
+      id: reading.id,
+      createPerson: choice.createPerson === true,
+      useProject: choice.useProject === true,
+      copyProject: choice.copyProject === true
+    })
       .then(function (result) {
         return refresh({ keepPanel: true }).then(function () {
           drawLine(importStateLine, {
             className: "ado__line ado__importstate is-ok",
-            text: importLine(result.facts),
+            text: result.kind === "project" ? projectImportLine(result.facts) : importLine(result.facts),
             title: ""
           });
           importInput.value = "";
@@ -7142,18 +7166,25 @@ function openAdoOperationsPanel(trigger) {
       .then(function () {
         importButton.disabled = false;
         offerButton.disabled = false;
+        offerAltButton.disabled = false;
       });
   }
 
-  function acceptOffer() {
-    if (offer) runImport(true);
+  // The offer's primary press: create the Person it names, or use the Project
+  // already on the plan. Its second press exists only where the offer carries
+  // one, and is always the copy.
+  function acceptOffer(asCopy) {
+    if (!offer) return;
+    if (asCopy) return runImport({ copyProject: true });
+    if (offer.kind === "use-project") return runImport({ useProject: true });
+    runImport({ createPerson: true });
   }
 
   // Enter is the Import press, and the form's submit is the same press: this
   // panel has no setting to save, so a stray Enter can write nothing else.
   form.addEventListener("submit", function (event) {
     event.preventDefault();
-    runImport(false);
+    runImport();
   });
 
   openPanel(node, trigger);

@@ -780,11 +780,12 @@ function chainSummary(chain) {
  *
  * The mapping says which work-item type a PACT Project comes from, and the
  * position of a type in the hierarchy is its level, so the Project is the first
- * ancestor whose type is that level - never the item itself, which is what
- * makes an item sitting at the project level a refusal rather than a Project
- * with no parent. A chain that reaches no such ancestor refuses, naming every
- * level it walked and the level it was looking for: an import that guessed a
- * Project would put real work in the wrong place.
+ * ancestor whose type is that level - never the item itself, because a record
+ * cannot be its own container. An item whose own type is the project level does
+ * not reach here at all: `importLevel` sends it down the path that makes it a
+ * Project of its own. A chain that reaches no such ancestor refuses, naming
+ * every level it walked and the level it was looking for: an import that
+ * guessed a Project would put real work in the wrong place.
  */
 export function projectFromChain(chain, projectLevel) {
   const level = String(projectLevel === undefined || projectLevel === null ? "" : projectLevel).trim();
@@ -809,6 +810,102 @@ export function projectFromChain(chain, projectLevel) {
     refusal: "The work item's parents are " + chainSummary(walked) + "; none is a '" + level +
       "', the project level the mapping names, so the import has no Project to place the work under."
   };
+}
+
+/*
+ * Which record an item's type becomes, decided before any Person is
+ * considered: the level its type sits at against the mapping's own three
+ * slots, and then, for a type the mapping does not name, its rank against the
+ * assignment level.
+ *
+ *   "project"    - the type the mapping draws Projects from
+ *   "tag"       - the type the mapping names as the tag level
+ *   "below"     - a ranked type lower than the assignment level
+ *   "assignment" - the existing path: the assignment level itself, a level
+ *                  between it and the project level, or a type whose rank the
+ *                  instance did not answer for (an import must not refuse work
+ *                  it cannot place for want of a rank)
+ *
+ * An item is never its own container, so a project-level type is the item's
+ * own type here and nowhere else: `projectFromChain` still refuses to read the
+ * item itself as the Project it sits under.
+ */
+export function importLevel(ranks, mapping, type) {
+  const block = mapping || {};
+  const name = String(type === undefined || type === null ? "" : type).trim();
+  const named = (value) => String(value === undefined || value === null ? "" : value).trim();
+  if (name !== "" && name === named(block.projectLevel)) return "project";
+  if (name !== "" && name === named(block.tagLevel)) return "tag";
+  if (name !== "" && name === named(block.assignmentLevel)) return "assignment";
+  const assignment = levelRank(ranks, named(block.assignmentLevel));
+  const rank = levelRank(ranks, name);
+  if (assignment !== null && rank !== null && rank < assignment) return "below";
+  return "assignment";
+}
+
+/*
+ * The refusal a tag-level or below-the-assignment-level item gets. Each names
+ * what that level is for rather than what the item lacks, so an owner reading
+ * it is not told to go and assign an owner to work that needs none.
+ */
+export function importLevelRefusal(level, facts) {
+  const result = facts || {};
+  const mapping = result.mapping || {};
+  const type = String(result.workItemType || "").trim();
+  const id = result.workItemId;
+  const title = String(result.title || "").trim();
+  const item = "Work item " + id + " (\"" + title + "\") is " + (type === "" ? "of a type" : type);
+  const projectLevel = String(mapping.projectLevel || "").trim();
+  const assignmentLevel = String(mapping.assignmentLevel || "").trim();
+  if (level === "tag") {
+    return item + ", the type the mapping names as the tag level: a tag has no record of its own, " +
+      "so an import of one would put nothing on the plan. Import an item at the project level (" +
+      projectLevel + ") or at the level that carries a person's time (" + assignmentLevel + ").";
+  }
+  return item + ", which sits below " + assignmentLevel + ", the assignment level the mapping names: " +
+    "this is below the level that carries a person's time, so an import of it has no record to become. " +
+    "Import the " + assignmentLevel + " that carries the time, or the " + projectLevel + " above it.";
+}
+
+/*
+ * The offer a project-level item gets when a live Project already carries its
+ * title. It carries both ways out: using the existing Project, which stores the
+ * link on it and creates nothing, and importing as a copy under the app's own
+ * `X (copy)` naming rule. `copyName` is that rule's answer, computed by the
+ * caller that holds the plan's live Project names.
+ */
+export function existingProjectOffer(project, copyName) {
+  const name = String(project && project.name || "").trim();
+  const copy = String(copyName === undefined || copyName === null ? "" : copyName).trim();
+  return {
+    kind: "use-project",
+    projectId: project && project.id ? project.id : "",
+    name: name,
+    label: "Use \"" + name + "\"",
+    altLabel: "Import as a copy",
+    copyName: copy,
+    message: "The plan already has a live Project named \"" + name + "\", which is this work item's title. " +
+      "Using it stores the item's link on that Project and creates nothing" +
+      (copy === "" ? "." : ", or PACT can import the item as a second Project named \"" + copy + "\".")
+  };
+}
+
+/*
+ * What a finished project-level import reads as in the panel's line: the item
+ * and the Project it became, and whether a Project was created or an existing
+ * one took the link. It never names a Person, because an import at this level
+ * makes none and reads no owner.
+ */
+export function projectImportLine(facts) {
+  const result = facts || {};
+  const type = String(result.workItemType || "").trim();
+  const item = (type === "" ? "work item" : type) + " #" + result.workItemId;
+  const name = "\"" + String(result.projectName || "").trim() + "\"";
+  if (result.created) {
+    return "Imported " + item + " as the new Project " + name +
+      ": its link and baseline are stored on the Project, so a later sync can keep its name current.";
+  }
+  return "Linked " + item + " to the existing Project " + name + ": nothing was created.";
 }
 
 // The start date of the iteration a path names, as a date, or empty when the
@@ -929,9 +1026,17 @@ export function importPlacement(input) {
 export const LINK_KEYS = Object.freeze(["workItemId", "rev", "workItemType", "values", "datesAssumed"]);
 export const LINK_VALUE_KEYS = Object.freeze(["title", "personEmail", "project", "start", "end", "iterationPath"]);
 
-export function linkRefusals(link) {
+/*
+ * `place` is where the link sits: `"project"` for a Project's own link, and
+ * nothing for an Assignment's. Both homes are checked by this one rule, so a
+ * Project's link can never be shaped differently from an Assignment's. The one
+ * thing a Project's link does not carry is an owner's email: an import at the
+ * project level never reads `AssignedTo`, so there is no person to record.
+ */
+export function linkRefusals(link, place) {
   if (!link || typeof link !== "object" || Array.isArray(link)) return ["link must be an object"];
   const errors = [];
+  const onProject = place === "project";
   Object.keys(link).forEach(function (key) {
     if (isCredentialKey(key)) {
       errors.push("the link must never carry a credential: remove link." + key);
@@ -961,9 +1066,16 @@ export function linkRefusals(link) {
       errors.push("link.values has an unknown field '" + key + "'");
     }
   });
-  ["title", "personEmail", "project"].forEach(function (key) {
+  ["title", "project"].forEach(function (key) {
     if (!isNonEmptyText(values[key])) errors.push("link.values." + key + " must be a non-empty string");
   });
+  // An Assignment's link is what ties a person's time to the item, so the email
+  // is required there. A Project's link may carry one, but never a blank one.
+  if (!onProject) {
+    if (!isNonEmptyText(values.personEmail)) errors.push("link.values.personEmail must be a non-empty string");
+  } else if (values.personEmail !== undefined && !isNonEmptyText(values.personEmail)) {
+    errors.push("link.values.personEmail must be a non-empty string when it is given");
+  }
   ["start", "end"].forEach(function (key) {
     if (values[key] !== null && !isDateText(values[key])) {
       errors.push("link.values." + key + " must be a YYYY-MM-DD date or null");
@@ -978,7 +1090,8 @@ export function linkRefusals(link) {
 // The link as it is stored: the texts trimmed, an absent date kept as null
 // rather than left out, and an unset type name or iteration path left out
 // rather than stored as an empty string.
-export function normalizeLink(link) {
+export function normalizeLink(link, place) {
+  const onProject = place === "project";
   const values = (link && link.values) || {};
   const start = values.start === undefined || values.start === null || values.start === "" ? null : String(values.start);
   const end = values.end === undefined || values.end === null || values.end === "" ? null : String(values.end);
@@ -998,6 +1111,9 @@ export function normalizeLink(link) {
     },
     datesAssumed: !!link.datesAssumed
   };
+  // A Project's link has no owner, so an empty email is left out of its values
+  // rather than stored as a blank field a sync would have to read as one.
+  if (onProject && normalized.values.personEmail === "") delete normalized.values.personEmail;
   const type = link.workItemType === undefined || link.workItemType === null
     ? ""
     : String(link.workItemType).trim();

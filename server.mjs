@@ -365,15 +365,19 @@ export function createServer(store, options) {
           }
           // The import: one work item, by id or link, read from ADO and written
           // to the plan in one commit. `createPerson` is set only by the press
-          // that accepts the offer an unmatched assignee comes with, so a Person
-          // is never created behind the panel's back.
+          // that accepts the offer an unmatched assignee comes with, and
+          // `useProject` / `copyProject` only by the two presses a project-level
+          // item's name clash offers - so neither a Person nor a Project is ever
+          // created behind the panel's back.
           if (pathname === "/api/ado/import") {
             if (req.method !== "POST") return sendError(res, 405, "method not allowed");
             return readBody(req).then((body) => {
               const input = body || {};
               return importWorkItem(Object.assign({}, ado, {
                 id: input.id,
-                createPerson: input.createPerson === true
+                createPerson: input.createPerson === true,
+                useExisting: input.useProject === true,
+                copyProject: input.copyProject === true
               })).then((result) => sendJSON(res, 200, result));
             });
           }
