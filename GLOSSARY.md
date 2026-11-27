@@ -111,8 +111,12 @@ The app's own settings file, `data/config.json`, kept beside the plan and gitign
 _Avoid_: preferences, settings, options, registry
 
 **Connection**:
-A configured Azure DevOps organisation and project: a [Mapping](#mapping) in the plan, plus a personal access token in this machine's config. The mapping travels with the plan and may be shared; the token is a secret that is never in the plan, never leaves the server and is never shown in the browser, which reads back only whether one is set. It is verified by a press - Test connection - and never by a background check: with Azure DevOps unreachable, the plan keeps working exactly as it does without a connection.
+A configured Azure DevOps organisation and project: a [Mapping](#mapping) in the plan, plus a personal access token in this machine's config. The mapping travels with the plan and may be shared; the token is a secret that is never in the plan, never leaves the server and is never shown in the browser, which reads back only whether one is set. It is set up in one place and used in another: the settings - the organisation's URL, the mapping's three rows and the token - are reached from `Options` then `Azure DevOps...`, and using it is the [ADO operations](#ado-operations), opened from the `ADO` button in the top bar. It is verified by a press - Test connection - and never by a background check: with Azure DevOps unreachable, the plan keeps working exactly as it does without a connection.
 _Avoid_: integration, sync, account, login, credential
+
+**ADO operations**:
+The surface where a [Connection](#connection) is used rather than set up: importing one work item by its id or its link today, and the per-field sync when it lands. It opens from the `ADO` button in the top bar, which is always there and withheld until an operation could work - a [Mapping](#mapping) in the plan and a token on this machine - because an operation needs both halves; the button says which half is missing. An operation answers with what it did or refused, so its line is its own, while the token's state and the last connection's ranks stay with the settings.
+_Avoid_: ADO panel, sync panel, import panel, integration
 
 **Mapping**:
 The `ado` block in the plan: the Azure DevOps organisation's address, the project's name, and the work-item type that a Project, an Assignment and optionally a tag are drawn from. It holds type names and an address and never a secret, and a credential-shaped key inside it is refused so a shared plan cannot carry one. Its slots are checked against the instance's own backlog ranks - the project type above the assignment type, and a tag type the instance reports - when the mapping is saved. A plan without one behaves exactly as it did before there was a connection.

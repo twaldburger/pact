@@ -10,6 +10,14 @@
  * browser can disable them by id instead of holding a second copy of the list.
  * The bar carries no help control: the help is opened from the Options menu's
  * own first entry, which stays live on a report too.
+ *
+ * The `ADO` button opens the Azure DevOps operations - the import today, the
+ * sync later - and never the settings, which stay under Options. It is in the
+ * bar always, so the entry is always found, and its state is the app's: it
+ * mounts withheld (`aria-disabled`), and public/app.js sets that, and the words
+ * saying why, from the shared rule in public/lib/ado.mjs once the plan's own
+ * connection state is known. The words are not written here, so there is one
+ * source for them.
  */
 
 export const VIEW_PLAN = "plan";
@@ -33,7 +41,7 @@ export function viewFromAttribute(value) {
  * height and Grid spacing pairs, and Undo/Redo. A report makes no grid moves
  * and no plan writes, so these are disabled - visibly not available and not
  * focusable - while keeping their exact position in the bar. The Filter, the
- * zoom and the Options glyph stay live.
+ * zoom, the ADO operations button and the Options glyph stay live.
  */
 export function reportDisabledControlIds() {
   return [
@@ -120,8 +128,7 @@ export function topbarMarkup(view) {
           </svg>
         </button>
       </div>
-      <div class="history" role="group" aria-label="Undo and Redo">
-        <button type="button" class="history__btn" id="undo-btn"
+      <div class="history" role="group" aria-label="Undo and Redo">        <button type="button" class="history__btn" id="undo-btn"
           aria-label="Undo" title="Undo" disabled>
           <svg class="history__glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor"
             stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -138,6 +145,8 @@ export function topbarMarkup(view) {
           </svg>
         </button>
       </div>
+      <button type="button" class="ghost is-disabled" id="ado-operations"
+        aria-disabled="true" aria-label="Azure DevOps operations">ADO</button>
       <div class="options" id="options">
         <button type="button" class="ghost options__btn" id="options-btn"
           aria-haspopup="true" aria-expanded="false" aria-label="Options" title="Options">

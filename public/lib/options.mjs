@@ -216,19 +216,24 @@ export function milestonesItem(milestones) {
 }
 
 /*
- * The ADO entry in the Options menu. Like the panel entries above it an action,
- * not a checked state: opening it opens the Azure DevOps panel, which is where
- * a connection is set up - so the row is always there rather than appearing
+ * The Azure DevOps entry in the Options menu: the settings door. Like the panel
+ * entries above it an action, not a checked state: opening it opens the
+ * Azure DevOps settings, where a connection is set up - the URL, the mapping's
+ * three rows and the token - so the row is always there rather than appearing
  * once a mapping exists, which would leave no way to make the first one. The
  * detail states whether a mapping is configured, and names its ADO project when
  * one is. The mapping is plan data; whether a token is set is not, so a plan
  * with no mapping says so even when a token sits on this machine.
+ *
+ * It is titled for what it configures rather than for the operation surface it
+ * was once the only door to: the operations live in the top bar's own button,
+ * so a reader opening this row meets settings and nothing else.
  */
 export function adoItem(mapping) {
   const project = mapping && typeof mapping.project === "string" ? mapping.project.trim() : "";
   return {
     key: "ado",
-    label: "ADO...",
+    label: "Azure DevOps...",
     detail: project === "" ? "Not configured" : project
   };
 }

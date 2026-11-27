@@ -433,8 +433,61 @@ export function tokenNotice(token) {
 // The refusal a call gets when it needs a token and there is none.
 export function noTokenMessage(token) {
   const state = token || {};
-  return "No token is set. Save a personal access token in the ADO panel; PACT writes it to " +
-    (state.path || "~/.config/pact/ado-pat") + " with mode 600.";
+  return "No token is set. Save a personal access token in the Azure DevOps settings, under " +
+    "Options; PACT writes it to " + (state.path || "~/.config/pact/ado-pat") + " with mode 600.";
+}
+
+/* --- the two doors -------------------------------------------------------
+ *
+ * The connection has two surfaces, and each holds one kind of thing: the
+ * settings - the URL, the mapping's three rows and the token - live under
+ * Options, and the operations - the import now, the sync later - open from a
+ * button in the top bar. The button is always in the bar, so it is always
+ * found, and it is withheld until an operation could actually work: a mapping
+ * in the plan and a token on this machine. An operation needs both halves, and
+ * a press that cannot work is worse than a door that says why it is shut.
+ *
+ * The words are here rather than in the browser because a reason is a rule:
+ * the whole connection when neither half is set, and the half that is missing
+ * when one of them is. A plan with a mapping and no token does not repeat the
+ * sentence for a plan with no mapping at all.
+ */
+export const ADO_CONNECT_FIRST =
+  "Connect PACT to Azure DevOps first: Options then Azure DevOps\u2026";
+
+// A mapping is in the plan when the store would accept it: the address pair
+// and the two levels an Assignment is drawn from. The tag level is optional
+// there, so it is optional here too.
+export function adoMappingInPlan(mapping) {
+  return !!mapping && adoRefusals(mapping).length === 0;
+}
+
+/*
+ * The operation surface's state: whether it may be opened, and what the bar's
+ * button says about it. `missing` names the half that is absent - `mapping`,
+ * `token`, `both` or nothing - so a caller can say it without parsing a
+ * sentence, and `title` is the whole of that sentence: what opening it offers
+ * when it may be opened, and why it may not when it may not.
+ */
+export function adoOperationState(mapping, tokenPresent) {
+  const mapped = adoMappingInPlan(mapping);
+  const tokened = tokenPresent === true;
+  if (mapped && tokened) {
+    return { enabled: true, missing: "", title: "Import a work item from Azure DevOps" };
+  }
+  if (!mapped && !tokened) return { enabled: false, missing: "both", title: ADO_CONNECT_FIRST };
+  if (!tokened) {
+    return {
+      enabled: false,
+      missing: "token",
+      title: "The plan's mapping is set, but no token is. Add one in Options then Azure DevOps\u2026"
+    };
+  }
+  return {
+    enabled: false,
+    missing: "mapping",
+    title: "A token is set, but the plan has no mapping. Add one in Options then Azure DevOps\u2026"
+  };
 }
 
 /* --- the panel's two status lines ---------------------------------------

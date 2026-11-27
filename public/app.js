@@ -56,6 +56,7 @@ import {
   ADO_ROW_TIPS,
   ADO_WORK_ITEM_SHAPES,
   addressFromUrl,
+  adoOperationState,
   adoRefusals,
   adoUrlFor,
   assignmentLevelBelow,
@@ -6532,7 +6533,7 @@ function buildAdoItem() {
   btn.appendChild(adoOptionDetail);
   btn.addEventListener("click", function () {
     openOptions(false);
-    openAdoPanel(btn);
+    openAdoSettingsPanel(btn);
   });
   return btn;
 }
@@ -6542,12 +6543,16 @@ function updateAdoItem() {
   adoOptionDetail.textContent = adoItem(adoState && adoState.mapping).detail;
 }
 
-// The connection's state is the server's to know: the menu and the panel read
-// it back rather than keeping a copy that another tab or an Undo could stale.
+// The connection's state is the server's to know: the menu, the settings panel
+// and the bar's operations button read it back rather than keeping a copy that
+// another tab or an Undo could stale. One fetch serves all three, so the button
+// follows the plan - a mapping arriving with a plan file, an Undo restoring one,
+// a token saved or cleared - without a second route or a reload.
 function loadAdoState() {
   return api("GET", "/api/ado").then(function (state) {
     adoState = state;
     updateAdoItem();
+    updateAdoOperationsButton();
     return state;
   }).catch(function () {
     return adoState;
@@ -6701,25 +6706,43 @@ function openPlanFilePanel(trigger) {
   });
 }
 
-/* --- the Azure DevOps panel ---------------------------------------------- */
+// One of a panel's status lines drawn from the shared rules' own words, class
+// and title: a line that is null leaves the paragraph hidden rather than empty,
+// so the panel shows no blank line where nothing has been said yet.
+function drawLine(node, line) {
+  node.hidden = !line;
+  node.className = line ? line.className : "";
+  node.textContent = line ? line.text : "";
+  if (line && line.title) node.title = line.title;
+  else node.removeAttribute("title");
+}
+
+/* --- the Azure DevOps settings panel ------------------------------------- */
 
 /*
- * The connection PACT uses for Azure DevOps. The organisation address and the
- * project are written into the plan, the three type slots are chosen from the
- * types the instance itself reports, and the token is typed here and written by
- * the server to this machine's config - it is never read back into the browser.
+ * The settings door: the connection PACT uses for Azure DevOps, and nothing
+ * that uses it. The organisation address and the project are written into the
+ * plan, the three type slots are chosen from the types the instance itself
+ * reports, and the token is typed here and written by the server to this
+ * machine's config - it is never read back into the browser.
  *
  * One URL is the panel's whole address: the pair it yields is the plan's to
  * store and is never echoed back as two fields, so a mis-pasted URL is caught
  * at Test connection, which reports the project it read. Each of the three
  * slots is named after the PACT thing it produces and explains itself on hover.
  *
+ * Importing is not here. An operation is not a setting, and the two are read in
+ * different moods: configuration is visited rarely and carefully, an import in
+ * short bursts. So this panel holds the settings and its two status lines, the
+ * operations live behind the bar's own ADO button, and neither grows a foot in
+ * the other's room.
+ *
  * Every call to ADO is caused by a press: opening this panel (which loads the
  * types once, because the slots are chosen from them), Test connection, and
  * Save mapping. There is no status light, no timer and no polling - closing the
  * panel is the end of it, even when ADO is unreachable.
  */
-function openAdoPanel(trigger) {
+function openAdoSettingsPanel(trigger) {
   loadAdoState().then(function (state) {
     var mapping = state.mapping || {};
     var token = state.token || {};
@@ -6792,14 +6815,6 @@ function openAdoPanel(trigger) {
     connectionStateLine.hidden = true;
     node.appendChild(connectionStateLine);
 
-    function drawLine(node, line) {
-      node.hidden = !line;
-      node.className = line ? line.className : "";
-      node.textContent = line ? line.text : "";
-      if (line && line.title) node.title = line.title;
-      else node.removeAttribute("title");
-    }
-
     drawLine(tokenStateLine, tokenLine(token));
 
     // A token that is set is shown as set, not as a masked field that invites
@@ -6824,120 +6839,6 @@ function openAdoPanel(trigger) {
     }
 
     syncTokenControls();
-
-    /*
-     * The import: one work item at a time, pasted as an id or as the browser's
-     * own work-item link. It sits below the connection's rows because it is
-     * what a connection is for, and it is deliberately one field and one press
-     * - a sweep of the board and an import of an item's children are not things
-     * this press does, and the hint under it says so rather than leaving it to
-     * be discovered.
-     *
-     * An assignee PACT cannot match is never created silently: that refusal
-     * arrives with an offer, and the offer is drawn here as its own press,
-     * naming the Person it would add. Only that press sends createPerson.
-     */
-    var importBlock = el("div", "ado__import");
-    var importInput = document.createElement("input");
-    importInput.type = "text";
-    importInput.id = "ado-import-id";
-    importInput.spellcheck = false;
-    importInput.setAttribute("aria-label", "Work item id or link");
-    importInput.setAttribute("placeholder", "12345 or a work item URL");
-    var importRow = el("div", "ado__import-row");
-    importRow.appendChild(importInput);
-    var importButton = button("btn-ghost", "Import", function () { runImport(false); });
-    importButton.id = "ado-import";
-    importRow.appendChild(importButton);
-    importBlock.appendChild(formRow("Import", importRow, ADO_IMPORT_TIP));
-    var importHint = el("p", "panel__sub");
-    importHint.textContent = "One work item at a time; its children are not imported.";
-    importBlock.appendChild(importHint);
-    var importStateLine = el("p", "");
-    importStateLine.id = "ado-import-line";
-    importStateLine.hidden = true;
-    importBlock.appendChild(importStateLine);
-    // The offer, drawn only by a refusal that came with one.
-    var offer = null;
-    var offerButton = button("btn-primary", "", function () { acceptOffer(); });
-    offerButton.id = "ado-import-offer";
-    offerButton.hidden = true;
-    importBlock.appendChild(offerButton);
-    // Inside the form, so the row lines up with the connection's rows and its
-    // field wears the same field styling; Enter in the field is caught above and
-    // never submits the form, which is the mapping's save.
-    form.appendChild(importBlock);
-
-    function clearOffer() {
-      offer = null;
-      offerButton.hidden = true;
-      offerButton.textContent = "";
-    }
-
-    function showOffer(next) {
-      offer = next || null;
-      offerButton.textContent = offer ? offer.label : "";
-      offerButton.hidden = !offer;
-    }
-
-    // One import press. The id or link is read here first, so a paste that is
-    // neither is refused before a round trip. A refusal that carries an offer
-    // says why nothing was imported and turns the offer into the press below
-    // it; every other refusal is the panel's error line.
-    function runImport(createPerson) {
-      var reading = readWorkItemId(importInput.value);
-      if (reading.refusal) {
-        error.set(reading.refusal);
-        importInput.focus();
-        return;
-      }
-      error.clear();
-      clearOffer();
-      drawLine(importStateLine, null);
-      importButton.disabled = true;
-      offerButton.disabled = true;
-      api("POST", "/api/ado/import", { id: reading.id, createPerson: createPerson === true })
-        .then(function (result) {
-          return refresh({ keepPanel: true }).then(function () {
-            drawLine(importStateLine, {
-              className: "ado__line ado__importstate is-ok",
-              text: importLine(result.facts),
-              title: ""
-            });
-            importInput.value = "";
-          });
-        })
-        .catch(function (err) {
-          var payload = err && err.payload ? err.payload : {};
-          if (payload.offer) {
-            showOffer(payload.offer);
-            drawLine(importStateLine, {
-              className: "ado__line ado__importstate",
-              text: err.message,
-              title: ""
-            });
-          } else {
-            error.set(err && err.message ? err.message : "Could not import that work item.");
-          }
-        })
-        .then(function () {
-          importButton.disabled = false;
-          offerButton.disabled = false;
-        });
-    }
-
-    function acceptOffer() {
-      if (offer) runImport(true);
-    }
-
-    importInput.addEventListener("keydown", function (event) {
-      // Enter in the field is the Import press. The form's own submit stays the
-      // mapping's save, so a stray Enter never rewrites a saved mapping.
-      if (event.key === "Enter") {
-        event.preventDefault();
-        runImport(false);
-      }
-    });
 
     var status = el("p", "ado__line ado__status");
     status.setAttribute("role", "status");
@@ -6967,11 +6868,12 @@ function openAdoPanel(trigger) {
     }
 
     // The server's answer to a token action is the whole connection state, so
-    // the menu's detail and the token line move together.
+    // the menu's detail, the token line and the bar's button move together.
     function applyState(next) {
       if (!next) return;
       adoState = next;
       updateAdoItem();
+      updateAdoOperationsButton();
       token = next.token || {};
       drawLine(tokenStateLine, tokenLine(token));
       replacing = false;
@@ -7119,6 +7021,191 @@ function openAdoPanel(trigger) {
   });
 }
 
+/* --- the Azure DevOps operations panel ----------------------------------- */
+
+/*
+ * The operations door: what the connection is for, as against how it is set up.
+ * Today that is one import - a work item by its id or the browser's link to it
+ * - and the per-field sync will join it here. It is a surface of its own
+ * because an operation answers with a record or a diff and never with a
+ * setting, and the two are read in different moods.
+ *
+ * Nothing about the URL, the token or the mapping's levels is drawn here: a
+ * press that needs one of them says so in this panel's own line, and changing
+ * them is the settings, under Options. The bar's button says the same while it
+ * is withheld, so the first visit here meets the way in rather than a blank
+ * panel.
+ *
+ * The import did not change when it moved. One field and one press, one work
+ * item per press, and an assignee PACT cannot match refused with an offer
+ * naming the Person it would add rather than created silently; only that
+ * offer's press sends createPerson. Every call to ADO is caused by a press.
+ */
+function openAdoOperationsPanel(trigger) {
+  var node = panelShell("Azure DevOps operations",
+    "Import one work item by its id or the link to it. The connection these use is set up in " +
+    "the Azure DevOps settings, under Options.");
+  node.classList.add("panel--ado");
+
+  var form = el("form", "form");
+  var importBlock = el("div", "ado__import ado__import--sole");
+  var importInput = document.createElement("input");
+  importInput.type = "text";
+  importInput.id = "ado-import-id";
+  importInput.spellcheck = false;
+  importInput.setAttribute("aria-label", "Work item id or link");
+  importInput.setAttribute("placeholder", "12345 or a work item URL");
+  var importRow = el("div", "ado__import-row");
+  importRow.appendChild(importInput);
+  var importButton = button("btn-ghost", "Import", function () { runImport(false); });
+  importButton.id = "ado-import";
+  importRow.appendChild(importButton);
+  importBlock.appendChild(formRow("Import", importRow, ADO_IMPORT_TIP));
+  var importHint = el("p", "panel__sub");
+  importHint.textContent = "One work item at a time; its children are not imported.";
+  importBlock.appendChild(importHint);
+  // The import's own line: what that press created, or what it refused. The
+  // settings' token and connection lines are configuration feedback and stay
+  // with the settings; this one is the operation's answer and nothing else.
+  var importStateLine = el("p", "ado__line ado__importstate");
+  importStateLine.id = "ado-import-line";
+  importStateLine.hidden = true;
+  importBlock.appendChild(importStateLine);
+  // The offer, drawn only by a refusal that came with one.
+  var offer = null;
+  var offerButton = button("btn-primary", "", function () { acceptOffer(); });
+  offerButton.id = "ado-import-offer";
+  offerButton.hidden = true;
+  importBlock.appendChild(offerButton);
+  form.appendChild(importBlock);
+  node.appendChild(form);
+
+  var error = errorLine(node);
+
+  var foot = el("div", "panel__foot");
+  foot.appendChild(el("span", "panel__spacer"));
+  foot.appendChild(button("btn-ghost", "Close", function () { closePanel(true); }));
+  node.appendChild(foot);
+
+  function clearOffer() {
+    offer = null;
+    offerButton.hidden = true;
+    offerButton.textContent = "";
+  }
+
+  function showOffer(next) {
+    offer = next || null;
+    offerButton.textContent = offer ? offer.label : "";
+    offerButton.hidden = !offer;
+  }
+
+  // One import press. The id or link is read here first, so a paste that is
+  // neither is refused before a round trip. A refusal that carries an offer
+  // says why nothing was imported and turns the offer into the press below it;
+  // every other refusal is this panel's error line.
+  function runImport(createPerson) {
+    var reading = readWorkItemId(importInput.value);
+    if (reading.refusal) {
+      error.set(reading.refusal);
+      importInput.focus();
+      return;
+    }
+    error.clear();
+    clearOffer();
+    drawLine(importStateLine, null);
+    importButton.disabled = true;
+    offerButton.disabled = true;
+    api("POST", "/api/ado/import", { id: reading.id, createPerson: createPerson === true })
+      .then(function (result) {
+        return refresh({ keepPanel: true }).then(function () {
+          drawLine(importStateLine, {
+            className: "ado__line ado__importstate is-ok",
+            text: importLine(result.facts),
+            title: ""
+          });
+          importInput.value = "";
+        });
+      })
+      .catch(function (err) {
+        var payload = err && err.payload ? err.payload : {};
+        if (payload.offer) {
+          showOffer(payload.offer);
+          drawLine(importStateLine, {
+            className: "ado__line ado__importstate",
+            text: err.message,
+            title: ""
+          });
+        } else {
+          error.set(err && err.message ? err.message : "Could not import that work item.");
+        }
+      })
+      .then(function () {
+        importButton.disabled = false;
+        offerButton.disabled = false;
+      });
+  }
+
+  function acceptOffer() {
+    if (offer) runImport(true);
+  }
+
+  // Enter is the Import press, and the form's submit is the same press: this
+  // panel has no setting to save, so a stray Enter can write nothing else.
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    runImport(false);
+  });
+
+  openPanel(node, trigger);
+  importInput.focus();
+}
+
+/* --- the bar's ADO button ------------------------------------------------ */
+
+/*
+ * The button that opens the operations, and the one thing about it that has to
+ * be right: it says why it is withheld, to a mouse and to a keyboard alike. A
+ * natively `disabled` button takes no focus and its tooltip is unreliable, so
+ * it is withheld with `aria-disabled` instead - focusable, still announced as a
+ * button, and still receiving the press - and the press answers with the reason
+ * in the app's toast, which carries `role="alert"` for the keyboard. The title
+ * carries the same sentence for the mouse.
+ *
+ * Its state is the plan's, so it is drawn from the same /api/ado state the
+ * settings panel reads, and never from a second fetch: a token saved or cleared
+ * in the settings, an Undo that brings a mapping back, or another plan file all
+ * pass through the one update below.
+ */
+var adoOperationsButton = null;
+
+function initAdoOperationsButton() {
+  adoOperationsButton = document.getElementById("ado-operations");
+  if (!adoOperationsButton) return;
+  adoOperationsButton.addEventListener("click", function () {
+    var state = currentAdoOperationState();
+    if (!state.enabled) {
+      showToast(state.title);
+      return;
+    }
+    openAdoOperationsPanel(adoOperationsButton);
+  });
+  updateAdoOperationsButton();
+}
+
+function currentAdoOperationState() {
+  var state = adoState || {};
+  return adoOperationState(state.mapping, !!(state.token && state.token.present));
+}
+
+function updateAdoOperationsButton() {
+  if (!adoOperationsButton) return;
+  var state = currentAdoOperationState();
+  // The same two marks the Today control wears when its action is withdrawn:
+  // still a button, still focusable, and still carrying the words that say why.
+  adoOperationsButton.setAttribute("aria-disabled", state.enabled ? "false" : "true");
+  adoOperationsButton.classList.toggle("is-disabled", !state.enabled);
+  adoOperationsButton.title = state.title;
+}
 // A type slot's select, empty until the instance answers.
 function typeSelect() {
   var select = document.createElement("select");
@@ -7758,6 +7845,7 @@ function boot() {
     bindChrome();
     initFilter();
     initOptions();
+    initAdoOperationsButton();
     initViewSwitch();
     syncReportControls();
     loadPlanFileState();
