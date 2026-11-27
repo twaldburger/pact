@@ -1016,28 +1016,63 @@ form that keeps the id in the query string; a host that is neither
 read. **One work item per press, and its children are not imported** - the hint
 under the field says so, rather than leaving it to be discovered.
 
-What the import needs from ADO is a title, an owner with an email, and the
-parents that reach the project level. **Dates are not required.** The title
-becomes the Assignment's own Name. The owner is matched
-to a Person **by email and never by name** - the instance's own `uniqueName`,
-compared without case against each live Person's email - because "Anna Meier"
-and "Meier, Anna (EXT)" are one person and no string comparison can know that. An
-email matching no Person is refused **with an offer**: the operations panel
-draws a press that creates the Person with ADO's display name verbatim and that
-email, which can then be edited like any other. Nothing is created before that
-press, so a Person never appears on the plan unasked. An item assigned to nobody,
-or to a group - an identity with no email - is refused, and the refusal names
-which.
+What the import needs from ADO is a title and the item's own type: the type's
+level against the mapping decides what the item becomes, before any person is
+considered. An owner is needed only at the assignment level, and dates are
+never required.
 
-**The parents decide the Project.** The import walks up from the item to the
-first ancestor whose work-item type is the mapping's project level, and that
-ancestor's title names the Project: `Invoices` for an Epic of that name, matched
-against the live Projects without case. A chain that reaches no such ancestor is
-refused, naming every level it walked and the project level it was looking for,
-and so is a project level whose title matches no Project - **an import never
-invents a Project**, because a wrong Project puts real work in the wrong place.
-The mapping's `Tag` row is not applied by an import yet: nothing is tagged from
-ADO.
+**The level decides the record.**
+
+- An item whose own type is the mapping's **project level** becomes a
+  [Project](../GLOSSARY.md#project): the title verbatim as its name, the
+  least-used colour slot as any new Project takes, and no notes. Its `AssignedTo`
+  is not read at all - a Project needs no owner - and no Assignment is created.
+  The import records the item's [Link](../GLOSSARY.md#link), with its baseline, on
+  that Project, so a later sync can keep its name current.
+- An item at the **assignment level** - or at a rank between it and the project
+  level, which has always been read as an Assignment - becomes an
+  [Assignment](../GLOSSARY.md#assignment): the title as its own Name, the owner
+  matched to a Person, the parents walked for the Project, and the dates by the
+  rules below.
+- An item at the **tag level** is refused, because a tag has no record of its
+  own: an import of one would put nothing on the plan. So is an item ranked
+  **below the assignment level**, because that is below the level that carries a
+  person's time. Each refusal names the level its type belongs to and the raw
+  item, never the owner.
+
+The rank comes from the instance's own backlog levels, read only for a type the
+mapping does not name. An instance that will not answer them leaves that type on
+**the assignment path it has always had**, because an import must not refuse work
+for want of a rank it never needed before.
+
+**A title the plan already carries is offered, never duplicated.** When a live
+Project's name matches the item's title - compared trimmed and without case, as
+everywhere else - the panel draws two presses instead of importing: `Use
+"<name>"`, which stores the link on that Project and creates nothing, and
+`Import as a copy`, which creates a second Project under the app's own copy rule,
+`X (copy)` and then `X (copy 2)` while that name is taken. An archived Project is
+not offered and does not match: an import never lands on something the plan has
+put away.
+
+At the assignment level the owner is matched to a Person **by email and never by
+name** - the instance's own `uniqueName`, compared without case against each
+live Person's email - because "Anna Meier" and "Meier, Anna (EXT)" are one
+person and no string comparison can know that. An email matching no Person is
+refused **with an offer**: the operations panel draws a press that creates the
+Person with ADO's display name verbatim and that email, which can then be edited
+like any other. Nothing is created before that press, so a Person never appears
+on the plan unasked. An item assigned to nobody, or to a group - an identity with
+no email - is refused at that level, and the refusal names which.
+
+**The parents decide the Project**, for an item that becomes an Assignment. The
+import walks up from the item to the first ancestor whose work-item type is the
+mapping's project level, and that ancestor's title names the Project: `Invoices`
+for an Epic of that name, matched against the live Projects without case. A chain
+that reaches no such ancestor is refused, naming every level it walked and the
+project level it was looking for, and so is a project level whose title matches
+no Project - **an assignment-level import never invents a Project**, because a
+wrong Project puts real work in the wrong place. The mapping's `Tag` row is not
+applied by an import yet: nothing is tagged from ADO.
 
 **The dates follow three rules, in order.** ADO's own win whenever the item's
 type carries both, and are recorded as not assumed; the end field is resolved per
@@ -1062,24 +1097,34 @@ that number is PACT's own and the person sets it afterwards.
 The import records a [Link](../GLOSSARY.md#link) beside the Assignment:
 `{ workItemId, rev, workItemType, values, datesAssumed }`, where `values` are the
 fields both sides agreed - the title, the owner's email, the project-level item's
-title, ADO's start and end (null when it holds none) and the iteration path. That
+title, ADO's start and end (null when it holds none) and the iteration path. A
+project-level import stores the same link shape on the Project, with no owner's
+email because it read no owner, and with the dates empty because a Project has
+none. That
 [Baseline](../GLOSSARY.md#baseline) is what a later sync compares field by field,
 so an empty start means "PACT moved this", not "both agree on today". A
 credential-shaped key inside the link is refused when the plan is read or
-written, exactly as one inside the mapping is. The link is optional throughout: a
+written, exactly as one inside the mapping is, and a link anywhere but an
+Assignment or a Project - on a Person or a Milestone - is refused too. The link
+is optional throughout: a
 plan without one loads, validates and behaves as it did before, and a linked
-Assignment is an ordinary Assignment afterwards - same panels, same figures, same
+record is ordinary afterwards - same panels, same figures, same
 rules - with the link shown read-only in its panel, naming the work item, the
 revision and whether its dates are assumed.
 
-**The import is one write and one Undo step.** The Person it creates - when the
-offer was taken - and the Assignment land in a single write through the plan's
-store, so the validation, the atomic write and the changed-underneath guard cover
-both together. A refusal writes nothing at all and records no history, so an
-import that cannot be finished leaves nothing behind rather than a Person with no
-work. Re-importing a work item that a live Assignment already carries is refused,
+**Each import is one write and one Undo step.** The Person a taken offer creates
+- at the assignment level - and the Assignment land in a single write through
+the plan's store, and so do a Project created with its link and a link stored on
+an existing Project, each as one write of its own. So the validation, the atomic
+write and the changed-underneath guard cover the whole record, and none of them
+can leave a half-written one behind. A refusal writes nothing at all and records
+no history, so an import that cannot be finished leaves nothing behind rather
+than a Person with no work or a Project with no link. Re-importing a work item
+that a live Assignment already carries is refused,
 naming that Assignment; archive it first if a second block of the same work is
-what was meant. ADO's own dates outside the plan period are refused by the plan's
+what was meant. Re-importing a project-level item offers its Project instead:
+using it stores the link again and creates nothing. ADO's own dates outside the
+plan period are refused by the plan's
 rule rather than moved, and widening the period or archiving is the answer.
 
 **Where the controls are.** The `ADO` button in the top bar, after the undo and
@@ -1095,8 +1140,10 @@ withdrawn writes nothing and says the same words in the app's toast, so a mouse
 and a keyboard both learn the reason. On a plan that is not configured at all
 that reason is `Connect PACT to Azure DevOps first: Options then Azure DevOps...`,
 which points at the settings. The operations panel holds the import's field, its
-`Import` press, the offer to create a missing Person, and its own line reporting
-what the import did or refused. Nothing about the URL, the token or the mapping's
+`Import` press, the offer to create a missing Person, the two presses a clashing
+Project name offers (`Use "<name>"` and `Import as a copy`), and its own line
+reporting what the import did or refused - a Project created, a Project linked,
+or the refusal's own sentence. Nothing about the URL, the token or the mapping's
 levels is in it: the settings are the other door.
 
 ## Reset view

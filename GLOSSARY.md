@@ -81,7 +81,7 @@ The state of a Person on a day whose Allocations add up to more than their Capac
 _Avoid_: overload, conflict, double-booking
 
 **Project**:
-A body of work that Assignments place onto People; it carries a name, a colour, any number of Project tags and an optional note, and exists independently of any Person.
+A body of work that Assignments place onto People; it carries a name, a colour, any number of Project tags and an optional note, an optional [Link](#link) to the Azure DevOps work item it was imported from, and exists independently of any Person.
 _Avoid_: engagement, job, client, ticket
 
 **Assignment**:
@@ -123,11 +123,11 @@ The `ado` block in the plan: the Azure DevOps organisation's address, the projec
 _Avoid_: schema, field map, binding, metadata
 
 **Link**:
-What ties an Assignment to the Azure DevOps work item it was imported from: the work item's id, the type it was read as, its [Baseline](#baseline), and whether the Assignment's dates are the item's own or PACT's guess. It sits in the plan beside the Assignment, because the plan is what travels, and it is optional everywhere - an Assignment typed onto the grid has none, and a plan without links behaves exactly as it did before there was an import. Type names and an address may appear in it; a token never does, and a credential-shaped key inside it is refused when the plan is read or written. A linked Assignment is an ordinary Assignment in every other way: same panels, same figures, same rules, with the link shown read-only.
+What ties a record to the Azure DevOps work item it was imported from: the work item's id, the type it was read as, its [Baseline](#baseline), and whether the Assignment's dates are the item's own or PACT's guess. It has two homes, the same shape in each: an Assignment's link is the work an item became on a Person's row, and a Project's link is the item an import at the project level became. It sits in the plan beside the Assignment or the Project, because the plan is what travels, and it is optional everywhere - an Assignment typed onto the grid has none, a Project added by hand has none, and a plan without links behaves exactly as it did before there was an import. Type names and an address may appear in it; a token never does, and a credential-shaped key inside it is refused when the plan is read or written. A Project's link carries no owner's email, because an import at that level reads no owner, and no dates, because a Project has none. A linked record is ordinary in every other way: same panels, same figures, same rules, with the link shown read-only.
 _Avoid_: reference, attachment, foreign key, pointer, sync record
 
 **Baseline**:
-The values both sides last agreed, kept inside a [Link](#link) so a later sync can tell what changed, on which side and in which field, rather than comparing two records that run on independent clocks. It holds the work item's revision and the agreed values - the title, the owner's email, the Project's work-item title, the start and end dates ADO holds (which are empty when it holds none), and the iteration path - beside a marker saying whether the dates are assumed. ADO's revision is what a conditional write is checked against; the marker is what keeps an assumed date from being published as if a person had decided it.
+The values both sides last agreed, kept inside a [Link](#link) so a later sync can tell what changed, on which side and in which field, rather than comparing two records that run on independent clocks. It holds the work item's revision and the agreed values - the title, the owner's email, the Project's work-item title, the start and end dates ADO holds (which are empty when it holds none), and the iteration path - beside a marker saying whether the dates are assumed. ADO's revision is what a conditional write is checked against; the marker is what keeps an assumed date from being published as if a person had decided it. A Project's baseline holds the title and the revision alone: it has no owner to record and no dates to assume.
 _Avoid_: snapshot, sync state, checkpoint, watermark
 
 **View setting**:

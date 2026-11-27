@@ -88,16 +88,27 @@ test("the operations hold the import, and every part of it", () => {
     "ado-import-id",
     "ado-import",
     "ado-import-line",
-    "ado-import-offer"
+    "ado-import-offer",
+    "ado-import-offer-alt"
   ]);
-  // The press, the one work item per press, and the offer that is the only
-  // thing which sends createPerson.
-  assert.match(OPERATIONS, /button\("btn-ghost", "Import", function \(\) \{ runImport\(false\); \}\)/);
-  assert.match(OPERATIONS, /api\("POST", "\/api\/ado\/import", \{ id: reading\.id, createPerson: createPerson === true \}\)/);
+  // The press, the one work item per press, and the offers that are the only
+  // things which send createPerson, useProject or copyProject.
+  assert.match(OPERATIONS, /button\("btn-ghost", "Import", function \(\) \{ runImport\(\); \}\)/);
+  assert.match(OPERATIONS, /api\("POST", "\/api\/ado\/import", \{/);
+  assert.match(OPERATIONS, /id: reading\.id,/);
+  assert.match(OPERATIONS, /createPerson: choice\.createPerson === true/);
+  assert.match(OPERATIONS, /useProject: choice\.useProject === true/);
+  assert.match(OPERATIONS, /copyProject: choice\.copyProject === true/);
   assert.match(OPERATIONS, /One work item at a time; its children are not imported\./);
-  assert.match(OPERATIONS, /if \(offer\) runImport\(true\);/);
-  // Its own line, drawn from the shared rules' words.
-  assert.match(OPERATIONS, /text: importLine\(result\.facts\)/);
+  // The offer's own presses: one for the choice it names, one for the copy it
+  // offers beside it.
+  assert.match(OPERATIONS, /if \(asCopy\) return runImport\(\{ copyProject: true \}\);/);
+  assert.match(OPERATIONS, /if \(offer\.kind === "use-project"\) return runImport\(\{ useProject: true \}\);/);
+  assert.match(OPERATIONS, /runImport\(\{ createPerson: true \}\);/);
+  assert.match(OPERATIONS, /offerAltButton\.textContent = offer && offer\.altLabel \? offer\.altLabel : "";/);
+  // Its own line, drawn from the shared rules' words, and the level decides
+  // which of the two lines it is.
+  assert.match(OPERATIONS, /result\.kind === "project" \? projectImportLine\(result\.facts\) : importLine\(result\.facts\)/);
 });
 
 test("nothing about the address, the token or the mapping levels is in the operations", () => {

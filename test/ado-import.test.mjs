@@ -17,11 +17,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { createStore, seedPlan, validatePlan } from "../lib/plan.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
+import { leastUsedSlot } from "../public/lib/palette.mjs";
 import {
   ADO_FIELDS,
   assignedIdentity,
   assumedWindow,
   datePart,
+  existingProjectOffer,
+  importLevel,
+  importLevelRefusal,
   importLine,
   importPlacement,
   iterationStartFor,
@@ -32,6 +36,7 @@ import {
   personForEmail,
   projectFromChain,
   projectForTitle,
+  projectImportLine,
   readWorkItemId,
   schedulingFields,
   sprintForDate,
@@ -520,4 +525,193 @@ test("the import's line states what it made and which date rule placed it", () =
     person: { name: "Dana Voss", email: "dana@example.com", created: true }
   }));
   assert.match(created, /Dana Voss was added as a Person with dana@example\.com/);
+});
+
+/* --- which level the item is -------------------------------------------- */
+
+const RANKS = [
+  { name: "Epic", rank: 4 },
+  { name: "Feature", rank: 3 },
+  { name: "User Story", rank: 2 },
+  { name: "Task", rank: 1 }
+];
+const LEVELS = { projectLevel: "Epic", assignmentLevel: "Feature" };
+
+test("the item's own level against the mapping decides what it becomes", () => {
+  // The type the mapping draws Projects from is the item's own type at the
+  // project level - no parent walk, and no owner.
+  assert.equal(importLevel(RANKS, LEVELS, "Epic"), "project");
+  // The type mapping as the assignment level, and a level between it and the
+  // project's, keep the assignment path.
+  assert.equal(importLevel(RANKS, LEVELS, "Feature"), "assignment");
+  assert.equal(importLevel(RANKS, Object.assign({}, LEVELS, { assignmentLevel: "User Story" }), "Feature"),
+    "assignment");
+  // Below the assignment level is a refusal, decided by the ranks.
+  assert.equal(importLevel(RANKS, Object.assign({}, LEVELS, { assignmentLevel: "User Story" }), "Task"),
+    "below");
+  // The tag slot's own type is a refusal whatever its rank.
+  assert.equal(importLevel(RANKS, Object.assign({}, LEVELS, { tagLevel: "Task" }), "Task"), "tag");
+  // Ranks the instance never answered leave an unnamed type where it has always
+  // been: an import must not refuse work for want of a rank.
+  assert.equal(importLevel([], LEVELS, "Task"), "assignment");
+  assert.equal(importLevel(null, LEVELS, "Bug"), "assignment");
+  // A type with no name at all is not a level.
+  assert.equal(importLevel(RANKS, LEVELS, ""), "assignment");
+});
+
+test("a tag-level and a below-assignment refusal each name what that level is for", () => {
+  const facts = {
+    workItemId: 2000,
+    title: "Login is slow",
+    workItemType: "Bug",
+    mapping: LEVELS
+  };
+  const tag = importLevelRefusal("tag", facts);
+  assert.match(tag, /Work item 2000 \("Login is slow"\) is Bug/);
+  assert.match(tag, /a tag has no record of its own/);
+  assert.match(tag, /Epic/);
+  assert.match(tag, /Feature/);
+
+  const below = importLevelRefusal("below", Object.assign({}, facts, { workItemType: "Task" }));
+  assert.match(below, /is Task/);
+  assert.match(below, /below the level that carries a person's time/);
+  assert.match(below, /Feature/);
+  // Neither blames the owner: there is no owner to blame at these levels.
+  [tag, below].forEach((text) => assert.doesNotMatch(text, /assigned to anybody|owner/));
+});
+
+/* --- the offer a matching name makes ------------------------------------ */
+
+test("a matching name offers the existing Project and a copy, both named in full", () => {
+  const offer = existingProjectOffer({ id: "invoices", name: "Invoices" }, "Invoices (copy)");
+  assert.equal(offer.kind, "use-project");
+  assert.equal(offer.projectId, "invoices");
+  assert.equal(offer.name, "Invoices");
+  assert.equal(offer.label, "Use \"Invoices\"");
+  assert.equal(offer.altLabel, "Import as a copy");
+  assert.equal(offer.copyName, "Invoices (copy)");
+  assert.match(offer.message, /already has a live Project named "Invoices"/);
+  assert.match(offer.message, /Using it stores the item's link on that Project and creates nothing/);
+  assert.match(offer.message, /"Invoices \(copy\)"/);
+});
+
+test("the project import's line says whether a Project was created or linked, and names no person", () => {
+  const created = projectImportLine({
+    created: true, workItemId: 2000, workItemType: "Epic", projectName: "Super Epic Project"
+  });
+  assert.match(created, /Imported Epic #2000 as the new Project "Super Epic Project"/);
+  assert.match(created, /its link and baseline are stored on the Project/);
+
+  const linked = projectImportLine({
+    created: false, workItemId: 2000, workItemType: "Epic", projectName: "Super Epic Project"
+  });
+  assert.equal(linked, "Linked Epic #2000 to the existing Project \"Super Epic Project\": nothing was created.");
+
+  [created, linked].forEach((text) => {
+    assert.doesNotMatch(text, /[Pp]erson|owner|assigned/);
+  });
+});
+
+/* --- the link's second home --------------------------------------------- */
+
+const PROJECT_LINK = {
+  workItemId: 2000,
+  rev: 4,
+  workItemType: "Epic",
+  datesAssumed: false,
+  values: { title: "Super Epic Project", project: "Super Epic Project", start: null, end: null, iterationPath: null }
+};
+
+test("a Project's link is the same rule as an Assignment's, without an owner's email", () => {
+  assert.deepEqual(linkRefusals(PROJECT_LINK, "project"), []);
+  // Normalised, it stays exactly that: no empty email field is invented.
+  assert.deepEqual(normalizeLink(PROJECT_LINK, "project"), PROJECT_LINK);
+  // An Assignment's link still needs the email; a Project's may carry one but
+  // never a blank one.
+  assert.notDeepEqual(linkRefusals(PROJECT_LINK), []);
+  assert.notDeepEqual(linkRefusals({
+    workItemId: 1, rev: 1, datesAssumed: false,
+    values: { title: "X", project: "X", personEmail: "  ", start: null, end: null, iterationPath: null }
+  }, "project"), []);
+  // The credential refusal is the same one, in the link and inside its values.
+  ["token", "pat", "password"].forEach((key) => {
+    assert.notDeepEqual(linkRefusals(Object.assign({}, PROJECT_LINK, { [key]: "a-secret" }), "project"), []);
+    assert.notDeepEqual(linkRefusals(Object.assign({}, PROJECT_LINK, {
+      values: Object.assign({}, PROJECT_LINK.values, { [key]: "a-secret" })
+    }), "project"), []);
+  });
+});
+
+test("validatePlan accepts a link on a Project, and refuses one on a Person or a Milestone", () => {
+  const plan = seedPlan();
+  assert.deepEqual(validatePlan(plan), []);
+  plan.projects[0].link = PROJECT_LINK;
+  assert.deepEqual(validatePlan(plan), []);
+
+  const broken = seedPlan();
+  broken.projects[0].link = Object.assign({}, PROJECT_LINK, { token: "a-secret" });
+  assert.notDeepEqual(validatePlan(broken), []);
+
+  const onPerson = seedPlan();
+  onPerson.people[0].link = PROJECT_LINK;
+  assert.notDeepEqual(validatePlan(onPerson), []);
+
+  const onMilestone = seedPlan();
+  onMilestone.milestones = [{ id: "m1", name: "Release", date: "2026-06-01", colour: 1, tags: [] }];
+  assert.deepEqual(validatePlan(onMilestone), []);
+  onMilestone.milestones[0].link = PROJECT_LINK;
+  assert.notDeepEqual(validatePlan(onMilestone), []);
+});
+
+/* --- the project-level writes ------------------------------------------- */
+
+test("a Project created by an import and its link are one write and one undo", () => {
+  const dir = tempDir();
+  const store = createStore(path.join(dir, "plan.json"));
+  const before = store.get();
+  const created = store.importProject({
+    project: { name: "Super Epic Project", notes: "", tags: [] },
+    link: PROJECT_LINK
+  });
+  // The least-used colour, as any new Project takes when nobody names one.
+  assert.equal(created.colour, leastUsedSlot(before.projects));
+  assert.deepEqual(created.link, PROJECT_LINK);
+  assert.equal(store.get().projects.length, before.projects.length + 1);
+  assert.equal(store.historyDepth().undo, 1);
+  store.undo();
+  assert.deepEqual(store.get(), before);
+});
+
+test("using an existing Project stores the link on it as its own write", () => {
+  const dir = tempDir();
+  const store = createStore(path.join(dir, "plan.json"));
+  const target = store.get().projects[0];
+  const countBefore = store.get().projects.length;
+  const linked = store.linkProject({ projectId: target.id, link: PROJECT_LINK });
+  assert.equal(linked.id, target.id);
+  assert.deepEqual(linked.link, PROJECT_LINK);
+  assert.equal(store.get().projects.length, countBefore, "linking created a Project");
+  assert.deepEqual(store.get().projects.filter((project) => project.id === target.id)[0], linked);
+  assert.equal(store.historyDepth().undo, 1);
+  store.undo();
+  assert.equal("link" in store.get().projects.filter((project) => project.id === target.id)[0], false);
+});
+
+test("a Project write carrying a credential-shaped link is refused and writes nothing", () => {
+  const dir = tempDir();
+  const file = path.join(dir, "plan.json");
+  const store = createStore(file);
+  const before = store.get();
+  const textBefore = String(fs.readFileSync(file, "utf8"));
+  assert.throws(() => store.importProject({
+    project: { name: "Super Epic Project", notes: "", tags: [] },
+    link: Object.assign({}, PROJECT_LINK, { token: "a-secret" })
+  }));
+  assert.throws(() => store.linkProject({
+    projectId: before.projects[0].id,
+    link: Object.assign({}, PROJECT_LINK, { token: "a-secret" })
+  }));
+  assert.deepEqual(store.get(), before);
+  assert.equal(String(fs.readFileSync(file, "utf8")), textBefore);
+  assert.equal(store.canUndo(), false);
 });

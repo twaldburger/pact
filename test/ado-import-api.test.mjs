@@ -16,7 +16,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createStore, seedPlan, todayISO } from "../lib/plan.mjs";
 import { createServer } from "../server.mjs";
-import { importLine } from "../public/lib/ado.mjs";
+import { importLine, projectImportLine } from "../public/lib/ado.mjs";
+import { leastUsedSlot } from "../public/lib/palette.mjs";
 import { sprintsFor } from "../public/lib/sprints.mjs";
 import { scratch } from "../test-support/scratch.mjs";
 
@@ -83,6 +84,12 @@ function adoStub(settings) {
     }
     if (/^\/PACT\/PACT%20Team\/_apis\/work\/teamsettings\/iterations$/.test(pathname)) {
       return reply(200, { count: (fixture.iterations || []).length, value: fixture.iterations || [] });
+    }
+    // The backlog levels, which only an import of a type the mapping does not
+    // name asks for: its rank decides whether the item sits below the level
+    // that carries a person's time.
+    if (/^\/PACT\/PACT%20Team\/_apis\/work\/backlogs$/.test(pathname)) {
+      return reply(200, { count: (fixture.backlogs || []).length, value: fixture.backlogs || [] });
     }
     return reply(404, {});
   };
@@ -467,8 +474,228 @@ test("a project level the plan has no Project for refuses rather than inventing 
   assert.deepEqual(app.store.get(), before);
 });
 
-/* --- the ways ADO says no ----------------------------------------------- */
+/* --- the item at the project level -------------------------------------- */
 
+// An item whose own type is the mapping's project level: an Epic, with no
+// owner at all in the cases that matter - which is what the owner's import hit.
+function projectItem(overrides) {
+  return {
+    rev: 4,
+    fields: Object.assign({
+      "System.Title": "Super Epic Project",
+      "System.WorkItemType": "Epic",
+      "System.State": "Doing"
+    }, overrides || {})
+  };
+}
+
+const PROJECT_LINK = {
+  workItemId: 2000,
+  rev: 4,
+  workItemType: "Epic",
+  datesAssumed: false,
+  values: {
+    title: "Super Epic Project",
+    project: "Super Epic Project",
+    start: null,
+    end: null,
+    iterationPath: null
+  }
+};
+
+test("a project-level item with no owner becomes one Project carrying its link, and no Assignment", async () => {
+  const app = await start({ items: { 2000: projectItem() } });
+  const before = app.store.get();
+  const res = await importOf(app, { id: 2000 });
+  assert.equal(res.status, 200, res.text);
+
+  const plan = app.store.get();
+  assert.equal(plan.assignments.length, before.assignments.length, "a project-level import created an Assignment");
+  assert.equal(plan.projects.length, before.projects.length + 1);
+  const created = plan.projects.slice(-1)[0];
+  assert.equal(created.name, "Super Epic Project");
+  // The least-used colour, as any new Project takes, and no notes.
+  assert.equal(created.colour, leastUsedSlot(before.projects));
+  assert.equal(created.notes, "");
+  assert.deepEqual(created.tags, []);
+  // The link and the baseline sit on the Project, and carry no owner's email:
+  // an import at this level never reads AssignedTo.
+  assert.deepEqual(created.link, PROJECT_LINK);
+  assert.equal("personEmail" in created.link.values, false);
+
+  // It reached the file, not only the memory.
+  const file = stored(app);
+  assert.deepEqual(file.projects[file.projects.length - 1].link, PROJECT_LINK);
+  // One write, one undo step.
+  assert.equal(app.store.historyDepth().undo, 1);
+
+  assert.equal(res.json.kind, "project");
+  const line = projectImportLine(res.json.facts);
+  assert.match(line, /Imported Epic #2000 as the new Project "Super Epic Project"/);
+  assert.doesNotMatch(line, /[Pp]erson|owner/);
+});
+
+test("a project-level item's AssignedTo is not read at all", async () => {
+  // The email matches nobody on the plan. At the assignment level that is an
+  // offer to create a Person; here it must not even be looked at.
+  const app = await start({
+    items: {
+      2000: projectItem({ "System.AssignedTo": { displayName: "Dana Voss", uniqueName: "dana@example.com" } })
+    }
+  });
+  const before = app.store.get();
+  const res = await importOf(app, { id: 2000 });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.offer, undefined);
+  assert.equal(app.store.get().people.length, before.people.length);
+  assert.equal(stored(app).people.some((person) => person.email === "dana@example.com"), false);
+});
+
+test("the same project-level import twice offers the Project, then links rather than creating a second", async () => {
+  const app = await start({ items: { 2000: projectItem() } });
+  const first = await importOf(app, { id: 2000 });
+  assert.equal(first.status, 200, first.text);
+  const created = app.store.get().projects.slice(-1)[0];
+  const afterFirst = app.store.get();
+
+  const second = await importOf(app, { id: 2000 });
+  assert.equal(second.status, 409);
+  // The offer travels as a field, so the panel draws two presses rather than
+  // parsing them back out of a sentence.
+  assert.equal(second.json.offer.kind, "use-project");
+  assert.equal(second.json.offer.projectId, created.id);
+  assert.equal(second.json.offer.name, "Super Epic Project");
+  assert.equal(second.json.offer.label, "Use \"Super Epic Project\"");
+  assert.equal(second.json.offer.altLabel, "Import as a copy");
+  assert.equal(second.json.offer.copyName, "Super Epic Project (copy)");
+  assert.match(second.json.error, /already has a live Project named "Super Epic Project"/);
+  assert.deepEqual(app.store.get(), afterFirst, "the offer wrote something");
+  assert.equal(app.store.historyDepth().undo, 1);
+
+  const used = await importOf(app, { id: 2000, useProject: true });
+  assert.equal(used.status, 200, used.text);
+  const plan = app.store.get();
+  assert.equal(plan.projects.length, afterFirst.projects.length, "using the Project created another");
+  assert.deepEqual(plan.projects.filter((project) => project.name === "Super Epic Project"),
+    [created], "the link did not land on the existing Project unchanged");
+  assert.equal(plan.assignments.length, afterFirst.assignments.length);
+  assert.equal(used.json.facts.created, false);
+  assert.equal(projectImportLine(used.json.facts),
+    "Linked Epic #2000 to the existing Project \"Super Epic Project\": nothing was created.");
+  // The link is its own single commit, one step back.
+  assert.equal(app.store.historyDepth().undo, 2);
+});
+
+test("Import as a copy names the new Project X (copy), numbered by the app's own rule", async () => {
+  const app = await start({ items: { 2000: projectItem() } });
+  assert.equal((await importOf(app, { id: 2000 })).status, 200);
+  const copy = await importOf(app, { id: 2000, copyProject: true });
+  assert.equal(copy.status, 200, copy.text);
+  assert.equal(copy.json.facts.created, true);
+  assert.equal(copy.json.facts.projectName, "Super Epic Project (copy)");
+  const names = app.store.get().projects.map((project) => project.name);
+  assert.equal(names.filter((name) => name === "Super Epic Project").length, 1);
+  assert.equal(names.includes("Super Epic Project (copy)"), true);
+  // The copy already exists, so the next one is numbered on rather than
+  // stacking a second suffix.
+  const second = await importOf(app, { id: 2000, copyProject: true });
+  assert.equal(second.status, 200, second.text);
+  assert.equal(second.json.facts.projectName, "Super Epic Project (copy 2)");
+  const copyProject = app.store.get().projects.filter((project) => project.name === "Super Epic Project (copy)")[0];
+  assert.equal(copyProject.link.values.title, "Super Epic Project");
+  assert.equal(copyProject.link.workItemId, 2000);
+});
+
+test("an archived Project is not offered, and the import creates a live one", async () => {
+  const app = await start({
+    plan: (plan) => {
+      plan.projects.push({
+        id: "old-epic", name: "Super Epic Project", colour: 2, notes: "", tags: [], archived: true
+      });
+    },
+    items: { 2000: projectItem() }
+  });
+  const res = await importOf(app, { id: 2000 });
+  assert.equal(res.status, 200, res.text);
+  const plan = app.store.get();
+  const live = plan.projects.filter((project) => project.name === "Super Epic Project" && !project.archived);
+  assert.equal(live.length, 1, "an archived Project was offered or a new one was not created");
+  assert.equal(plan.projects.filter((project) => project.archived).length, 1);
+  assert.equal("link" in plan.projects.filter((project) => project.id === "old-epic")[0], false);
+});
+
+/* --- the tag level, and below the level that carries time --------------- */
+
+const BACKLOGS = [
+  { rank: 4, name: "Epics", workItemTypes: [{ name: "Epic" }] },
+  { rank: 3, name: "Features", workItemTypes: [{ name: "Feature" }] },
+  { rank: 2, name: "Stories", workItemTypes: [{ name: "User Story" }] },
+  { rank: 1, name: "Tasks", workItemTypes: [{ name: "Task" }] }
+];
+
+test("a tag-level item is refused for what a tag is for, and blames nobody", async () => {
+  const app = await start({
+    plan: (plan) => { plan.ado = Object.assign({}, plan.ado, { tagLevel: "Bug" }); },
+    items: {
+      2000: {
+        rev: 1,
+        fields: {
+          "System.Title": "Login is slow",
+          "System.WorkItemType": "Bug",
+          "System.AssignedTo": { displayName: "Anna Meier", uniqueName: "anna@example.com" }
+        }
+      }
+    }
+  });
+  const before = app.store.get();
+  const res = await importOf(app, { id: 2000 });
+  assert.equal(res.status, 409);
+  assert.match(res.json.error, /Work item 2000 \("Login is slow"\) is Bug/);
+  assert.match(res.json.error, /a tag has no record of its own/);
+  assert.doesNotMatch(res.json.error, /assigned to anybody|no owner|give it an owner/);
+  assert.deepEqual(app.store.get(), before);
+  assert.equal(app.store.canUndo(), false);
+});
+
+test("an item below the assignment level is refused for its level, not for its owner", async () => {
+  const app = await start({
+    backlogs: BACKLOGS,
+    items: {
+      2000: {
+        rev: 2,
+        fields: {
+          "System.Title": "Wire the export",
+          "System.WorkItemType": "Task",
+          "System.AssignedTo": { displayName: "Anna Meier", uniqueName: "anna@example.com" }
+        }
+      }
+    }
+  });
+  const before = app.store.get();
+  const res = await importOf(app, { id: 2000 });
+  assert.equal(res.status, 409);
+  assert.match(res.json.error, /Work item 2000 \("Wire the export"\) is Task/);
+  assert.match(res.json.error, /below the level that carries a person's time/);
+  // The mapping's own names, so the refusal says which level to import instead.
+  assert.match(res.json.error, /Feature/);
+  assert.doesNotMatch(res.json.error, /assigned to anybody|give it an owner/);
+  assert.deepEqual(app.store.get(), before);
+});
+
+test("an unnamed type whose rank the instance does not answer keeps the assignment path", async () => {
+  // No backlog fixture, so the ranks read answers 404: an import must not
+  // refuse work for want of a rank it never needed before.
+  const app = await start({
+    items: { 1000: EPIC, 1001: feature({ "System.WorkItemType": "User Story" }) }
+  });
+  const res = await importOf(app, { id: 1001 });
+  assert.equal(res.status, 200, res.text);
+  const created = app.store.get().assignments.slice(-1)[0];
+  assert.equal(created.name, "PDF export");
+  assert.equal(created.link.workItemType, "User Story");
+});
+
+/* --- the ways ADO says no ----------------------------------------------- */
 test("a work item that does not exist answers 404, and nothing is written", async () => {
   const app = await start({ items: { 1000: EPIC } });
   const before = app.store.get();
