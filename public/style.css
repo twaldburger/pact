@@ -2897,10 +2897,27 @@ down to the last row and no further. */
 
 .ado__import-row input { flex: 1 1 8rem; min-width: 0; }
 
-/* A linked Assignment's read-only line: an id and a revision, short, but with
-   room to wrap rather than widen the panel. */
+/* The ADO row: the work item's type and id, or the words `not linked`, in a
+   panel's own form. The id is the link, drawn in the app's ink and underlined
+   rather than in the browser's link blue, so it belongs to the panel it sits in;
+   the type beside it is plain text, because only the id goes anywhere. `not
+   linked` takes the quiet ink, because a record with no work item behind it is a
+   fact rather than a warning. All of it wraps anywhere rather than widening the
+   panel. */
 .ado__link {
   overflow-wrap: anywhere;
+}
+
+.ado__link__item {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.ado__link__item:hover { text-decoration-thickness: 2px; }
+
+.ado__link--none {
+  color: var(--ink-soft);
 }
 
 .ado__select { min-width: 0; }

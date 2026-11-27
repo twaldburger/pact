@@ -158,7 +158,9 @@ row is the panel's own Delete with no dialog and no panel to open: the Project
 and every Assignment of it go in one write, and the notice names the cascade -
 `Deleted "Atlas" and its 3 Assignments` - where a Project with no work is named
 alone. [Undo](../GLOSSARY.md#undo) steps the whole removal back. Absence is a
-checkbox in the same panel.
+checkbox in the same panel, and the `ADO` row follows it, saying which work item
+the Project came from or `not linked` - see
+[Importing a work item](#importing-a-work-item).
 
 ## Assignments
 
@@ -197,7 +199,10 @@ the Plan period, and a change that would leave it is refused with a message
 naming the period.
 
 Clicking a block opens it: Name, Share, tags and a note, plus Copy, Archive and
-Delete. Assignment tags are their own
+Delete. The panel also carries one `ADO` row saying whether a work item is
+behind the Assignment - the item's id as a link to it, or `not linked` - which
+is [Importing a work item](#importing-a-work-item)'s own row. Assignment tags
+are their own
 vocabulary, suggested from that Project's other Assignments. The Delete key
 deletes the Assignment under the pointer with no confirmation -
 [Undo](../GLOSSARY.md#undo) is the recovery - and `Ctrl+C` then `Ctrl+V` over a
@@ -1090,9 +1095,15 @@ month, and the line says which of the three rules placed the block.
 
 Every date that is not ADO's is assumed, and the assumed marker is stored rather
 than inferred: nothing writes an assumed date back to ADO until a person confirms
-it. A Person created by an import is full time, and the block takes one step of
-the plan's granularity as its Share, because ADO has no notion of "40% of Anna" -
-that number is PACT's own and the person sets it afterwards.
+it. A Person created by an import is full time, and an imported Assignment takes
+**100% as its Share** - the whole of that person for those dates - because ADO
+has no notion of "40% of Anna" and nothing in the work item suggests a slice, so
+any smaller number would be a guess drawn as a plan. The person narrows it in
+the panel when the work is not full time, and over-allocation is allowed and
+drawn, so an import that commits somebody past their Availability says so on the
+grid rather than understating the work. The plan's
+[Step](../GLOSSARY.md#step) still governs the Share steppers and the vertical
+drag; it no longer decides what an import starts at.
 
 The import records a [Link](../GLOSSARY.md#link) beside the Assignment:
 `{ workItemId, rev, workItemType, values, datesAssumed }`, where `values` are the
@@ -1109,8 +1120,30 @@ Assignment or a Project - on a Person or a Milestone - is refused too. The link
 is optional throughout: a
 plan without one loads, validates and behaves as it did before, and a linked
 record is ordinary afterwards - same panels, same figures, same
-rules - with the link shown read-only in its panel, naming the work item, the
-revision and whether its dates are assumed.
+rules.
+
+**A linked record's panel names the work item, and links its id.** The `ADO` row
+appears on an Assignment's panel and on an existing Project's - always, linked
+or not, because reading that no work item is behind a record is information -
+and a new Project has no link yet so it carries no row. Linked, it reads the
+work item's type as the link records it and the id as the link: `Feature 1234`,
+with the number the only clickable part. A link that recorded no type shows the
+id alone rather than being called a work item. The id opens the item's own page
+- `https://dev.azure.com/{org}/{project}/_workitems/edit/{id}`, whose org and
+project are the plan's mapping and whose id is the link's - in a new tab so
+reading the plan is not interrupted, and a `{org}.visualstudio.com` connection
+keeps its own host. The link is drawn in the app's own ink rather than the
+browser's link blue. The address is built from the plan's mapping, never
+guessed: a plan with no mapping saved, or a record with no link, reads `not
+linked` in the same quiet style, because an invented address would point at
+something real and wrong.
+
+The facts the row used to spell out are its hover title, which is where this app
+explains things: the work item's type, the revision both sides last agreed, and
+whether the dates are assumed, beside the sentence saying the row is read-only.
+An import establishes the link and PACT writes nothing to ADO in this slice, so
+the row is read-only on both records - and it assumes no owner, because a
+Project's link carries none.
 
 **Each import is one write and one Undo step.** The Person a taken offer creates
 - at the assignment level - and the Assignment land in a single write through
@@ -1144,7 +1177,10 @@ which points at the settings. The operations panel holds the import's field, its
 Project name offers (`Use "<name>"` and `Import as a copy`), and its own line
 reporting what the import did or refused - a Project created, a Project linked,
 or the refusal's own sentence. Nothing about the URL, the token or the mapping's
-levels is in it: the settings are the other door.
+levels is in it: the settings are the other door. The row a linked record shows
+is in that record's own panel rather than in either of these: an Assignment's
+`ADO` row, or a Project's, with the id as the link to the work item or `not
+linked`.
 
 ## Reset view
 
