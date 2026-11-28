@@ -73,6 +73,8 @@ export function topbarMarkup(view) {
         <a class="viewswitch__btn" href="${PLAN_PATH}" data-view-link="${VIEW_PLAN}"${planCurrent}>Plan</a>
         <a class="viewswitch__btn" href="${REPORT_PATH}" data-view-link="${VIEW_REPORT}"${reportCurrent}>Report</a>
       </nav>
+      <button type="button" class="ghost is-disabled" id="ado-operations"
+        aria-disabled="true" aria-label="Azure DevOps operations"><span class="ghost__caps">ADO</span></button>
       <div class="filter" id="filter">
         <input type="text" class="filter__input" id="filter-input" placeholder="Filter"
           aria-label="Filter the plan" autocomplete="off" role="combobox"
@@ -145,8 +147,6 @@ export function topbarMarkup(view) {
           </svg>
         </button>
       </div>
-      <button type="button" class="ghost is-disabled" id="ado-operations"
-        aria-disabled="true" aria-label="Azure DevOps operations"><span class="ghost__caps">ADO</span></button>
       <div class="options" id="options">
         <button type="button" class="ghost options__btn" id="options-btn"
           aria-haspopup="true" aria-expanded="false" aria-label="Options" title="Options">
