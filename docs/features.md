@@ -1208,19 +1208,20 @@ records. ADO's own dates outside the
 plan period are refused by the plan's
 rule rather than moved, and widening the period or archiving is the answer.
 
-**Where the controls are.** The `ADO` button in the top bar, after the undo and
-redo controls and before the Options glyph, so it sits with the app-level
-controls rather than among the view controls. It is always visible, and it is
-withdrawn until an operation could work: a mapping in the plan, with both of
-its lists, **and** a token on this machine. A plan carrying a mapping
-but no token leaves it withdrawn, and the reason names the missing half rather
-than repeating the same sentence. It is withdrawn with `aria-disabled` rather
-than `disabled`, because a natively disabled button takes no focus and its
-tooltip is unreliable: it keeps its focus and its title, and a press while it is
-withdrawn writes nothing and says the same words in the app's toast, so a mouse
-and a keyboard both learn the reason. On a plan that is not configured at all
-that reason is `Connect PACT to Azure DevOps first: Options then Azure DevOps…`,
-which points at the settings. The operations panel holds the import's field, its
+**Where the controls are.** The `ADO` button in the top bar, between the
+`Plan`/`Report` switch and the Filter, so it sits with the three controls that
+change what you are looking at rather than among the settings steppers. It is
+always visible, and it is withdrawn until an operation could work:
+a mapping in the plan, with both of its lists, **and** a token on this machine.
+A plan carrying a mapping but no token leaves it withdrawn, and the reason
+names the missing half rather than repeating the same sentence. It is withdrawn
+with `aria-disabled` rather than `disabled`, because a natively disabled button
+takes no focus and its tooltip is unreliable: it keeps its focus and its title,
+and a press while it is withdrawn writes nothing and says the same words in the
+app's toast, so a mouse and a keyboard both learn the reason. On a plan that is
+not configured at all, the reason is the rule's own
+`Connect PACT to Azure DevOps first: Options then Azure DevOps…`, which points
+at the settings. The operations panel holds the import's field, its
 `Import` press, the offer to create a missing Person, the two presses a clashing
 Project name offers (`Use "<name>"` and `Import as a copy`), and its own line
 reporting what the import did or refused - a Project created, a Project linked,

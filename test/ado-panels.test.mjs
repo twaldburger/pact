@@ -154,13 +154,13 @@ test("each panel keeps the status lines that are its own", () => {
 
 /* --- the button in the bar ---------------------------------------------- */
 
-test("the button sits in the bar after the history controls and before Options", () => {
-  const history = TOPBAR.indexOf('class="history"');
+test("the button sits in the bar after the view switch and before the Filter", () => {
+  const viewswitch = TOPBAR.indexOf('class="viewswitch"');
   const button = TOPBAR.indexOf('id="ado-operations"');
-  const options = TOPBAR.indexOf('class="options"');
-  assert.ok(history >= 0 && options >= 0, "the bar's history and Options controls are not both in the markup");
-  assert.ok(history < button && button < options,
-    "the ADO button belongs between the history controls and the Options glyph");
+  const filter = TOPBAR.indexOf('id="filter"');
+  assert.ok(viewswitch >= 0 && filter >= 0, "the bar's view switch and Filter are not both in the markup");
+  assert.ok(viewswitch < button && button < filter,
+    "the ADO button belongs between the view switch and the Filter");
   // A word, because the surface has no glyph of its own, and the full name for
   // a reader who cannot see the abbreviation's shape. The word sits in a span
   // of its own because it is the one all-caps label in the bar, and the caps
@@ -239,7 +239,7 @@ test("the two lines of prose that name the doors name them right", () => {
   const section = FEATURES.slice(start, end === -1 ? FEATURES.length : end);
   assert.match(section, /Where the controls are/);
   assert.match(section, /`ADO` button in the top bar/);
-  assert.match(section, /before the Options glyph/);
+  assert.match(section, /between the\s+`Plan`\/`Report` switch and the Filter/);
   assert.match(section, /`aria-disabled` rather\s+than `disabled`/);
   // The withheld button's reason, as the rule words it rather than as it was
   // once retyped here: the prose quotes one ellipsis character, not three full

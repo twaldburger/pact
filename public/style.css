@@ -101,12 +101,13 @@
      centre of the title beside it. This is that distance for a 17px title, in
      rem, so it follows the root and survives text zoom. */
   --optical-plus: -0.105rem;
-  /* The other way round: an all-caps word has nothing below its baseline, so in
-     a centred line box its ink - the cap band - sits half a descender above the
-     box's centre, while a mixed-case neighbour with a descender lands on it.
-     Measured in the bar: "ADO" 0.92px high, "Today" 0.08px low. This is that
-     distance for a --fs-data label, in rem, so it follows the root and survives
-     text zoom. */
+  /* The other way round: an all-caps word has no lowercase body and nothing
+     below its baseline, so in a centred line box its ink - the cap band - sits
+     above the box's centre, while a mixed-case neighbour's lowercase letters
+     and descenders pull its ink down onto it. Every neighbour the label has in
+     this bar is mixed-case text. Measured in the bar: "ADO" 0.92px high, the
+     mixed-case label measured beside it 0.08px low. This is that distance for
+     a --fs-data label, in rem, so it follows the root and survives text zoom. */
   --optical-caps: 0.0575rem;
 
   /* Motion ------------------------------------------------------------------- */
@@ -316,10 +317,9 @@ h1, h2, h3, p { margin: 0; }
 }
 
 /* "ADO" is the bar's one all-caps word, and the caps have no descender under
-   them: centred on its line box its ink sits a pixel above the centre that
-   "Today" beside it and the bar's glyphs - whose ink is their whole box - all
-   land on. The label, not the button, is moved, so the frame stays on the row's
-   line. */
+   them: centred on its line box its ink sits a pixel above the centre that the
+   mixed-case labels and glyphs around it all land on. The label, not the
+   button, is moved, so the frame stays on the row's line. */
 .ghost__caps {
   display: block;
   transform: translateY(var(--optical-caps));
