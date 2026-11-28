@@ -15,7 +15,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createStore, todayISO, ValidationError, NotFoundError, PlanFileError } from "./lib/plan.mjs";
 import { resolvePlanFile, readView, writeView, writePlanFile } from "./lib/config.mjs";
-import { AdoError, adoState, clearToken, importWorkItem, saveMapping, testConnection, writeToken } from "./lib/ado.mjs";
+import { AdoError, adoState, clearToken, importWorkItem, saveMapping, testConnection, writeBack, writeToken } from "./lib/ado.mjs";
 import { addressRefusals } from "./public/lib/ado.mjs";
 import { resolvePlanPath, withPlanSuffix } from "./public/lib/plan-file.mjs";
 import { visiblePlan } from "./public/lib/visibility.mjs";
@@ -382,6 +382,22 @@ export function createServer(store, options) {
                 useExisting: input.useProject === true,
                 copyProject: input.copyProject === true,
                 confirmNesting: input.confirmNesting === true
+              })).then((result) => sendJSON(res, 200, result));
+            });
+          }
+          // The write back: one linked Assignment's allocation as a comment on
+          // its work item, and the iteration of the sprint it starts in. A POST
+          // because it writes, and it writes to ADO as well as to the plan: the
+          // baseline takes the new revision in the same answer, so the panel
+          // refreshes from the plan rather than from a second read of the item.
+          // Every refusal - an unlinked or assumed Assignment, a day no sprint
+          // covers, an item that moved - is lib/ado.mjs's own sentence.
+          if (pathname === "/api/ado/write-back") {
+            if (req.method !== "POST") return sendError(res, 405, "method not allowed");
+            return readBody(req).then((body) => {
+              const input = body || {};
+              return writeBack(Object.assign({}, ado, {
+                assignmentId: input.assignmentId
               })).then((result) => sendJSON(res, 200, result));
             });
           }

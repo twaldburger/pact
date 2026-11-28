@@ -982,8 +982,8 @@ redirect to the sign-in page, which says the token was not accepted - it may be
 wrong for this organisation, expired or revoked, or missing a scope, because
 PACT needs Work Items (read) and Project and Team (read). Every ADO
 call is the direct result of a press - opening the settings panel,
-`Test connection`, `Save mapping` or an import - and never of a timer, a poll or
-a background check. Opening the settings panel reads the instance's types
+`Test connection`, `Save mapping`, an import or a write back - and never of a
+timer, a poll or a background check. Opening the settings panel reads the instance's types
 once, because the mapping's lists are chosen from them, and tests the connection
 when a token and an address are already stored. Writing or clearing the token
 is not on that list: it writes or deletes a file on this machine and reaches
@@ -1229,6 +1229,98 @@ levels is in it: the settings are the other door. The row a linked record shows
 is in that record's own panel rather than in either of these: an Assignment's
 `ADO` row, or a Project's, with the id as the link to the work item or `not
 linked`.
+
+## Writing an Assignment back
+
+**The write back.** A linked Assignment can publish what PACT knows about it to
+its work item: **one comment**, and **the iteration path of the sprint it starts
+in**. Nothing else goes out - no field a team reports on, and nothing is read
+back from ADO - because this is the first write rather than the sync, and a
+write path proven on two things is worth more than a wide one proven on none.
+The comment is the vehicle for the allocation because ADO has no field for it,
+and a comment a person can read is better than a field nobody owns.
+
+**An assumed date is never published.** An imported block whose dates are still
+the ones the import assumed carries the assumed marker, and the action is
+withdrawn while it does. Only values a person decided go out: ADO's own dates
+and dates a person set are not assumed, and a person setting either end of a
+linked Assignment is what clears the marker. The marker is stored rather than
+inferred, so a save that sends the same dates back leaves it as it was and only
+a real decision unblocks the write. The reason sits on the press's `title`, in
+the same visible-but-withdrawn manner as the bar's `ADO` button, and a press
+while it is withdrawn says the same words in the app's toast and calls nothing.
+
+**One comment per work item, updated in place.** The comment's own first line is
+the marker - **Allocation, from PACT**, the words in bold rather than an HTML
+comment, so a reader can see which comment PACT maintains. PACT's own comment is
+edited; a comment that does not begin with the marker is somebody else's and is
+left alone, whatever it says; and a comment is posted only when none is PACT's.
+A second write back updates the one comment, so a thread PACT has written to
+once never grows a second PACT comment.
+
+The comment is that heading, with *maintained automatically* in italic after it,
+then this table and nothing after it:
+
+| Person | Share | From | To | FTE-days |
+| --- | --- | --- | --- | --- |
+| Anna Example | 40% | 2026-01-05 | 2026-02-13 | 8.8 |
+
+The row is the Person's name, the Share as a percentage, the Assignment's dates,
+and the FTE-days that Share is worth over them - the plan's own figure, computed
+by the report's own arithmetic, so the comment cannot disagree with the grid.
+
+**The iteration is the sprint the Assignment starts in**, and it is resolved by
+date rather than by name. PACT reads the project's iterations and takes the one
+whose dates contain the Assignment's start, **both ends inclusive and read in
+UTC** - the same arithmetic the import placed the block by. A day no iteration
+covers is refused, naming the date, and so is a day two of them cover: PACT does
+not fall back to the project's root and does not choose an iteration by name or
+by ordinal, because either would put real work in a sprint nobody chose.
+
+**The conditional write is one JSON Patch.** `If-Match` is silently ignored by
+this API, so the revision is a `test` op in the same patch that sets
+`System.IterationPath`: the test against the baseline's revision, then the one
+field, in that order. An item that changed answers **412**, and that is reported
+rather than retried - PACT holds the revision both sides last agreed, and
+overwriting somebody else's change with the newest one is exactly what the
+baseline exists to prevent.
+
+**The order is the honest part.** Two calls cannot be one, so the conditional
+patch goes first - it is the call that fails on somebody else's change - and the
+comment is posted or edited only once it has landed. A comment therefore never
+claims a state the item is not in. When the comment fails afterwards, the
+refusal says exactly that: the iteration moved and the comment did not, followed
+by the reason the comment failed. The plan is written between the two calls: the
+baseline takes the revision the patch answered with, the agreed dates and
+iteration path, and the cleared assumed marker, so a failure at the comment
+leaves the plan holding the revision the item is actually at rather than one it
+is not.
+
+**Every refusal names its own cause**: the item moved (412), a token that may
+not write (403, naming the **Work Items (write)** scope it needs), an item that
+no longer exists (404), a day no ADO sprint covers, a day two cover, an
+Assignment with no work item, and dates still assumed. All of them happen before
+the first call, so nothing is half-written by a refusal; the one way two halves
+can differ is the comment failing after the patch succeeded, which says so.
+
+**The write is one plan change, so it is one Undo step.** The baseline is one
+write through the plan's store, with the validation, the atomic write and the
+changed-underneath guard any other plan change gets. Undo steps the plan back to
+the revision PACT held before it, and leaves ADO as it is: Undo is the plan's
+history, not a second write to somebody else's system.
+
+**Where the controls are.** The `Write back` press sits in the `ADO` row of an
+Assignment's panel, on the row's right beside the work item it acts on - paired
+with it rather than down in the footer with Archive and Delete. A linked
+Assignment whose dates a person decided enables it; an unlinked one and an
+assumed one are drawn withdrawn, with the reason on the press's `title` and in
+the app's toast when it is pressed. It is `aria-disabled` rather than `disabled`,
+as the bar's `ADO` button is, so it keeps its focus and its title. An archived
+Assignment's row carries no such press, because an archived block is history
+rather than plan. What the write did - the comment posted or updated in place,
+and the iteration the item now sits in - is reported in the app's own line, and
+the panel closes as the plan is redrawn, because the baseline's revision moved.
+
 
 ## Reset view
 

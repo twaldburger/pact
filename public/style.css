@@ -2950,6 +2950,29 @@ down to the last row and no further. */
   color: var(--ink-soft);
 }
 
+/* The ADO row's press sits on the row's right, beside the work item it acts on
+   rather than down in the footer with Delete. It is withdrawn with
+   `aria-disabled` and `.is-disabled` exactly as the bar's ADO button is - still
+   focusable, still answering with its reason - and it dims to the quiet ink
+   `not linked` wears rather than to the bar's opacity, because a panel's ink is
+   not the bar's. */
+.ado__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.ado__writeback {
+  flex: none;
+}
+
+.ado__writeback[aria-disabled="true"] {
+  color: var(--ink-soft);
+  border-color: var(--rule);
+  cursor: default;
+}
+
 /* A choice field: one closed row naming what is chosen, drawn as a field so it
    sits in its form row like every other control, and opening the shared tick
    list rather than stacking a box per value down the panel. "Choose..." until

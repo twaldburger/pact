@@ -537,7 +537,8 @@ export const ADO_EGRESS_ACTIONS = Object.freeze([
   "opening the settings panel",
   "Test connection",
   "Save mapping",
-  "an import"
+  "an import",
+  "a write back"
 ]);
 
 // A mapping is in the plan when the store would accept it: the address pair
@@ -1358,7 +1359,8 @@ export function linkFacts(link) {
 // lead it; these say what the row is not, which is the part a reader cannot
 // tell by looking at it.
 const LINK_READ_ONLY_TIP =
-  "It is read-only here: an import establishes the link, and PACT does not write to ADO yet.";
+  "It is read-only here: an import establishes the link, and the write back publishes the Assignment's " +
+  "allocation and its start sprint rather than editing the link.";
 const LINK_NOT_LINKED_TIP =
   "No Azure DevOps work item behind this record: an import creates the link, and PACT does not " +
   "write to ADO yet.";
@@ -1393,4 +1395,189 @@ export function linkRow(link, mapping) {
     href: url,
     title: linkFacts(link) + " " + LINK_READ_ONLY_TIP
   };
+}
+
+/*
+ * --- writing one Assignment back -------------------------------------------
+ *
+ * The first write PACT makes to Azure DevOps, and the whole of it: an
+ * Assignment's allocation as one comment, and the iteration of the sprint the
+ * Assignment starts in. Nothing a team reports on is written, and nothing is
+ * read back.
+ *
+ * Each rule lives here because each is a judgement rather than a call: what may
+ * be published, which iteration a day falls in, what the comment says, and the
+ * words a refusal uses. lib/ado.mjs makes the calls and asks these, so the panel
+ * and a later agent command share one set of answers.
+ */
+
+/*
+ * The comment's own first line is the marker. A stored comment whose text begins
+ * with it is PACT's and is edited in place; anything else is somebody's and is
+ * never touched, and a second PACT comment is never posted. It is visible text
+ * rather than an HTML comment, because a reader should be able to see which
+ * comment PACT maintains by reading it.
+ */
+export const WRITE_BACK_MARKER = "**Allocation, from PACT**";
+
+// A figure as the app writes one: one decimal, rounded, and a value too small to
+// read as a middot rather than a row of zeros - the report's own convention.
+export function commentFigure(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "-";
+  if (Math.abs(n) < 0.05) return "\u00b7";
+  return (Math.round(n * 10) / 10).toFixed(1);
+}
+
+// A table cell's text: a pipe would end the cell and break the table, so it is
+// the one character a name may not carry through.
+function cellText(value) {
+  return String(value === undefined || value === null ? "" : value).trim().replace(/\|/g, "\\|");
+}
+
+/*
+ * The comment: the heading, then one row - who, how much, from when to when, and
+ * the FTE-days that share is worth over those dates - and nothing after it. The
+ * figures are the caller's, computed by the plan's own arithmetic rather than
+ * here: a comment that added its own maths could disagree with the grid.
+ */
+export function allocationComment(facts) {
+  const f = facts || {};
+  const share = Number(f.share);
+  return [
+    WRITE_BACK_MARKER + " _(maintained automatically)_",
+    "",
+    "| Person | Share | From | To | FTE-days |",
+    "| --- | --- | --- | --- | --- |",
+    "| " + cellText(f.personName) + " | " + (Number.isFinite(share) ? share : 0) + "% | " +
+      cellText(f.start) + " | " + cellText(f.end) + " | " + commentFigure(f.fteDays) + " |"
+  ].join("\n");
+}
+
+/*
+ * The iteration windows a project's classification-node tree holds: one entry per
+ * node that has both dates, with the path a work item is written with and its
+ * two ends as dates. The tree is nested, so it is walked rather than read at one
+ * depth.
+ *
+ * The two kinds of path are not the same one. A classification node's own path
+ * carries the project's `Iteration` segment - `\PACT\Iteration\Sprint 01` -
+ * while a work item's `System.IterationPath` is the project's name and the node
+ * names below it, `PACT\Sprint 01`. Writing the first would be refused as an
+ * invalid tree name, so the paths built here are the work item's, from the
+ * project the root node names.
+ */
+export function iterationWindows(node) {
+  const windows = [];
+  if (!node || typeof node !== "object") return windows;
+  const project = String(node.path || "").trim().split("\\").filter(Boolean)[0] || "";
+  const walk = function (entry, parent) {
+    if (!entry || typeof entry !== "object") return;
+    const name = String(entry.name || "").trim();
+    const path = name === "" ? parent : (parent === "" ? project : parent + "\\" + name);
+    const attributes = entry.attributes || {};
+    const start = datePart(attributes.startDate);
+    const end = datePart(attributes.finishDate);
+    if (path !== "" && start !== "" && end !== "") windows.push({ path: path, start: start, end: end });
+    (Array.isArray(entry.children) ? entry.children : []).forEach(function (child) {
+      walk(child, path);
+    });
+  };
+  // Walked from the root's children, so the root's own `Iteration` segment never
+  // becomes part of a path, and the root itself is never a window: the project's
+  // iteration root is the fallback the write must not make.
+  (Array.isArray(node.children) ? node.children : []).forEach(function (child) {
+    walk(child, project);
+  });
+  return windows;
+}
+
+/*
+ * The one iteration whose dates contain a day, with both ends inclusive and read
+ * in UTC - the arithmetic the import already uses, so the sprint a block was
+ * placed by is the sprint it is written back to.
+ *
+ * `covers` is how many iterations contain the day, which is what the refusal is
+ * decided on: one is an answer, none is a day no sprint holds, and two is an
+ * overlap PACT will not resolve by name or by ordinal.
+ */
+export function iterationForDate(iterations, date) {
+  const iso = datePart(date);
+  const covering = iso === "" ? [] : (iterations || []).filter(function (window) {
+    return window && typeof window.start === "string" && typeof window.end === "string" &&
+      window.start <= iso && iso <= window.end;
+  });
+  return {
+    date: iso,
+    path: covering.length === 1 ? covering[0].path : "",
+    covers: covering.length
+  };
+}
+
+// The refusal an iteration that is not exactly one says, naming the day it could
+// not place: a day no sprint holds is a sprint-dates problem, and a day two hold
+// is an overlap, so they are two sentences rather than one hedge.
+export function iterationRefusal(facts) {
+  const f = facts || {};
+  const project = String(f.project || "the mapped project").trim();
+  const date = String(f.date || "").trim();
+  const covers = Number(f.covers) || 0;
+  if (date === "") {
+    return "The Assignment's start is not a date, so PACT cannot tell which sprint it starts in. " +
+      "Set its dates and write back again.";
+  }
+  if (covers === 0) {
+    return "No Azure DevOps iteration in " + project + " covers " + date + ", the day this Assignment " +
+      "starts, so there is no path to write. PACT will not fall back to the project's root: give that " +
+      "sprint its dates in Azure DevOps, then write back again.";
+  }
+  return covers + " Azure DevOps iterations in " + project + " cover " + date + ", the day this Assignment " +
+    "starts, so PACT cannot tell which one to write. Fix the overlapping sprint dates in Azure DevOps, " +
+    "then write back again.";
+}
+
+/*
+ * Whether a linked Assignment may be written back, and the words that say why
+ * not when it may not - the panel's button is drawn from this, so the reason is
+ * a rule rather than a sentence in the markup.
+ *
+ * Two things stop it, and each keeps a promise: an Assignment with no work item
+ * has nothing to publish to, and an assumed date is PACT's guess, which is never
+ * published as though a person had decided it.
+ */
+export function writeBackState(link) {
+  const id = Number(link && link.workItemId);
+  if (!(id > 0)) {
+    return {
+      enabled: false,
+      reason: "unlinked",
+      title: "Nothing to write back: this Assignment has no Azure DevOps work item behind it. " +
+        "An import establishes the link, and PACT publishes only to a linked work item."
+    };
+  }
+  if (link.datesAssumed) {
+    return {
+      enabled: false,
+      reason: "assumed",
+      title: "The dates are assumed, and PACT never publishes a guess. Set this Assignment's own dates, " +
+        "then write back."
+    };
+  }
+  return {
+    enabled: true,
+    reason: "",
+    title: "Publish this Assignment as a comment on work item #" + id + ", and its iteration as the " +
+      "sprint it starts in."
+  };
+}
+
+// What a finished write back reads as: the item, whether its comment was posted
+// or edited in place, and the iteration it now sits in. Both halves are named,
+// because they are two calls and a person should see both landed.
+export function writeBackLine(facts) {
+  const f = facts || {};
+  const type = String(f.workItemType || "").trim();
+  const item = (type === "" ? "work item" : type) + " #" + f.workItemId;
+  const comment = f.comment === "edited" ? "its comment was updated in place" : "its comment was posted";
+  return "Wrote back to " + item + ": " + comment + ", and its iteration is now " + f.iterationPath + ".";
 }
