@@ -43,10 +43,31 @@ const calls = (source) => source.match(/adoLinkRow\(/g) || [];
 
 test("an Assignment's panel carries the ADO row, linked or not", () => {
   assert.equal(calls(ASSIGNMENT).length, 1, "the Assignment panel draws the row once");
-  assert.match(ASSIGNMENT, /adoLinkRow\(a\.raw\.link, "assignment-ado-link"\)/);
+  // The row is drawn with the press that acts on the work item beside it, or
+  // with nothing where the Assignment is archived history.
+  assert.match(ASSIGNMENT, /adoLinkRow\(a\.raw\.link, "assignment-ado-link", archived \? null : adoWriteBackButton\(a\)\)/);
   // Not behind a link: an Assignment typed onto the grid says `not linked`,
   // which is what makes the row worth reading on every one of them.
   assert.doesNotMatch(ASSIGNMENT, /if \(a\.raw\.link\)/);
+});
+
+test("the write back's press sits in the row, and an archived Assignment offers none", () => {
+  const press = sourceFrom("function adoWriteBackButton(", "function writeBackAssignment(");
+  // Its state is the rule's, not a second copy in the markup: the words, the
+  // reason and whether it may be pressed all come from writeBackState.
+  assert.match(press, /var state = writeBackState\(a\.raw\.link\);/);
+  assert.match(press, /press\.setAttribute\("title", state\.title\);/);
+  // Withdrawn with aria-disabled and `.is-disabled`, exactly as the bar's ADO
+  // button is: still focusable, still a button, still carrying its reason.
+  assert.match(press, /press\.setAttribute\("aria-disabled", state\.enabled \? "false" : "true"\);/);
+  assert.match(press, /press\.classList\.toggle\("is-disabled", !state\.enabled\);/);
+  assert.doesNotMatch(press, /press\.disabled =/);
+  // A press while withdrawn explains itself and calls nothing.
+  assert.match(press, /if \(!state\.enabled\) \{\s*showToast\(state\.title\);/);
+  // The press is drawn by the row rather than beside it, so the action travels
+  // with the thing it acts on.
+  assert.match(BUILDER, /var cell = el\("span", "ado__row"\);|var cell = node;/);
+  assert.match(BUILDER, /cell\.appendChild\(action\);/);
 });
 
 test("an existing Project's panel carries it too, and a new Project's does not", () => {

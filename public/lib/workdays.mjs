@@ -182,3 +182,14 @@ export function workingDays(startISO, endISO, location, holidays, absences) {
 export function planWorkingDays(startISO, endISO, holidays) {
   return countWorkingDays(startISO, endISO, holidayOffEverywhere(holidays));
 }
+
+/*
+ * The FTE-days one Assignment is worth: its Share of the working days in its
+ * span, net of the Person's Location's holidays and their own absences. It is
+ * the figure the grid, the report and the write back's comment all mean by an
+ * Assignment's size, so it is computed once here rather than three times.
+ */
+export function spanFteDays(plan, person, start, end, share) {
+  const off = absencesFor(plan, person.id);
+  return (Number(share) || 0) / 100 * workingDays(start, end, person.location, plan.holidays, off);
+}

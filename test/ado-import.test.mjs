@@ -459,7 +459,10 @@ test("the facts the row used to spell out are its hover title", () => {
   assert.match(assignment.title, /Feature #1234, revision 7/);
   assert.match(assignment.title, /its dates are assumed/);
   assert.match(assignment.title, /an import establishes the link/);
-  assert.match(assignment.title, /does not write to ADO/);
+  // PACT writes one thing to ADO, and the link is not it: the write back
+  // publishes the allocation and the start sprint beside this row.
+  assert.match(assignment.title, /the write back publishes/);
+  assert.doesNotMatch(assignment.title, /does not write to ADO/);
   // A Project's link carries the type and revision it has and no assumed
   // marker, because a Project has no dates to assume.
   const project = linkRow(PROJECT_LINK, MAPPING);

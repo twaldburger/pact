@@ -30,8 +30,8 @@ real colleagues, clients or engagements.
 PACT is local by default, and stays that way. The one thing that can reach the
 network is an [ADO connection](docs/features.md#the-azure-devops-settings), and it
 does so only in answer to a press - opening the settings panel when a token and
-an address are already stored, `Test connection`, `Save mapping`, or an import -
-never on a timer and never in the background. Writing or clearing the token is
+an address are already stored, `Test connection`, `Save mapping`, an import or a
+write back - never on a timer and never in the background. Writing or clearing the token is
 not one of those presses: it touches a file on this machine and reaches nothing.
 The token it uses stays on the server, and the plan behaves exactly as it always
 has whether the connection is missing, or Azure DevOps is unreachable.

@@ -65,7 +65,9 @@ import {
   listWords,
   projectImportLine,
   readWorkItemId,
-  tokenLine
+  tokenLine,
+  writeBackLine,
+  writeBackState
 } from "./lib/ado.mjs";
 import {
   HELP_DOCUMENTS,
@@ -3187,7 +3189,7 @@ function copyPerson(person) {
  * link and a plan with no mapping both read `not linked`: no address is ever
  * invented for one.
  */
-function adoLinkRow(link, id) {
+function adoLinkRow(link, id, action) {
   var row = linkRow(link, adoState && adoState.mapping);
   var node = el("span", "ado__link");
   node.id = id;
@@ -3206,7 +3208,58 @@ function adoLinkRow(link, id) {
     node.textContent = row.text;
     node.classList.add("ado__link--none");
   }
-  return formRow("ADO", node, row.title);
+  // A press that acts on the work item sits on the row's right, beside the
+  // thing it acts on rather than down in the footer with Delete.
+  var cell = node;
+  if (action) {
+    cell = el("span", "ado__row");
+    cell.appendChild(node);
+    cell.appendChild(action);
+  }
+  return formRow("ADO", cell, row.title);
+}
+
+/*
+ * The write back's press, in the ADO row: the first write PACT makes to Azure
+ * DevOps, kept to what PACT knows - the allocation as a comment and the sprint
+ * the Assignment starts in.
+ *
+ * Its state is a rule in public/lib/ado.mjs, drawn the way the bar's ADO button
+ * is: a press that cannot work stays focusable, wears `is-disabled` and carries
+ * the reason in its title, and a press while withdrawn says the same words in
+ * the app's toast without calling anything. Two things stop it - an Assignment
+ * with no work item behind it, and dates still assumed - and each says which.
+ */
+function adoWriteBackButton(a) {
+  var state = writeBackState(a.raw.link);
+  var press = button("btn-ghost ado__writeback", "Write back", function () {
+    if (!state.enabled) {
+      showToast(state.title);
+      return;
+    }
+    writeBackAssignment(a);
+  });
+  press.id = "ado-write-back";
+  press.setAttribute("aria-disabled", state.enabled ? "false" : "true");
+  press.classList.toggle("is-disabled", !state.enabled);
+  press.setAttribute("title", state.title);
+  return press;
+}
+
+// One write back, then the plan as the store now holds it: the baseline's
+// revision changed, so the panel's own copy of the link is stale and the panel
+// closes rather than sending a second press from a revision nobody holds. The
+// line reports both halves of the write, and a refusal - or a comment that did
+// not land after the iteration did - is reported in its own words.
+function writeBackAssignment(a) {
+  return api("POST", "/api/ado/write-back", { assignmentId: a.id }).then(function (result) {
+    closePanel(false);
+    showToast(writeBackLine(result.facts));
+    return refresh();
+  }).catch(function (err) {
+    showError(err);
+    return refresh();
+  });
 }
 
 function openProjectPanel(project, trigger) {
@@ -3344,10 +3397,11 @@ function openAssignmentPanel(a, trigger) {
   form.appendChild(formRow("Note", noteInput));
   // The ADO row is on every Assignment's panel: a linked one reads the work
   // item's id as a link to it, and an unlinked one reads `not linked`, because
-  // which of the two a block is belongs to reading the block. It is read-only
-  // either way - the link is ADO's, established by the import and changed there
-  // rather than retyped here.
-  form.appendChild(adoLinkRow(a.raw.link, "assignment-ado-link"));
+  // which of the two a block is belongs to reading the block. The id's link is
+  // read-only - the link is ADO's, established by the import and changed there
+  // rather than retyped here - and the press beside it writes back, which is an
+  // archived Assignment's history and offers no such press.
+  form.appendChild(adoLinkRow(a.raw.link, "assignment-ado-link", archived ? null : adoWriteBackButton(a)));
   node.appendChild(form);
   var error = errorLine(node);
 
