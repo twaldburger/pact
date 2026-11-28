@@ -104,6 +104,10 @@ function adoStub(settings) {
       return reply(200, fixture.iterations || iterationsFixture());
     }
     if (/^\/PACT\/_apis\/wit\/workitems\/\d+$/.test(pathname)) {
+      // The patch answers the revision it moved the item to, and the read after
+      // the comment answers the one the comment itself moved it to - ADO counts a
+      // comment as a revision of the work item.
+      if (method === "GET") return reply(200, { id: 4, rev: fixture.finalRev || (fixture.patchRev || 8) + 1 });
       return reply(200, { id: 4, rev: fixture.patchRev || 8, fields: {} });
     }
     if (/^\/PACT\/_apis\/wit\/workItems\/\d+\/comments(\/\d+)?$/.test(pathname)) {
@@ -217,7 +221,7 @@ test("what a finished write back reports names the item, the comment and the ite
   assert.equal(answer.status, 200, answer.text);
   assert.equal(answer.json.facts.comment, "posted");
   assert.equal(answer.json.facts.iterationPath, "PACT\\Sprint 01");
-  assert.equal(answer.json.facts.rev, 8);
+  assert.equal(answer.json.facts.rev, 9);
   assert.match(answer.json.line, /Wrote back to User Story #4/);
   assert.match(answer.json.line, /its comment was posted/);
 });
@@ -250,7 +254,10 @@ test("the baseline takes the new revision, the agreed dates and stops being assu
   const answer = await writeBackOf(app);
   assert.equal(answer.status, 200, answer.text);
   const link = stored(app).assignments.filter((entry) => entry.id === "a-atlas-anna")[0].link;
-  assert.equal(link.rev, 8);
+  // The revision recorded is the item's after both writes, not the patch's: the
+  // comment is a revision of its own, and a baseline one behind it would see
+  // PACT's own comment as somebody else's change on the next write.
+  assert.equal(link.rev, 9);
   assert.equal(link.datesAssumed, false);
   assert.equal(link.values.start, before.start);
   assert.equal(link.values.end, before.end);
@@ -268,15 +275,29 @@ test("the baseline takes the new revision, the agreed dates and stops being assu
 
 test("a patch that changes nothing keeps the revision the item was already at", async () => {
   // Setting the iteration the item already holds is not a change, so ADO answers
-  // the revision it was at rather than a higher one. That is still the item's
-  // revision, and the write back proceeds to the comment.
-  const app = await start({ patchRev: 7 });
+  // the revision it was at rather than a higher one. That is still an accepted
+  // write, the comment follows it, and the baseline takes the revision the item
+  // is at afterwards - one on, because the comment moved it.
+  const app = await start({ patchRev: 7, finalRev: 8 });
   const answer = await writeBackOf(app);
   assert.equal(answer.status, 200, answer.text);
-  assert.equal(answer.json.facts.rev, 7);
+  assert.equal(answer.json.facts.rev, 8);
   const link = stored(app).assignments.filter((entry) => entry.id === "a-atlas-anna")[0].link;
-  assert.equal(link.rev, 7);
+  assert.equal(link.rev, 8);
   assert.equal(link.values.iterationPath, "PACT\\Sprint 01");
+});
+
+test("the revision is read back after the comment, and only a failed read keeps the patch's", async () => {
+  const app = await start({ finalRev: 12 });
+  const answer = await writeBackOf(app);
+  assert.equal(answer.status, 200, answer.text);
+  assert.equal(answer.json.facts.rev, 12);
+  // The read comes after the comment's write, not before it: the comment is what
+  // moved the item to that revision.
+  const order = app.stub.calls.map((entry) => entry.method + " " + entry.path);
+  const comment = order.findIndex((entry) => entry.startsWith("POST /PACT/_apis/wit/workItems/4/comments"));
+  const read = order.findIndex((entry) => entry.startsWith("GET /PACT/_apis/wit/workitems/4"));
+  assert.ok(comment !== -1 && read > comment, order.join(" | "));
 });
 
 test("a write that never landed changes neither the revision nor the marker", async () => {
@@ -401,7 +422,7 @@ test("a comment that fails after the iteration landed says both halves", async (
   assert.equal(answer.status, 502);
   assert.match(answer.json.error, /iteration is now PACT\\Sprint 01/);
   assert.match(answer.json.error, /comment was not written/);
-  assert.match(answer.json.error, /The plan holds the new revision/);
+  assert.match(answer.json.error, /The plan holds the revision the item moved to/);
   // The half that landed is recorded rather than rolled back: the plan holds the
   // revision the item is at, which is what a later write diffs against.
   const link = stored(app).assignments.filter((entry) => entry.id === "a-atlas-anna")[0].link;

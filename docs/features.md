@@ -1290,11 +1290,14 @@ patch goes first - it is the call that fails on somebody else's change - and the
 comment is posted or edited only once it has landed. A comment therefore never
 claims a state the item is not in. When the comment fails afterwards, the
 refusal says exactly that: the iteration moved and the comment did not, followed
-by the reason the comment failed. The plan is written between the two calls: the
-baseline takes the revision the patch answered with, the agreed dates and
-iteration path, and the cleared assumed marker, so a failure at the comment
-leaves the plan holding the revision the item is actually at rather than one it
-is not.
+by the reason the comment failed. The baseline is written once both calls have
+landed: it takes the revision the item is at after the comment - a comment is a
+revision of the work item too, one past the patch's - beside the agreed dates,
+the iteration path and the cleared assumed marker, because a baseline one behind
+the comment would read PACT's own comment as somebody else's change and refuse
+every later write. When the comment fails instead, the plan records the revision
+the patch answered with and the refusal says so, so a later write back reports a
+moved item rather than claiming the two agreed.
 
 **Every refusal names its own cause**: the item moved (412), a token that may
 not write (403, naming the **Work Items (write)** scope it needs), an item that
